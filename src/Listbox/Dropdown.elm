@@ -187,11 +187,20 @@ view config ids state allEntries maybeSelection =
                         , typeAhead = config.behaviour.typeAhead
                         }
                     , view =
-                        { ul = config.view.ul
+                        { ul =
+                            Attributes.style "position" "absolute" :: config.view.ul
                         , li = config.view.li
                         , empty = Html.div [] []
                         }
                     }
+
+                selection =
+                    case maybeSelection of
+                        Nothing ->
+                            []
+
+                        Just actualSelection ->
+                            [ actualSelection ]
             in
             Html.div
                 (appendAttributes config.view.container [])
@@ -202,7 +211,7 @@ view config ids state allEntries maybeSelection =
                     }
                     listbox
                     allEntries
-                    maybeSelection
+                    selection
                     |> Html.map (ListboxMsg (Just ids.id))
                 ]
 

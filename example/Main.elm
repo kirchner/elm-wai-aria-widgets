@@ -23,6 +23,7 @@ import Html exposing (Html)
 import Html.Attributes as Attributes
 import Listbox exposing (Listbox)
 import Listbox.Dropdown as Dropdown exposing (Dropdown)
+import Set exposing (Set)
 
 
 main : Program {} Model Msg
@@ -40,17 +41,17 @@ main =
 
 
 type alias Model =
-    { selectedLocale : Maybe String
+    { selectedLocales : Set String
     , listbox : Listbox
-    , selectedLocale2 : Maybe String
+    , selectedLocale : Maybe String
     , dropdown : Dropdown
     }
 
 
 init _ =
-    ( { selectedLocale = Nothing
+    ( { selectedLocales = Set.empty
       , listbox = Listbox.unfocused
-      , selectedLocale2 = Nothing
+      , selectedLocale = Nothing
       , dropdown = Dropdown.closed
       }
     , Cmd.none
@@ -68,6 +69,7 @@ type Msg
 
 type OutMsg
     = EntrySelected String
+    | EntryUnselected String
 
 
 update msg model =
@@ -76,19 +78,24 @@ update msg model =
             let
                 ( newListbox, listboxCmd, maybeOutMsg ) =
                     Listbox.update
-                        [ Listbox.onEntrySelect EntrySelected ]
+                        [ Listbox.onEntrySelect EntrySelected
+                        , Listbox.onEntryUnselect EntryUnselected
+                        ]
                         model.listbox
                         listboxMsg
             in
             ( { model
                 | listbox = newListbox
-                , selectedLocale =
+                , selectedLocales =
                     case maybeOutMsg of
                         Nothing ->
-                            model.selectedLocale
+                            model.selectedLocales
 
                         Just (EntrySelected locale) ->
-                            Just locale
+                            Set.insert locale model.selectedLocales
+
+                        Just (EntryUnselected locale) ->
+                            Set.remove locale model.selectedLocales
               }
             , Cmd.map ListboxMsg listboxCmd
             )
@@ -100,13 +107,13 @@ update msg model =
             in
             ( { model
                 | dropdown = newDropdown
-                , selectedLocale2 =
+                , selectedLocale =
                     case maybeOutMsg of
-                        Nothing ->
-                            model.selectedLocale2
-
                         Just (EntrySelected locale) ->
                             Just locale
+
+                        _ ->
+                            model.selectedLocale
               }
             , Cmd.map DropdownMsg dropdownCmd
             )
@@ -136,50 +143,69 @@ view model =
                 [ Attributes.class "columns" ]
                 [ Html.div
                     [ Attributes.class "column" ]
-                    [ Html.label
-                        [ Attributes.id "locales-label" ]
-                        [ Html.text <|
-                            "Locale (currently selected: "
-                                ++ Maybe.withDefault "<none>" model.selectedLocale
-                                ++ ")"
-                        ]
-                    , Html.div
-                        [ Attributes.class "field" ]
+                    [ Html.form []
                         [ Html.div
-                            [ Attributes.class "control" ]
-                            [ model.selectedLocale
-                                |> Listbox.viewLazy (\_ -> 42)
-                                    listboxConfig
-                                    { id = "locales"
-                                    , labelledBy = "locales-label"
-                                    }
-                                    model.listbox
-                                    locales
-                                |> Html.map ListboxMsg
+                            [ Attributes.class "field" ]
+                            [ Html.label
+                                [ Attributes.id "locales-label" ]
+                                [ Html.text "Locale" ]
+                            , Html.div
+                                [ Attributes.class "control" ]
+                                [ model.selectedLocales
+                                    |> Set.toList
+                                    |> Listbox.viewLazy (\_ -> 42)
+                                        listboxConfig
+                                        { id = "locales"
+                                        , labelledBy = "locales-label"
+                                        }
+                                        model.listbox
+                                        locales
+                                    |> Html.map ListboxMsg
+                                ]
+                            , Html.p
+                                [ Attributes.class "help" ]
+                                [ Html.text <|
+                                    if Set.isEmpty model.selectedLocales then
+                                        "nothing selected"
+                                    else
+                                        "currently selected: "
+                                            ++ (model.selectedLocales
+                                                    |> Set.toList
+                                                    |> String.join ", "
+                                               )
+                                ]
                             ]
                         ]
                     ]
                 , Html.div
                     [ Attributes.class "column" ]
-                    [ Html.label
-                        [ Attributes.id "locales-dropdown-label" ]
-                        [ Html.text <|
-                            "Locale (currently selected: "
-                                ++ Maybe.withDefault "<none>" model.selectedLocale2
-                                ++ ")"
-                        ]
-                    , Html.div
-                        [ Attributes.class "field" ]
+                    [ Html.form []
                         [ Html.div
-                            [ Attributes.class "control" ]
-                            [ model.selectedLocale2
-                                |> Dropdown.view dropdownConfig
-                                    { id = "locales-dropdown"
-                                    , labelledBy = "locales-dropdown-label"
-                                    }
-                                    model.dropdown
-                                    locales
-                                |> Html.map DropdownMsg
+                            [ Attributes.class "field" ]
+                            [ Html.label
+                                [ Attributes.id "locales-dropdown-label" ]
+                                [ Html.text "Locale" ]
+                            , Html.div
+                                [ Attributes.class "control" ]
+                                [ model.selectedLocale
+                                    |> Dropdown.view dropdownConfig
+                                        { id = "locales-dropdown"
+                                        , labelledBy = "locales-dropdown-label"
+                                        }
+                                        model.dropdown
+                                        locales
+                                    |> Html.map DropdownMsg
+                                ]
+                            , Html.p
+                                [ Attributes.class "help" ]
+                                [ Html.text <|
+                                    case model.selectedLocale of
+                                        Nothing ->
+                                            "nothing selected"
+
+                                        Just selectedLocale ->
+                                            "currently selected: " ++ selectedLocale
+                                ]
                             ]
                         ]
                     ]
