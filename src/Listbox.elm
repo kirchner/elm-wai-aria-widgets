@@ -339,8 +339,15 @@ viewHelp renderedEntries config ids listbox allEntries maybeSelection =
                     , allEntries = allEntries
                     }
             in
-            viewUnfocused config ids viewData data.maybeKeyboardFocus maybeSelection allEntries <|
-                viewEntries
+            viewUnfocused
+                config
+                ids
+                viewData
+                data.maybeKeyboardFocus
+                maybeSelection
+                allEntries
+                renderedEntries.visibleEntries
+                (viewEntries
                     config
                     ids
                     data.maybeKeyboardFocus
@@ -348,6 +355,7 @@ viewHelp renderedEntries config ids listbox allEntries maybeSelection =
                     maybeSelection
                     Nothing
                     renderedEntries
+                )
 
         Focused data ->
             let
@@ -374,8 +382,17 @@ viewHelp renderedEntries config ids listbox allEntries maybeSelection =
                 |> Html.map (\_ -> NoOp)
 
 
-viewUnfocused : Config a -> Ids -> Data a -> Maybe String -> Maybe a -> List a -> List (Html (Msg a)) -> Html (Msg a)
-viewUnfocused config ids data maybeKeyboardFocus maybeSelection allEntries =
+viewUnfocused :
+    Config a
+    -> Ids
+    -> Data a
+    -> Maybe String
+    -> Maybe a
+    -> List a
+    -> List a
+    -> List (Html (Msg a))
+    -> Html (Msg a)
+viewUnfocused config ids data maybeKeyboardFocus maybeSelection allEntries visibleEntries =
     Html.ul
         ([ Attributes.id (printListId ids.id)
          , Attributes.attribute "role" "listbox"
@@ -386,7 +403,32 @@ viewUnfocused config ids data maybeKeyboardFocus maybeSelection allEntries =
             Decode.map2 ListScrolled
                 (Decode.at [ "target", "scrollTop" ] Decode.float)
                 (Decode.at [ "target", "clientHeight" ] Decode.float)
-         , Events.on "focus" (Decode.succeed (ListFocused data maybeSelection))
+         , Events.on "focus"
+            (Decode.oneOf
+                [ case maybeSelection of
+                    Nothing ->
+                        case maybeKeyboardFocus of
+                            Nothing ->
+                                Decode.succeed Nothing
+
+                            Just keyboardFocus ->
+                                visibleEntries
+                                    |> indexOf config.uniqueId keyboardFocus
+                                    |> Maybe.map
+                                        (\index ->
+                                            Decode.map Just (scrollDataDecoder (index + 2))
+                                        )
+                                    |> Maybe.withDefault (Decode.succeed Nothing)
+
+                    Just selection ->
+                        visibleEntries
+                            |> indexOf config.uniqueId (config.uniqueId selection)
+                            |> Maybe.map (\index -> Decode.map Just (scrollDataDecoder (index + 2)))
+                            |> Maybe.withDefault (Decode.succeed Nothing)
+                , Decode.succeed Nothing
+                ]
+                |> Decode.map (ListFocused data maybeSelection)
+            )
          ]
             |> setAriaActivedescendant ids.id config.uniqueId maybeKeyboardFocus allEntries
             |> appendAttributes config.view.ul
@@ -663,7 +705,7 @@ setAriaActivedescendant id uniqueId maybeKeyboardFocus entries attrs =
 type Msg a
     = NoOp
       -- LIST
-    | ListFocused (Data a) (Maybe a)
+    | ListFocused (Data a) (Maybe a) (Maybe ScrollData)
     | ListBlured
     | ListScrolled Float Float
     | ListArrowUpPressed (Data a) (Maybe ScrollData)
@@ -790,50 +832,45 @@ updateUnfocused :
 updateUnfocused events data msg =
     case msg of
         -- LIST
-        ListFocused { behaviour, id, uniqueId, allEntries } maybeSelection ->
+        ListFocused { behaviour, id, uniqueId, allEntries } maybeSelection maybeScrollData ->
             case maybeSelection of
                 Nothing ->
-                    case List.head allEntries of
+                    case data.maybeKeyboardFocus of
                         Nothing ->
-                            ( Empty
-                            , Cmd.none
-                            , Nothing
-                            )
+                            case List.head allEntries of
+                                Nothing ->
+                                    ( Empty
+                                    , Cmd.none
+                                    , Nothing
+                                    )
 
-                        Just firstEntry ->
-                            ( Focused
-                                { query = NoQuery
-                                , keyboardFocus = uniqueId firstEntry
-                                , maybeMouseFocus =
-                                    if behaviour.separateFocus then
+                                Just firstEntry ->
+                                    ( unfocusedToFocused behaviour (uniqueId firstEntry) data
+                                    , scrollListToTop id
+                                    , if behaviour.selectionFollowsFocus then
+                                        sendEntrySelected firstEntry events
+                                      else
                                         Nothing
-                                    else
-                                        Just (uniqueId firstEntry)
-                                , ulScrollTop = 0
-                                , ulClientHeight = 1000
-                                }
-                            , scrollListToTop id
+                                    )
+
+                        Just keyboardFocus ->
+                            ( unfocusedToFocused behaviour keyboardFocus data
+                            , adjustScrollTop id keyboardFocus maybeScrollData
                             , if behaviour.selectionFollowsFocus then
-                                sendEntrySelected firstEntry events
+                                case find uniqueId keyboardFocus allEntries of
+                                    Nothing ->
+                                        Nothing
+
+                                    Just ( _, a ) ->
+                                        sendEntrySelected a events
                               else
                                 Nothing
                             )
 
                 Just selection ->
                     if List.member selection allEntries then
-                        ( Focused
-                            { query = NoQuery
-                            , keyboardFocus = uniqueId selection
-                            , maybeMouseFocus =
-                                if behaviour.separateFocus then
-                                    Nothing
-                                else
-                                    Just (uniqueId selection)
-                            , ulScrollTop = 0
-                            , ulClientHeight = 1000
-                            }
-                        , Browser.scrollIntoView (printEntryId id (uniqueId selection))
-                            |> Task.attempt (\_ -> NoOp)
+                        ( unfocusedToFocused behaviour (uniqueId selection) data
+                        , adjustScrollTop id (uniqueId selection) maybeScrollData
                         , Nothing
                         )
                     else
@@ -949,13 +986,7 @@ updateFocused events data msg =
                     ( { data | query = NoQuery }
                         |> updateKeyboardFocus behaviour (uniqueId newEntry)
                         |> Focused
-                    , case maybeScrollData of
-                        Nothing ->
-                            Browser.scrollIntoView (printEntryId id (uniqueId newEntry))
-                                |> Task.attempt (\_ -> NoOp)
-
-                        Just scrollData ->
-                            adjustScrollTop NoOp id scrollData
+                    , adjustScrollTop id (uniqueId newEntry) maybeScrollData
                     , if behaviour.selectionFollowsFocus then
                         sendEntrySelected newEntry events
                       else
@@ -991,13 +1022,7 @@ updateFocused events data msg =
                     ( { data | query = NoQuery }
                         |> updateKeyboardFocus behaviour (uniqueId newEntry)
                         |> Focused
-                    , case maybeScrollData of
-                        Nothing ->
-                            Browser.scrollIntoView (printEntryId id (uniqueId newEntry))
-                                |> Task.attempt (\_ -> NoOp)
-
-                        Just scrollData ->
-                            adjustScrollTop NoOp id scrollData
+                    , adjustScrollTop id (uniqueId newEntry) maybeScrollData
                     , if behaviour.selectionFollowsFocus then
                         sendEntrySelected newEntry events
                       else
@@ -1168,6 +1193,21 @@ updateKeyboardFocus { separateFocus } newFocus data =
     }
 
 
+unfocusedToFocused : Behaviour a -> String -> UnfocusedData -> Listbox
+unfocusedToFocused behaviour keyboardFocus data =
+    Focused
+        { query = NoQuery
+        , keyboardFocus = keyboardFocus
+        , maybeMouseFocus =
+            if behaviour.separateFocus then
+                Nothing
+            else
+                Just keyboardFocus
+        , ulScrollTop = data.ulScrollTop
+        , ulClientHeight = data.ulClientHeight
+        }
+
+
 
 ---- SUBSCRIPTIONS
 
@@ -1214,30 +1254,36 @@ scrollListToBottom id =
         |> Task.attempt (\_ -> NoOp)
 
 
-adjustScrollTop : msg -> String -> ScrollData -> Cmd msg
-adjustScrollTop noOp id ({ ulScrollTop, ulClientHeight, liOffsetTop, liOffsetHeight } as scrollData) =
-    if (liOffsetTop + liOffsetHeight) > (ulScrollTop + ulClientHeight) then
-        if liOffsetTop <= ulScrollTop + ulClientHeight then
-            Browser.setScrollTop (printListId id)
-                (liOffsetTop + liOffsetHeight - ulClientHeight)
-                |> Task.attempt (\_ -> noOp)
-        else
-            centerScrollTop noOp id scrollData
-    else if liOffsetTop < ulScrollTop then
-        if liOffsetTop + liOffsetHeight >= ulScrollTop then
-            Browser.setScrollTop (printListId id) liOffsetTop
-                |> Task.attempt (\_ -> noOp)
-        else
-            centerScrollTop noOp id scrollData
-    else
-        Cmd.none
+adjustScrollTop : String -> String -> Maybe ScrollData -> Cmd (Msg a)
+adjustScrollTop id entryId maybeScrollData =
+    case maybeScrollData of
+        Nothing ->
+            Browser.scrollIntoView (printEntryId id entryId)
+                |> Task.attempt (\_ -> NoOp)
+
+        Just ({ ulScrollTop, ulClientHeight, liOffsetTop, liOffsetHeight } as scrollData) ->
+            if (liOffsetTop + liOffsetHeight) > (ulScrollTop + ulClientHeight) then
+                if liOffsetTop <= ulScrollTop + ulClientHeight then
+                    Browser.setScrollTop (printListId id)
+                        (liOffsetTop + liOffsetHeight - ulClientHeight)
+                        |> Task.attempt (\_ -> NoOp)
+                else
+                    centerScrollTop id scrollData
+            else if liOffsetTop < ulScrollTop then
+                if liOffsetTop + liOffsetHeight >= ulScrollTop then
+                    Browser.setScrollTop (printListId id) liOffsetTop
+                        |> Task.attempt (\_ -> NoOp)
+                else
+                    centerScrollTop id scrollData
+            else
+                Cmd.none
 
 
-centerScrollTop : msg -> String -> ScrollData -> Cmd msg
-centerScrollTop noOp id { ulClientHeight, liOffsetTop, liOffsetHeight } =
+centerScrollTop : String -> ScrollData -> Cmd (Msg a)
+centerScrollTop id { ulClientHeight, liOffsetTop, liOffsetHeight } =
     Browser.setScrollTop (printListId id)
         (liOffsetTop + liOffsetHeight / 2 - ulClientHeight / 2)
-        |> Task.attempt (\_ -> noOp)
+        |> Task.attempt (\_ -> NoOp)
 
 
 

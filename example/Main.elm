@@ -138,7 +138,11 @@ view model =
                     [ Attributes.class "column" ]
                     [ Html.label
                         [ Attributes.id "locales-label" ]
-                        [ Html.text "Locale" ]
+                        [ Html.text <|
+                            "Locale (currently selected: "
+                                ++ Maybe.withDefault "<none>" model.selectedLocale
+                                ++ ")"
+                        ]
                     , Html.div
                         [ Attributes.class "field" ]
                         [ Html.div
@@ -159,7 +163,11 @@ view model =
                     [ Attributes.class "column" ]
                     [ Html.label
                         [ Attributes.id "locales-dropdown-label" ]
-                        [ Html.text "Locale" ]
+                        [ Html.text <|
+                            "Locale (currently selected: "
+                                ++ Maybe.withDefault "<none>" model.selectedLocale2
+                                ++ ")"
+                        ]
                     , Html.div
                         [ Attributes.class "field" ]
                         [ Html.div
@@ -205,7 +213,8 @@ listboxConfig =
                 { attributes =
                     [ Attributes.class "entry"
                     , Attributes.classList
-                        [ ( "entry--keyboard-focused", keyboardFocused )
+                        [ ( "entry--selected", selected )
+                        , ( "entry--keyboard-focused", keyboardFocused )
                         , ( "entry--mouse-focused", mouseFocused )
                         ]
                     ]
@@ -253,7 +262,8 @@ dropdownConfig =
                 { attributes =
                     [ Attributes.class "entry"
                     , Attributes.classList
-                        [ ( "entry--keyboard-focused", keyboardFocused )
+                        [ ( "entry--selected", selected )
+                        , ( "entry--keyboard-focused", keyboardFocused )
                         , ( "entry--mouse-focused", mouseFocused )
                         ]
                     ]
