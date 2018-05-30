@@ -99,7 +99,10 @@ type Listbox
 
 
 type alias UnfocusedData =
-    { maybeKeyboardFocus : Maybe String
+    { preventScroll : Bool
+
+    -- FOCUS
+    , maybeKeyboardFocus : Maybe String
     , maybeMouseFocus : Maybe String
 
     -- DOM
@@ -131,7 +134,8 @@ type Query
 unfocused : Listbox
 unfocused =
     Unfocused
-        { maybeKeyboardFocus = Nothing
+        { preventScroll = False
+        , maybeKeyboardFocus = Nothing
         , maybeMouseFocus = Nothing
         , ulScrollTop = 0
         , ulClientHeight = 1000
@@ -408,6 +412,7 @@ viewUnfocused config ids data maybeKeyboardFocus selection allEntries visibleEnt
          , Attributes.attribute "role" "listbox"
          , Attributes.attribute "aria-labelledby" ids.labelledBy
          , Attributes.tabindex 0
+         , Events.onMouseDown ListMouseDown
          , Events.on "scroll" <|
             Decode.map2 ListScrolled
                 (Decode.at [ "target", "scrollTop" ] Decode.float)
@@ -748,6 +753,7 @@ setAriaActivedescendant id uniqueId maybeKeyboardFocus entries attrs =
 type Msg a
     = NoOp
       -- LIST
+    | ListMouseDown
     | ListFocused (Data a) (List a) (Maybe ScrollData)
     | ListBlured
     | ListScrolled Float Float
@@ -939,6 +945,12 @@ updateUnfocused :
 updateUnfocused events data msg =
     case msg of
         -- LIST
+        ListMouseDown ->
+            ( Unfocused { data | preventScroll = True }
+            , Cmd.none
+            , Nothing
+            )
+
         ListFocused { behaviour, id, uniqueId, allEntries } selection maybeScrollData ->
             case selection of
                 [] ->
@@ -953,7 +965,10 @@ updateUnfocused events data msg =
 
                                 Just firstEntry ->
                                     ( unfocusedToFocused behaviour (uniqueId firstEntry) data
-                                    , scrollListToTop id
+                                    , if data.preventScroll then
+                                        Cmd.none
+                                      else
+                                        scrollListToTop id
                                     , if behaviour.selectionFollowsFocus then
                                         sendEntrySelected firstEntry events
                                       else
@@ -962,7 +977,10 @@ updateUnfocused events data msg =
 
                         Just keyboardFocus ->
                             ( unfocusedToFocused behaviour keyboardFocus data
-                            , adjustScrollTop id keyboardFocus maybeScrollData
+                            , if data.preventScroll then
+                                Cmd.none
+                              else
+                                adjustScrollTop id keyboardFocus maybeScrollData
                             , if behaviour.selectionFollowsFocus then
                                 case find uniqueId keyboardFocus allEntries of
                                     Nothing ->
@@ -977,7 +995,10 @@ updateUnfocused events data msg =
                 firstSelection :: _ ->
                     if List.member firstSelection allEntries then
                         ( unfocusedToFocused behaviour (uniqueId firstSelection) data
-                        , adjustScrollTop id (uniqueId firstSelection) maybeScrollData
+                        , if data.preventScroll then
+                            Cmd.none
+                          else
+                            adjustScrollTop id (uniqueId firstSelection) maybeScrollData
                         , Nothing
                         )
                     else
@@ -1051,7 +1072,8 @@ updateFocused events data msg =
         -- LIST
         ListBlured ->
             ( Unfocused
-                { maybeKeyboardFocus = Just data.keyboardFocus
+                { preventScroll = False
+                , maybeKeyboardFocus = Just data.keyboardFocus
                 , maybeMouseFocus = data.maybeMouseFocus
                 , ulScrollTop = data.ulScrollTop
                 , ulClientHeight = data.ulClientHeight
