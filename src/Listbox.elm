@@ -12,6 +12,8 @@ module Listbox
         , View
         , focused
         , noTypeAhead
+        , onAllEntriesSelect
+        , onAllEntriesUnselect
         , onEntrySelect
         , onEntryUnselect
         , onEscapeDown
@@ -83,6 +85,7 @@ import Internal.Entries
         )
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline as Decode
+import Set
 import Task
 import Time
 
@@ -465,7 +468,7 @@ viewFocused config ids keyboardFocus visibleEntries allEntries selection =
          , Attributes.attribute "aria-labelledby" ids.labelledBy
          , Attributes.tabindex 0
          , Events.preventDefaultOn "keydown"
-            (Decode.field "key" Decode.string
+            (keyInfoDecoder
                 |> Decode.andThen
                     (listKeydown data keyboardFocus visibleEntries selection)
             )
@@ -480,15 +483,30 @@ viewFocused config ids keyboardFocus visibleEntries allEntries selection =
         )
 
 
+type alias KeyInfo =
+    { code : String
+    , shiftDown : Bool
+    , controlDown : Bool
+    }
+
+
+keyInfoDecoder : Decoder KeyInfo
+keyInfoDecoder =
+    Decode.succeed KeyInfo
+        |> Decode.required "key" Decode.string
+        |> Decode.required "shiftKey" Decode.bool
+        |> Decode.required "ctrlKey" Decode.bool
+
+
 listKeydown :
     Data a
     -> String
     -> List a
     -> List a
-    -> String
+    -> KeyInfo
     -> Decoder ( Msg a, Bool )
-listKeydown ({ id, uniqueId, behaviour, allEntries } as data) keyboardFocus visibleEntries selection code =
-    case code of
+listKeydown ({ id, uniqueId, behaviour, allEntries } as data) keyboardFocus visibleEntries selection { code, shiftDown, controlDown } =
+    case Debug.log "code" code of
         "ArrowUp" ->
             Decode.oneOf
                 [ visibleEntries
@@ -497,7 +515,7 @@ listKeydown ({ id, uniqueId, behaviour, allEntries } as data) keyboardFocus visi
                     |> Maybe.withDefault (Decode.succeed Nothing)
                 , Decode.succeed Nothing
                 ]
-                |> Decode.map (ListArrowUpPressed data)
+                |> Decode.map (ListArrowUpPressed data shiftDown selection)
                 |> preventDefault
 
         "ArrowDown" ->
@@ -508,7 +526,7 @@ listKeydown ({ id, uniqueId, behaviour, allEntries } as data) keyboardFocus visi
                     |> Maybe.withDefault (Decode.succeed Nothing)
                 , Decode.succeed Nothing
                 ]
-                |> Decode.map (ListArrowDownPressed data)
+                |> Decode.map (ListArrowDownPressed data shiftDown selection)
                 |> preventDefault
 
         "Enter" ->
@@ -533,6 +551,13 @@ listKeydown ({ id, uniqueId, behaviour, allEntries } as data) keyboardFocus visi
         "End" ->
             if behaviour.handleHomeAndEnd then
                 Decode.succeed (ListEndPressed data)
+                    |> preventDefault
+            else
+                Decode.fail "not handling that key here"
+
+        "a" ->
+            if controlDown then
+                Decode.succeed (ListControlAPressed uniqueId allEntries selection)
                     |> preventDefault
             else
                 Decode.fail "not handling that key here"
@@ -726,13 +751,14 @@ type Msg a
     | ListFocused (Data a) (List a) (Maybe ScrollData)
     | ListBlured
     | ListScrolled Float Float
-    | ListArrowUpPressed (Data a) (Maybe ScrollData)
-    | ListArrowDownPressed (Data a) (Maybe ScrollData)
+    | ListArrowUpPressed (Data a) Bool (List a) (Maybe ScrollData)
+    | ListArrowDownPressed (Data a) Bool (List a) (Maybe ScrollData)
     | ListEnterPressed String (a -> String) (List a) (List a)
     | ListEscapePressed
     | ListSpacePressed String (a -> String) (List a) (List a)
     | ListHomePressed (Data a)
     | ListEndPressed (Data a)
+    | ListControlAPressed (a -> String) (List a) (List a)
       -- QUERY
     | ListKeyPressed (Data a) Int (String -> a -> Bool) String
     | CurrentTimeReceived (Data a) Int (String -> a -> Bool) String Time.Posix
@@ -764,6 +790,8 @@ type alias ScrollData =
 type Event a outMsg
     = OnEntrySelect (a -> outMsg)
     | OnEntryUnselect (a -> outMsg)
+    | OnAllEntriesSelect outMsg
+    | OnAllEntriesUnselect outMsg
     | OnListboxBlur outMsg
     | OnEscapeDown outMsg
 
@@ -780,6 +808,20 @@ onEntrySelect =
 onEntryUnselect : (a -> outMsg) -> Event a outMsg
 onEntryUnselect =
     OnEntryUnselect
+
+
+{-| TODO
+-}
+onAllEntriesSelect : outMsg -> Event a outMsg
+onAllEntriesSelect =
+    OnAllEntriesSelect
+
+
+{-| TODO
+-}
+onAllEntriesUnselect : outMsg -> Event a outMsg
+onAllEntriesUnselect =
+    OnAllEntriesUnselect
 
 
 {-| TODO
@@ -820,6 +862,32 @@ sendEntryUnselected a events =
 
         _ :: rest ->
             sendEntryUnselected a rest
+
+
+sendAllEntriesSelected : List (Event a outMsg) -> Maybe outMsg
+sendAllEntriesSelected events =
+    case events of
+        [] ->
+            Nothing
+
+        (OnAllEntriesSelect allEntriesSelected) :: _ ->
+            Just allEntriesSelected
+
+        _ :: rest ->
+            sendAllEntriesSelected rest
+
+
+sendAllEntriesUnselected : List (Event a outMsg) -> Maybe outMsg
+sendAllEntriesUnselected events =
+    case events of
+        [] ->
+            Nothing
+
+        (OnAllEntriesUnselect allEntriesUnselected) :: _ ->
+            Just allEntriesUnselected
+
+        _ :: rest ->
+            sendAllEntriesUnselected rest
 
 
 sendListboxBlured : List (Event a outMsg) -> Maybe outMsg
@@ -966,10 +1034,7 @@ updateUnfocused events data msg =
                 , ulClientHeight = 1000
                 }
             , focusList id
-            , if List.member a selection then
-                sendEntryUnselected a events
-              else
-                sendEntrySelected a events
+            , toggleSelectState events selection a
             )
 
         _ ->
@@ -1005,7 +1070,7 @@ updateFocused events data msg =
             , Nothing
             )
 
-        ListArrowUpPressed { behaviour, id, uniqueId, allEntries } maybeScrollData ->
+        ListArrowUpPressed { behaviour, id, uniqueId, allEntries } shiftDown selection maybeScrollData ->
             case findPrevious uniqueId data.keyboardFocus allEntries of
                 Just (Last lastEntry) ->
                     if behaviour.jumpAtEnds then
@@ -1015,6 +1080,8 @@ updateFocused events data msg =
                         , scrollListToBottom id
                         , if behaviour.selectionFollowsFocus then
                             sendEntrySelected lastEntry events
+                          else if shiftDown then
+                            toggleSelectState events selection lastEntry
                           else
                             Nothing
                         )
@@ -1031,6 +1098,8 @@ updateFocused events data msg =
                     , adjustScrollTop id (uniqueId newEntry) maybeScrollData
                     , if behaviour.selectionFollowsFocus then
                         sendEntrySelected newEntry events
+                      else if shiftDown then
+                        toggleSelectState events selection newEntry
                       else
                         Nothing
                     )
@@ -1041,7 +1110,7 @@ updateFocused events data msg =
                     , Nothing
                     )
 
-        ListArrowDownPressed { behaviour, id, uniqueId, allEntries } maybeScrollData ->
+        ListArrowDownPressed { behaviour, id, uniqueId, allEntries } shiftDown selection maybeScrollData ->
             case findNext uniqueId data.keyboardFocus allEntries of
                 Just (First firstEntry) ->
                     if behaviour.jumpAtEnds then
@@ -1051,6 +1120,8 @@ updateFocused events data msg =
                         , scrollListToTop id
                         , if behaviour.selectionFollowsFocus then
                             sendEntrySelected firstEntry events
+                          else if shiftDown then
+                            toggleSelectState events selection firstEntry
                           else
                             Nothing
                         )
@@ -1067,6 +1138,8 @@ updateFocused events data msg =
                     , adjustScrollTop id (uniqueId newEntry) maybeScrollData
                     , if behaviour.selectionFollowsFocus then
                         sendEntrySelected newEntry events
+                      else if shiftDown then
+                        toggleSelectState events selection newEntry
                       else
                         Nothing
                     )
@@ -1085,10 +1158,7 @@ updateFocused events data msg =
                     Nothing
 
                 Just ( _, a ) ->
-                    if List.member a selection then
-                        sendEntryUnselected a events
-                    else
-                        sendEntrySelected a events
+                    toggleSelectState events selection a
             )
 
         ListEscapePressed ->
@@ -1105,10 +1175,7 @@ updateFocused events data msg =
                     Nothing
 
                 Just ( _, a ) ->
-                    if List.member a selection then
-                        sendEntryUnselected a events
-                    else
-                        sendEntrySelected a events
+                    toggleSelectState events selection a
             )
 
         ListHomePressed { behaviour, id, uniqueId, allEntries } ->
@@ -1139,6 +1206,26 @@ updateFocused events data msg =
                     , scrollListToBottom id
                     , Nothing
                     )
+
+        ListControlAPressed uniqueId allEntries selection ->
+            let
+                allEntriesSet =
+                    allEntries
+                        |> List.map uniqueId
+                        |> Set.fromList
+
+                selectionSet =
+                    selection
+                        |> List.map uniqueId
+                        |> Set.fromList
+            in
+            ( Focused data
+            , Cmd.none
+            , if Set.isEmpty (Set.diff allEntriesSet selectionSet) then
+                sendAllEntriesUnselected events
+              else
+                sendAllEntriesSelected events
+            )
 
         -- QUERY
         ListKeyPressed viewData timeout matchesQuery code ->
@@ -1257,6 +1344,14 @@ unfocusedToFocused behaviour keyboardFocus data =
         , ulScrollTop = data.ulScrollTop
         , ulClientHeight = data.ulClientHeight
         }
+
+
+toggleSelectState : List (Event a outMsg) -> List a -> a -> Maybe outMsg
+toggleSelectState events selection a =
+    if List.member a selection then
+        sendEntryUnselected a events
+    else
+        sendEntrySelected a events
 
 
 
