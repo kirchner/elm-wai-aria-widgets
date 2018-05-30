@@ -2,11 +2,19 @@ module Listbox
     exposing
         ( Behaviour
         , Config
+        , Event
+        , HtmlAttributes
+        , HtmlDetails
+        , Ids
         , Listbox
         , Msg
         , TypeAhead
         , View
+        , focused
         , noTypeAhead
+        , onEntrySelect
+        , onEscapeDown
+        , onListboxBlur
         , simpleTypeAhead
         , subscriptions
         , typeAhead
@@ -18,7 +26,25 @@ module Listbox
 
 {-|
 
-@docs Listbox
+@docs Listbox, unfocused, view, Ids, update, Msg, subscriptions
+
+@docs Event, onEntrySelect, onListboxBlur, onEscapeDown
+
+@docs focused
+
+@docs viewLazy
+
+
+# Configuration
+
+@docs Config, Behaviour, View
+
+@docs HtmlAttributes, HtmlDetails
+
+
+## Type ahead
+
+@docs TypeAhead, noTypeAhead, simpleTypeAhead, typeAhead
 
 -}
 
@@ -50,7 +76,8 @@ import Task
 import Time
 
 
-{-| -}
+{-| TODO
+-}
 type Listbox
     = Unfocused UnfocusedData
     | Focused FocusedData
@@ -85,7 +112,8 @@ type Query
     | Query Int Time.Posix String
 
 
-{-| -}
+{-| TODO
+-}
 unfocused : Listbox
 unfocused =
     Unfocused
@@ -94,6 +122,25 @@ unfocused =
         , ulScrollTop = 0
         , ulClientHeight = 1000
         }
+
+
+{-| TODO
+-}
+focused : String -> String -> ( Listbox, Cmd (Msg a) )
+focused id keyboardFocus =
+    ( Focused
+        { query = NoQuery
+        , keyboardFocus = keyboardFocus
+        , maybeMouseFocus = Nothing
+        , ulScrollTop = 0
+        , ulClientHeight = 1000
+        }
+    , Cmd.batch
+        [ Browser.scrollIntoView (printEntryId id keyboardFocus)
+            |> Task.attempt (\_ -> NoOp)
+        , focusList id
+        ]
+    )
 
 
 
@@ -363,7 +410,6 @@ viewFocused config ids keyboardFocus visibleEntries allEntries =
                 (Decode.at [ "target", "clientHeight" ] Decode.float)
          , Events.on "blur" (Decode.succeed ListBlured)
          ]
-            --|> handleKeypress data
             |> setAriaActivedescendant ids.id config.uniqueId (Just keyboardFocus) allEntries
             |> appendAttributes config.view.ul
         )
@@ -401,6 +447,10 @@ listKeydown ({ id, uniqueId, behaviour, allEntries } as data) keyboardFocus visi
 
         "Enter" ->
             Decode.succeed (ListEnterPressed id uniqueId allEntries)
+                |> preventDefault
+
+        "Escape" ->
+            Decode.succeed ListEscapePressed
                 |> preventDefault
 
         " " ->
@@ -598,6 +648,8 @@ setAriaActivedescendant id uniqueId maybeKeyboardFocus entries attrs =
 ---- UPDATE
 
 
+{-| TODO
+-}
 type Msg a
     = NoOp
       -- LIST
@@ -607,6 +659,7 @@ type Msg a
     | ListArrowUpPressed (Data a) (Maybe ScrollData)
     | ListArrowDownPressed (Data a) (Maybe ScrollData)
     | ListEnterPressed String (a -> String) (List a)
+    | ListEscapePressed
     | ListSpacePressed String (a -> String) (List a)
     | ListHomePressed (Data a)
     | ListEndPressed (Data a)
@@ -638,21 +691,93 @@ type alias ScrollData =
 
 {-| TODO
 -}
-update : (a -> outMsg) -> Listbox -> Msg a -> ( Listbox, Cmd (Msg a), Maybe outMsg )
-update entrySelected listbox msg =
+type Event a outMsg
+    = OnEntrySelect (a -> outMsg)
+    | OnListboxBlur outMsg
+    | OnEscapeDown outMsg
+
+
+{-| TODO
+-}
+onEntrySelect : (a -> outMsg) -> Event a outMsg
+onEntrySelect =
+    OnEntrySelect
+
+
+{-| TODO
+-}
+onListboxBlur : outMsg -> Event a outMsg
+onListboxBlur =
+    OnListboxBlur
+
+
+{-| TODO
+-}
+onEscapeDown : outMsg -> Event a outMsg
+onEscapeDown =
+    OnEscapeDown
+
+
+sendEntrySelected : a -> List (Event a outMsg) -> Maybe outMsg
+sendEntrySelected a events =
+    case events of
+        [] ->
+            Nothing
+
+        (OnEntrySelect entrySelected) :: _ ->
+            Just (entrySelected a)
+
+        _ :: rest ->
+            sendEntrySelected a rest
+
+
+sendListboxBlured : List (Event a outMsg) -> Maybe outMsg
+sendListboxBlured events =
+    case events of
+        [] ->
+            Nothing
+
+        (OnListboxBlur listboxBlured) :: _ ->
+            Just listboxBlured
+
+        _ :: rest ->
+            sendListboxBlured rest
+
+
+sendEscapeDown : List (Event a outMsg) -> Maybe outMsg
+sendEscapeDown events =
+    case events of
+        [] ->
+            Nothing
+
+        (OnEscapeDown escapeDowned) :: _ ->
+            Just escapeDowned
+
+        _ :: rest ->
+            sendEscapeDown rest
+
+
+{-| TODO
+-}
+update : List (Event a outMsg) -> Listbox -> Msg a -> ( Listbox, Cmd (Msg a), Maybe outMsg )
+update events listbox msg =
     case listbox of
         Unfocused unfocusedData ->
-            updateUnfocused entrySelected unfocusedData msg
+            updateUnfocused events unfocusedData msg
 
         Focused focusedData ->
-            updateFocused entrySelected focusedData msg
+            updateFocused events focusedData msg
 
         Empty ->
             ( listbox, Cmd.none, Nothing )
 
 
-updateUnfocused : (a -> outMsg) -> UnfocusedData -> Msg a -> ( Listbox, Cmd (Msg a), Maybe outMsg )
-updateUnfocused entrySelected data msg =
+updateUnfocused :
+    List (Event a outMsg)
+    -> UnfocusedData
+    -> Msg a
+    -> ( Listbox, Cmd (Msg a), Maybe outMsg )
+updateUnfocused events data msg =
     case msg of
         -- LIST
         ListFocused { behaviour, id, uniqueId, allEntries } maybeSelection ->
@@ -679,7 +804,7 @@ updateUnfocused entrySelected data msg =
                                 }
                             , scrollListToTop id
                             , if behaviour.selectionFollowsFocus then
-                                Just (entrySelected firstEntry)
+                                sendEntrySelected firstEntry events
                               else
                                 Nothing
                             )
@@ -755,15 +880,19 @@ updateUnfocused entrySelected data msg =
                 , ulClientHeight = 1000
                 }
             , focusList id
-            , Just (entrySelected a)
+            , sendEntrySelected a events
             )
 
         _ ->
             ( Unfocused data, Cmd.none, Nothing )
 
 
-updateFocused : (a -> outMsg) -> FocusedData -> Msg a -> ( Listbox, Cmd (Msg a), Maybe outMsg )
-updateFocused entrySelected data msg =
+updateFocused :
+    List (Event a outMsg)
+    -> FocusedData
+    -> Msg a
+    -> ( Listbox, Cmd (Msg a), Maybe outMsg )
+updateFocused events data msg =
     case msg of
         -- LIST
         ListBlured ->
@@ -774,7 +903,7 @@ updateFocused entrySelected data msg =
                 , ulClientHeight = data.ulClientHeight
                 }
             , Cmd.none
-            , Nothing
+            , sendListboxBlured events
             )
 
         ListScrolled ulScrollTop ulClientHeight ->
@@ -796,7 +925,7 @@ updateFocused entrySelected data msg =
                             |> Focused
                         , scrollListToBottom id
                         , if behaviour.selectionFollowsFocus then
-                            Just (entrySelected lastEntry)
+                            sendEntrySelected lastEntry events
                           else
                             Nothing
                         )
@@ -818,7 +947,7 @@ updateFocused entrySelected data msg =
                         Just scrollData ->
                             adjustScrollTop NoOp id scrollData
                     , if behaviour.selectionFollowsFocus then
-                        Just (entrySelected newEntry)
+                        sendEntrySelected newEntry events
                       else
                         Nothing
                     )
@@ -838,7 +967,7 @@ updateFocused entrySelected data msg =
                             |> Focused
                         , scrollListToTop id
                         , if behaviour.selectionFollowsFocus then
-                            Just (entrySelected firstEntry)
+                            sendEntrySelected firstEntry events
                           else
                             Nothing
                         )
@@ -860,7 +989,7 @@ updateFocused entrySelected data msg =
                         Just scrollData ->
                             adjustScrollTop NoOp id scrollData
                     , if behaviour.selectionFollowsFocus then
-                        Just (entrySelected newEntry)
+                        sendEntrySelected newEntry events
                       else
                         Nothing
                     )
@@ -879,7 +1008,13 @@ updateFocused entrySelected data msg =
                     Nothing
 
                 Just ( _, a ) ->
-                    Just (entrySelected a)
+                    sendEntrySelected a events
+            )
+
+        ListEscapePressed ->
+            ( Focused data
+            , Cmd.none
+            , sendEscapeDown events
             )
 
         ListSpacePressed id uniqueId allEntries ->
@@ -890,7 +1025,7 @@ updateFocused entrySelected data msg =
                     Nothing
 
                 Just ( _, a ) ->
-                    Just (entrySelected a)
+                    sendEntrySelected a events
             )
 
         ListHomePressed { behaviour, id, uniqueId, allEntries } ->
@@ -1004,7 +1139,7 @@ updateFocused entrySelected data msg =
                 |> updateKeyboardFocus behaviour (uniqueId a)
                 |> Focused
             , Cmd.none
-            , Just (entrySelected a)
+            , sendEntrySelected a events
             )
 
         _ ->

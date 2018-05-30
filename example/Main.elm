@@ -22,6 +22,7 @@ import Browser
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Listbox exposing (Listbox)
+import Listbox.Dropdown as Dropdown exposing (Dropdown)
 
 
 main : Program {} Model Msg
@@ -41,12 +42,16 @@ main =
 type alias Model =
     { selectedLocale : Maybe String
     , listbox : Listbox
+    , selectedLocale2 : Maybe String
+    , dropdown : Dropdown
     }
 
 
 init _ =
     ( { selectedLocale = Nothing
       , listbox = Listbox.unfocused
+      , selectedLocale2 = Nothing
+      , dropdown = Dropdown.closed
       }
     , Cmd.none
     )
@@ -58,6 +63,7 @@ init _ =
 
 type Msg
     = ListboxMsg (Listbox.Msg String)
+    | DropdownMsg (Dropdown.Msg String)
 
 
 type OutMsg
@@ -69,7 +75,10 @@ update msg model =
         ListboxMsg listboxMsg ->
             let
                 ( newListbox, listboxCmd, maybeOutMsg ) =
-                    Listbox.update EntrySelected model.listbox listboxMsg
+                    Listbox.update
+                        [ Listbox.onEntrySelect EntrySelected ]
+                        model.listbox
+                        listboxMsg
             in
             ( { model
                 | listbox = newListbox
@@ -84,13 +93,34 @@ update msg model =
             , Cmd.map ListboxMsg listboxCmd
             )
 
+        DropdownMsg dropdownMsg ->
+            let
+                ( newDropdown, dropdownCmd, maybeOutMsg ) =
+                    Dropdown.update EntrySelected model.dropdown dropdownMsg
+            in
+            ( { model
+                | dropdown = newDropdown
+                , selectedLocale2 =
+                    case maybeOutMsg of
+                        Nothing ->
+                            model.selectedLocale2
+
+                        Just (EntrySelected locale) ->
+                            Just locale
+              }
+            , Cmd.map DropdownMsg dropdownCmd
+            )
+
 
 
 ---- SUBSCRIPTIONS
 
 
 subscriptions model =
-    Sub.map ListboxMsg (Listbox.subscriptions model.listbox)
+    Sub.batch
+        [ Sub.map ListboxMsg (Listbox.subscriptions model.listbox)
+        , Sub.map DropdownMsg (Dropdown.subscriptions model.dropdown)
+        ]
 
 
 
@@ -122,6 +152,26 @@ view model =
                                     model.listbox
                                     locales
                                 |> Html.map ListboxMsg
+                            ]
+                        ]
+                    ]
+                , Html.div
+                    [ Attributes.class "column" ]
+                    [ Html.label
+                        [ Attributes.id "locales-dropdown-label" ]
+                        [ Html.text "Locale" ]
+                    , Html.div
+                        [ Attributes.class "field" ]
+                        [ Html.div
+                            [ Attributes.class "control" ]
+                            [ model.selectedLocale2
+                                |> Dropdown.view dropdownConfig
+                                    { id = "locales-dropdown"
+                                    , labelledBy = "locales-dropdown-label"
+                                    }
+                                    model.dropdown
+                                    locales
+                                |> Html.map DropdownMsg
                             ]
                         ]
                     ]
@@ -162,6 +212,53 @@ listboxConfig =
                 , children = liChildren maybeQuery name
                 }
         , empty = Html.div [] [ Html.text "this list is empty" ]
+        }
+    }
+
+
+dropdownConfig : Dropdown.Config String
+dropdownConfig =
+    { uniqueId = identity
+    , behaviour =
+        { jumpAtEnds = True
+        , closeAfterMouseSelection = True
+        , separateFocus = True
+        , selectionFollowsFocus = False
+        , handleHomeAndEnd = True
+        , typeAhead =
+            Listbox.typeAhead 200 <|
+                \query value ->
+                    String.toLower value
+                        |> String.contains (String.toLower query)
+        }
+    , view =
+        { container = [ Attributes.class "container" ]
+        , button =
+            \{ maybeSelection, open } ->
+                { attributes = [ Attributes.class "button" ]
+                , children =
+                    [ Html.span
+                        [ Attributes.style "width" "100%"
+                        , Attributes.style "text-align" "left"
+                        ]
+                        [ maybeSelection
+                            |> Maybe.withDefault "Select a locale..."
+                            |> Html.text
+                        ]
+                    ]
+                }
+        , ul = [ Attributes.class "dropdown-list" ]
+        , li =
+            \{ selected, keyboardFocused, mouseFocused, maybeQuery } name ->
+                { attributes =
+                    [ Attributes.class "entry"
+                    , Attributes.classList
+                        [ ( "entry--keyboard-focused", keyboardFocused )
+                        , ( "entry--mouse-focused", mouseFocused )
+                        ]
+                    ]
+                , children = liChildren maybeQuery name
+                }
         }
     }
 

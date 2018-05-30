@@ -1,0 +1,769 @@
+module Listbox.Dropdown
+    exposing
+        ( Behaviour
+        , Config
+        , Dropdown
+        , HtmlAttributes
+        , HtmlDetails
+        , Ids
+        , Msg
+        , View
+        , closed
+        , subscriptions
+        , update
+        , view
+        )
+
+{-|
+
+@docs Dropdown, closed, view, Ids, update, Msg, subscriptions
+
+
+# Configuration
+
+@docs Config, Behaviour, View
+
+@docs HtmlAttributes, HtmlDetails
+
+-}
+
+{-
+
+   Copyright 2018 Fabian Kirchner
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+-}
+
+import Browser
+import Html exposing (Html)
+import Html.Attributes as Attributes
+import Html.Events as Events
+import Json.Decode as Decode exposing (Decoder)
+import Listbox exposing (Listbox, TypeAhead)
+import Task
+
+
+{-| TODO
+-}
+type Dropdown
+    = Closed
+    | Open OpenData
+
+
+type alias OpenData =
+    { preventBlur : Bool
+    , listbox : Listbox
+    }
+
+
+{-| TODO
+-}
+closed : Dropdown
+closed =
+    Closed
+
+
+
+---- CONFIG
+
+
+{-| TODO
+-}
+type alias Config a =
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    , view : View a
+    }
+
+
+{-| TODO
+-}
+type alias Behaviour a =
+    { jumpAtEnds : Bool
+    , closeAfterMouseSelection : Bool
+    , separateFocus : Bool
+    , selectionFollowsFocus : Bool
+    , handleHomeAndEnd : Bool
+    , typeAhead : TypeAhead a
+    }
+
+
+{-| TODO
+-}
+type alias View a =
+    { container : HtmlAttributes
+    , button :
+        { maybeSelection : Maybe a
+        , open : Bool
+        }
+        -> HtmlDetails
+    , ul : HtmlAttributes
+    , li :
+        { selected : Bool
+        , keyboardFocused : Bool
+        , mouseFocused : Bool
+        , maybeQuery : Maybe String
+        }
+        -> a
+        -> HtmlDetails
+    }
+
+
+{-| TODO
+-}
+type alias HtmlAttributes =
+    List (Html.Attribute Never)
+
+
+{-| TODO
+-}
+type alias HtmlDetails =
+    { attributes : List (Html.Attribute Never)
+    , children : List (Html Never)
+    }
+
+
+
+---- VIEW
+
+
+{-| TODO
+-}
+type alias Ids =
+    { id : String
+    , labelledBy : String
+    }
+
+
+{-| TODO
+-}
+view : Config a -> Ids -> Dropdown -> List a -> Maybe a -> Html (Msg a)
+view config ids state allEntries maybeSelection =
+    let
+        data =
+            { behaviour = config.behaviour
+            , id = ids.id
+            , uniqueId = config.uniqueId
+            , allEntries = allEntries
+            }
+
+        buttonHtmlDetails =
+            config.view.button
+                { maybeSelection = maybeSelection
+                , open = True
+                }
+    in
+    case state of
+        Closed ->
+            viewClosed data config.view.container buttonHtmlDetails ids.labelledBy maybeSelection
+
+        Open { listbox } ->
+            let
+                listboxConfig =
+                    { uniqueId = config.uniqueId
+                    , behaviour =
+                        { jumpAtEnds = config.behaviour.jumpAtEnds
+                        , separateFocus = config.behaviour.separateFocus
+                        , selectionFollowsFocus = config.behaviour.selectionFollowsFocus
+                        , handleHomeAndEnd = config.behaviour.handleHomeAndEnd
+                        , typeAhead = config.behaviour.typeAhead
+                        }
+                    , view =
+                        { ul = config.view.ul
+                        , li = config.view.li
+                        , empty = Html.div [] []
+                        }
+                    }
+            in
+            Html.div
+                (appendAttributes config.view.container [])
+                [ viewButton data buttonHtmlDetails ids.labelledBy maybeSelection True
+                , Listbox.view listboxConfig
+                    { id = printListboxId ids.id
+                    , labelledBy = ids.labelledBy
+                    }
+                    listbox
+                    allEntries
+                    maybeSelection
+                    |> Html.map (ListboxMsg (Just ids.id))
+                ]
+
+
+viewClosed : Data a -> HtmlAttributes -> HtmlDetails -> String -> Maybe a -> Html (Msg a)
+viewClosed data containerHtmlAttributes buttonHtmlDetails labelledBy selection =
+    Html.div
+        (appendAttributes containerHtmlAttributes [])
+        [ viewButton data buttonHtmlDetails labelledBy selection False ]
+
+
+viewButton : Data a -> HtmlDetails -> String -> Maybe a -> Bool -> Html (Msg a)
+viewButton ({ id } as data) { attributes, children } labelledBy selection open =
+    Html.button
+        ([ Attributes.id (printButtonId id)
+         , Attributes.type_ "button"
+         , Attributes.attribute "aria-haspopup" "listbox"
+         , Attributes.attribute "aria-labelledby"
+            (printButtonId id ++ " " ++ labelledBy)
+         , Attributes.style "position" "relative"
+         , Attributes.tabindex 0
+         , Events.onClick (ButtonClicked data selection)
+         , Events.on "keydown"
+            (Decode.field "key" Decode.string
+                |> Decode.andThen (buttonKeyDown data selection)
+            )
+         ]
+            |> setAriaExpanded open
+            |> appendAttributes attributes
+        )
+        (List.map (Html.map (\_ -> NoOp)) children)
+
+
+buttonKeyDown : Data a -> Maybe a -> String -> Decoder (Msg a)
+buttonKeyDown data maybeSelection code =
+    case code of
+        "ArrowUp" ->
+            Decode.succeed (ButtonArrowUpPressed data maybeSelection)
+
+        "ArrowDown" ->
+            Decode.succeed (ButtonArrowDownPressed data maybeSelection)
+
+        _ ->
+            Decode.fail "not handling that key here"
+
+
+
+-- VIEW HELPER
+
+
+setAriaExpanded : Bool -> List (Html.Attribute msg) -> List (Html.Attribute msg)
+setAriaExpanded isOpen attrs =
+    if isOpen then
+        Attributes.attribute "aria-expanded" "true" :: attrs
+    else
+        attrs
+
+
+
+-- IDS
+
+
+printButtonId : String -> String
+printButtonId id =
+    id ++ "__button"
+
+
+printListboxId : String -> String
+printListboxId id =
+    id ++ "-listbox"
+
+
+
+---- UPDATE
+
+
+{-| TODO
+-}
+type Msg a
+    = NoOp
+      -- BUTTON
+    | ButtonClicked (Data a) (Maybe a)
+    | ButtonArrowUpPressed (Data a) (Maybe a)
+    | ButtonArrowDownPressed (Data a) (Maybe a)
+      -- LISTBOX
+    | ListboxMsg (Maybe String) (Listbox.Msg a)
+
+
+type alias Data a =
+    { behaviour : Behaviour a
+    , id : String
+    , uniqueId : a -> String
+    , allEntries : List a
+    }
+
+
+{-| TODO
+-}
+update : (a -> outMsg) -> Dropdown -> Msg a -> ( Dropdown, Cmd (Msg a), Maybe outMsg )
+update entrySelected state msg =
+    case state of
+        Closed ->
+            updateClosed entrySelected msg
+
+        Open stuff ->
+            updateOpen entrySelected stuff msg
+
+
+updateClosed : (a -> outMsg) -> Msg a -> ( Dropdown, Cmd (Msg a), Maybe outMsg )
+updateClosed entrySelected msg =
+    case msg of
+        NoOp ->
+            ( Closed, Cmd.none, Nothing )
+
+        -- BUTTON
+        ButtonClicked { behaviour, id, uniqueId, allEntries } maybeSelection ->
+            case maybeSelection of
+                Nothing ->
+                    case List.head allEntries of
+                        Nothing ->
+                            ( Closed, Cmd.none, Nothing )
+
+                        Just firstEntry ->
+                            let
+                                ( listbox, listboxCmd ) =
+                                    Listbox.focused (printListboxId id) (uniqueId firstEntry)
+                            in
+                            ( Open
+                                { preventBlur = False
+                                , listbox = listbox
+                                }
+                            , Cmd.map (ListboxMsg (Just id)) listboxCmd
+                            , if behaviour.selectionFollowsFocus then
+                                Just (entrySelected firstEntry)
+                              else
+                                Nothing
+                            )
+
+                Just selection ->
+                    if List.member selection allEntries then
+                        let
+                            ( listbox, listboxCmd ) =
+                                Listbox.focused (printListboxId id) (uniqueId selection)
+                        in
+                        ( Open
+                            { preventBlur = False
+                            , listbox = listbox
+                            }
+                        , Cmd.map (ListboxMsg (Just id)) listboxCmd
+                        , Nothing
+                        )
+                    else
+                        ( Closed, Cmd.none, Nothing )
+
+        ButtonArrowUpPressed { behaviour, id, uniqueId, allEntries } maybeSelection ->
+            case maybeSelection of
+                Nothing ->
+                    case List.head (List.reverse allEntries) of
+                        Nothing ->
+                            ( Closed, Cmd.none, Nothing )
+
+                        Just lastEntry ->
+                            let
+                                ( listbox, listboxCmd ) =
+                                    Listbox.focused (printListboxId id) (uniqueId lastEntry)
+                            in
+                            ( Open
+                                { preventBlur = False
+                                , listbox = listbox
+                                }
+                            , Cmd.map (ListboxMsg (Just id)) listboxCmd
+                            , if behaviour.selectionFollowsFocus then
+                                Just (entrySelected lastEntry)
+                              else
+                                Nothing
+                            )
+
+                Just selection ->
+                    case findPrevious uniqueId (uniqueId selection) allEntries of
+                        Just (Last lastEntry) ->
+                            if behaviour.jumpAtEnds then
+                                let
+                                    ( listbox, listboxCmd ) =
+                                        Listbox.focused (printListboxId id) (uniqueId lastEntry)
+                                in
+                                ( Open
+                                    { preventBlur = False
+                                    , listbox = listbox
+                                    }
+                                , Cmd.map (ListboxMsg (Just id)) listboxCmd
+                                , if behaviour.selectionFollowsFocus then
+                                    Just (entrySelected lastEntry)
+                                  else
+                                    Nothing
+                                )
+                            else
+                                let
+                                    ( listbox, listboxCmd ) =
+                                        Listbox.focused (printListboxId id) (uniqueId selection)
+                                in
+                                ( Open
+                                    { preventBlur = False
+                                    , listbox = listbox
+                                    }
+                                , Cmd.map (ListboxMsg (Just id)) listboxCmd
+                                , Nothing
+                                )
+
+                        Just (Previous newIndex newEntry) ->
+                            let
+                                ( listbox, listboxCmd ) =
+                                    Listbox.focused (printListboxId id) (uniqueId newEntry)
+                            in
+                            ( Open
+                                { preventBlur = False
+                                , listbox = listbox
+                                }
+                            , Cmd.map (ListboxMsg (Just id)) listboxCmd
+                            , if behaviour.selectionFollowsFocus then
+                                Just (entrySelected newEntry)
+                              else
+                                Nothing
+                            )
+
+                        Nothing ->
+                            ( Closed, Cmd.none, Nothing )
+
+        ButtonArrowDownPressed { behaviour, id, uniqueId, allEntries } maybeSelection ->
+            case maybeSelection of
+                Nothing ->
+                    case List.head allEntries of
+                        Nothing ->
+                            ( Closed, Cmd.none, Nothing )
+
+                        Just firstEntry ->
+                            let
+                                ( listbox, listboxCmd ) =
+                                    Listbox.focused (printListboxId id) (uniqueId firstEntry)
+                            in
+                            ( Open
+                                { preventBlur = False
+                                , listbox = listbox
+                                }
+                            , Cmd.map (ListboxMsg (Just id)) listboxCmd
+                            , if behaviour.selectionFollowsFocus then
+                                Just (entrySelected firstEntry)
+                              else
+                                Nothing
+                            )
+
+                Just selection ->
+                    case findNext uniqueId (uniqueId selection) allEntries of
+                        Just (First firstEntry) ->
+                            if behaviour.jumpAtEnds then
+                                let
+                                    ( listbox, listboxCmd ) =
+                                        Listbox.focused (printListboxId id) (uniqueId firstEntry)
+                                in
+                                ( Open
+                                    { preventBlur = False
+                                    , listbox = listbox
+                                    }
+                                , Cmd.map (ListboxMsg (Just id)) listboxCmd
+                                , if behaviour.selectionFollowsFocus then
+                                    Just (entrySelected firstEntry)
+                                  else
+                                    Nothing
+                                )
+                            else
+                                let
+                                    ( listbox, listboxCmd ) =
+                                        Listbox.focused (printListboxId id) (uniqueId selection)
+                                in
+                                ( Open
+                                    { preventBlur = False
+                                    , listbox = listbox
+                                    }
+                                , Cmd.map (ListboxMsg (Just id)) listboxCmd
+                                , Nothing
+                                )
+
+                        Just (Next newIndex newEntry) ->
+                            let
+                                ( listbox, listboxCmd ) =
+                                    Listbox.focused (printListboxId id) (uniqueId newEntry)
+                            in
+                            ( Open
+                                { preventBlur = False
+                                , listbox = listbox
+                                }
+                            , Cmd.map (ListboxMsg (Just id)) listboxCmd
+                            , if behaviour.selectionFollowsFocus then
+                                Just (entrySelected newEntry)
+                              else
+                                Nothing
+                            )
+
+                        Nothing ->
+                            ( Closed, Cmd.none, Nothing )
+
+        _ ->
+            ( Closed, Cmd.none, Nothing )
+
+
+type OutMsg a
+    = EntrySelected a
+    | ListboxBlured
+    | ListboxEscapePressed
+
+
+updateOpen : (a -> outMsg) -> OpenData -> Msg a -> ( Dropdown, Cmd (Msg a), Maybe outMsg )
+updateOpen entrySelected stuff msg =
+    case msg of
+        ListboxMsg maybeId listboxMsg ->
+            let
+                ( newListbox, listboxCmd, maybeOutMsg ) =
+                    Listbox.update
+                        [ Listbox.onEntrySelect EntrySelected
+                        , Listbox.onListboxBlur ListboxBlured
+                        , Listbox.onEscapeDown ListboxEscapePressed
+                        ]
+                        stuff.listbox
+                        listboxMsg
+
+                newDropdown =
+                    Open
+                        { stuff | listbox = newListbox }
+
+                dropdownCmd =
+                    Cmd.map (ListboxMsg maybeId) listboxCmd
+            in
+            case maybeOutMsg of
+                Nothing ->
+                    ( newDropdown
+                    , dropdownCmd
+                    , Nothing
+                    )
+
+                Just ListboxBlured ->
+                    ( Closed
+                    , dropdownCmd
+                    , Nothing
+                    )
+
+                Just (EntrySelected a) ->
+                    ( Closed
+                    , Cmd.batch
+                        [ dropdownCmd
+                        , maybeId
+                            |> Maybe.map focusButton
+                            |> Maybe.withDefault Cmd.none
+                        ]
+                    , Just (entrySelected a)
+                    )
+
+                Just ListboxEscapePressed ->
+                    ( Closed
+                    , Cmd.batch
+                        [ dropdownCmd
+                        , maybeId
+                            |> Maybe.map focusButton
+                            |> Maybe.withDefault Cmd.none
+                        ]
+                    , Nothing
+                    )
+
+        _ ->
+            ( Open stuff, Cmd.none, Nothing )
+
+
+
+-- CMDS
+
+
+focusButton : String -> Cmd (Msg a)
+focusButton id =
+    Browser.focus (printButtonId id)
+        |> Task.attempt (\_ -> NoOp)
+
+
+
+---- SUBSCRIPTIONS
+
+
+{-| TODO
+-}
+subscriptions : Dropdown -> Sub (Msg a)
+subscriptions dropdown =
+    case dropdown of
+        Closed ->
+            Sub.none
+
+        Open { listbox } ->
+            Sub.map (ListboxMsg Nothing) (Listbox.subscriptions listbox)
+
+
+
+-- MISC
+
+
+appendAttributes :
+    List (Html.Attribute Never)
+    -> List (Html.Attribute (Msg a))
+    -> List (Html.Attribute (Msg a))
+appendAttributes neverAttrs attrs =
+    neverAttrs
+        |> List.map (Attributes.map (\_ -> NoOp))
+        |> List.append attrs
+
+
+preventDefault : Decoder msg -> Decoder ( msg, Bool )
+preventDefault decoder =
+    decoder
+        |> Decode.map (\msg -> ( msg, True ))
+
+
+allowDefault : Decoder msg -> Decoder ( msg, Bool )
+allowDefault decoder =
+    decoder
+        |> Decode.map (\msg -> ( msg, False ))
+
+
+
+---- FIND CURRENT/NEXT/PREVIOUS ENTRIES
+
+
+indexOf : (a -> String) -> String -> List a -> Maybe Int
+indexOf =
+    indexOfHelp 0
+
+
+indexOfHelp : Int -> (a -> String) -> String -> List a -> Maybe Int
+indexOfHelp index uniqueId id entries =
+    case entries of
+        [] ->
+            Nothing
+
+        entry :: rest ->
+            if uniqueId entry == id then
+                Just index
+            else
+                indexOfHelp (index + 1) uniqueId id rest
+
+
+find : (a -> String) -> String -> List a -> Maybe ( Int, a )
+find =
+    findHelp 0
+
+
+findHelp : Int -> (a -> String) -> String -> List a -> Maybe ( Int, a )
+findHelp index entryId selectedId entries =
+    case entries of
+        [] ->
+            Nothing
+
+        entry :: rest ->
+            if entryId entry == selectedId then
+                Just ( index, entry )
+            else
+                findHelp (index + 1) entryId selectedId rest
+
+
+findWith : (String -> a -> Bool) -> (a -> String) -> String -> String -> List a -> Maybe String
+findWith matchesQuery uniqueId focus query entries =
+    case entries of
+        [] ->
+            Nothing
+
+        entry :: rest ->
+            if uniqueId entry == focus then
+                let
+                    id =
+                        uniqueId entry
+                in
+                if matchesQuery query entry then
+                    Just id
+                else
+                    proceedWith matchesQuery uniqueId id query rest
+            else
+                findWith matchesQuery uniqueId focus query rest
+
+
+proceedWith : (String -> a -> Bool) -> (a -> String) -> String -> String -> List a -> Maybe String
+proceedWith matchesQuery uniqueId id query entries =
+    case entries of
+        [] ->
+            Just id
+
+        next :: rest ->
+            if matchesQuery query next then
+                Just (uniqueId next)
+            else
+                proceedWith matchesQuery uniqueId id query rest
+
+
+type Previous a
+    = Previous Int a
+    | Last a
+
+
+findPrevious : (a -> String) -> String -> List a -> Maybe (Previous a)
+findPrevious entryId currentId entries =
+    case entries of
+        [] ->
+            Nothing
+
+        first :: rest ->
+            if entryId first == currentId then
+                entries
+                    |> List.reverse
+                    |> List.head
+                    |> Maybe.map Last
+            else
+                findPreviousHelp first 0 entryId currentId rest
+
+
+findPreviousHelp : a -> Int -> (a -> String) -> String -> List a -> Maybe (Previous a)
+findPreviousHelp previous index entryId currentId entries =
+    case entries of
+        [] ->
+            Nothing
+
+        next :: rest ->
+            if entryId next == currentId then
+                Just (Previous index previous)
+            else
+                findPreviousHelp next (index + 1) entryId currentId rest
+
+
+type Next a
+    = Next Int a
+    | First a
+
+
+findNext : (a -> String) -> String -> List a -> Maybe (Next a)
+findNext entryId currentId entries =
+    case entries of
+        [] ->
+            Nothing
+
+        first :: rest ->
+            case rest of
+                [] ->
+                    if entryId first == currentId then
+                        Just (First first)
+                    else
+                        Nothing
+
+                next :: _ ->
+                    if entryId first == currentId then
+                        Just (Next 1 next)
+                    else
+                        findNextHelp first 1 entryId currentId rest
+
+
+findNextHelp : a -> Int -> (a -> String) -> String -> List a -> Maybe (Next a)
+findNextHelp first index entryId currentId entries =
+    case entries of
+        [] ->
+            Nothing
+
+        entry :: rest ->
+            case rest of
+                [] ->
+                    Just (First first)
+
+                next :: _ ->
+                    if entryId entry == currentId then
+                        Just (Next (index + 1) next)
+                    else
+                        findNextHelp first (index + 1) entryId currentId rest
