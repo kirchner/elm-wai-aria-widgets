@@ -232,7 +232,7 @@ dropdownConfig =
                         |> String.contains (String.toLower query)
         }
     , view =
-        { container = [ Attributes.class "container" ]
+        { container = []
         , button =
             \{ maybeSelection, open } ->
                 { attributes = [ Attributes.class "button" ]
