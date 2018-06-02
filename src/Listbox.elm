@@ -32,11 +32,20 @@ module Listbox
 
 @docs Listbox, unfocused, view, Ids, update, Msg, subscriptions
 
-@docs Event, onEntrySelect, onEntryUnselect, onListboxBlur, onEscapeDown
-
 @docs focused
 
 @docs viewLazy
+
+
+# Events
+
+@docs Event
+
+@docs onEntrySelect, onEntriesSelect, onAllEntriesSelect
+
+@docs onEntryUnselect, onAllEntriesUnselect
+
+@docs onListboxBlur, onEscapeDown
 
 
 # Configuration
