@@ -162,7 +162,6 @@ view config ids state allEntries maybeSelection =
             { behaviour = config.behaviour
             , id = ids.id
             , uniqueId = config.uniqueId
-            , allEntries = allEntries
             }
 
         buttonHtmlDetails =
@@ -233,10 +232,10 @@ viewButton ({ id } as data) { attributes, children } labelledBy selection open =
             (printButtonId id ++ " " ++ labelledBy)
          , Attributes.style "position" "relative"
          , Attributes.tabindex 0
-         , Events.onClick (ButtonClicked data selection)
+         , Events.onClick (ButtonClicked data)
          , Events.on "keydown"
             (Decode.field "key" Decode.string
-                |> Decode.andThen (buttonKeyDown data selection)
+                |> Decode.andThen (buttonKeyDown data)
             )
          ]
             |> setAriaExpanded open
@@ -245,14 +244,14 @@ viewButton ({ id } as data) { attributes, children } labelledBy selection open =
         (List.map (Html.map (\_ -> NoOp)) children)
 
 
-buttonKeyDown : Data a -> Maybe a -> String -> Decoder (Msg a)
-buttonKeyDown data maybeSelection code =
+buttonKeyDown : Data a -> String -> Decoder (Msg a)
+buttonKeyDown data code =
     case code of
         "ArrowUp" ->
-            Decode.succeed (ButtonArrowUpPressed data maybeSelection)
+            Decode.succeed (ButtonArrowUpPressed data)
 
         "ArrowDown" ->
-            Decode.succeed (ButtonArrowDownPressed data maybeSelection)
+            Decode.succeed (ButtonArrowDownPressed data)
 
         _ ->
             Decode.fail "not handling that key here"
@@ -293,9 +292,9 @@ printListboxId id =
 type Msg a
     = NoOp
       -- BUTTON
-    | ButtonClicked (Data a) (Maybe a)
-    | ButtonArrowUpPressed (Data a) (Maybe a)
-    | ButtonArrowDownPressed (Data a) (Maybe a)
+    | ButtonClicked (Data a)
+    | ButtonArrowUpPressed (Data a)
+    | ButtonArrowDownPressed (Data a)
       -- LISTBOX
     | ListboxMsg (Maybe String) (Listbox.Msg a)
 
@@ -304,30 +303,40 @@ type alias Data a =
     { behaviour : Behaviour a
     , id : String
     , uniqueId : a -> String
-    , allEntries : List a
     }
 
 
 {-| TODO
 -}
-update : (a -> outMsg) -> Dropdown -> Msg a -> ( Dropdown, Cmd (Msg a), Maybe outMsg )
-update entrySelected state msg =
+update :
+    (a -> outMsg)
+    -> Dropdown
+    -> List a
+    -> Maybe a
+    -> Msg a
+    -> ( Dropdown, Cmd (Msg a), Maybe outMsg )
+update entrySelected state allEntries maybeSelection msg =
     case state of
         Closed ->
-            updateClosed entrySelected msg
+            updateClosed entrySelected allEntries maybeSelection msg
 
         Open stuff ->
-            updateOpen entrySelected stuff msg
+            updateOpen entrySelected allEntries maybeSelection stuff msg
 
 
-updateClosed : (a -> outMsg) -> Msg a -> ( Dropdown, Cmd (Msg a), Maybe outMsg )
-updateClosed entrySelected msg =
+updateClosed :
+    (a -> outMsg)
+    -> List a
+    -> Maybe a
+    -> Msg a
+    -> ( Dropdown, Cmd (Msg a), Maybe outMsg )
+updateClosed entrySelected allEntries maybeSelection msg =
     case msg of
         NoOp ->
             ( Closed, Cmd.none, Nothing )
 
         -- BUTTON
-        ButtonClicked { behaviour, id, uniqueId, allEntries } maybeSelection ->
+        ButtonClicked { behaviour, id, uniqueId } ->
             case maybeSelection of
                 Nothing ->
                     case List.head allEntries of
@@ -366,7 +375,7 @@ updateClosed entrySelected msg =
                     else
                         ( Closed, Cmd.none, Nothing )
 
-        ButtonArrowUpPressed { behaviour, id, uniqueId, allEntries } maybeSelection ->
+        ButtonArrowUpPressed { behaviour, id, uniqueId } ->
             case maybeSelection of
                 Nothing ->
                     case List.head (List.reverse allEntries) of
@@ -439,7 +448,7 @@ updateClosed entrySelected msg =
                         Nothing ->
                             ( Closed, Cmd.none, Nothing )
 
-        ButtonArrowDownPressed { behaviour, id, uniqueId, allEntries } maybeSelection ->
+        ButtonArrowDownPressed { behaviour, id, uniqueId } ->
             case maybeSelection of
                 Nothing ->
                     case List.head allEntries of
@@ -522,11 +531,25 @@ type OutMsg a
     | ListboxEscapePressed
 
 
-updateOpen : (a -> outMsg) -> OpenData -> Msg a -> ( Dropdown, Cmd (Msg a), Maybe outMsg )
-updateOpen entrySelected stuff msg =
+updateOpen :
+    (a -> outMsg)
+    -> List a
+    -> Maybe a
+    -> OpenData
+    -> Msg a
+    -> ( Dropdown, Cmd (Msg a), Maybe outMsg )
+updateOpen entrySelected allEntries maybeSelection stuff msg =
     case msg of
         ListboxMsg maybeId listboxMsg ->
             let
+                selection =
+                    case maybeSelection of
+                        Nothing ->
+                            []
+
+                        Just actualSelection ->
+                            [ actualSelection ]
+
                 ( newListbox, listboxCmd, maybeOutMsg ) =
                     Listbox.update
                         [ Listbox.onEntrySelect EntrySelected
@@ -534,6 +557,8 @@ updateOpen entrySelected stuff msg =
                         , Listbox.onEscapeDown ListboxEscapePressed
                         ]
                         stuff.listbox
+                        allEntries
+                        selection
                         listboxMsg
 
                 newDropdown =

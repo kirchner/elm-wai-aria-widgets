@@ -88,6 +88,8 @@ update msg model =
                         , Listbox.onAllEntriesUnselect AllEntriesUnselected
                         ]
                         model.listbox
+                        locales
+                        (Set.toList model.selectedLocales)
                         listboxMsg
             in
             ( { model
@@ -120,7 +122,11 @@ update msg model =
         DropdownMsg dropdownMsg ->
             let
                 ( newDropdown, dropdownCmd, maybeOutMsg ) =
-                    Dropdown.update EntrySelected model.dropdown dropdownMsg
+                    Dropdown.update EntrySelected
+                        model.dropdown
+                        locales
+                        model.selectedLocale
+                        dropdownMsg
             in
             ( { model
                 | dropdown = newDropdown

@@ -359,7 +359,6 @@ viewHelp renderedEntries config ids listbox allEntries selection =
                     { behaviour = config.behaviour
                     , id = ids.id
                     , uniqueId = config.uniqueId
-                    , allEntries = allEntries
                     }
             in
             viewUnfocused
@@ -456,7 +455,7 @@ viewUnfocused config ids data maybeKeyboardFocus selection allEntries visibleEnt
                             |> Maybe.withDefault (Decode.succeed Nothing)
                 , Decode.succeed Nothing
                 ]
-                |> Decode.map (ListFocused data selection)
+                |> Decode.map (ListFocused data)
             )
          ]
             |> setAriaActivedescendant ids.id config.uniqueId maybeKeyboardFocus allEntries
@@ -479,7 +478,6 @@ viewFocused config ids keyboardFocus visibleEntries allEntries selection =
             { behaviour = config.behaviour
             , id = ids.id
             , uniqueId = config.uniqueId
-            , allEntries = allEntries
             }
     in
     Html.ul
@@ -490,7 +488,7 @@ viewFocused config ids keyboardFocus visibleEntries allEntries selection =
          , Events.preventDefaultOn "keydown"
             (keyInfoDecoder
                 |> Decode.andThen
-                    (listKeydown data keyboardFocus visibleEntries selection)
+                    (listKeydown data keyboardFocus visibleEntries)
             )
          , Events.on "scroll" <|
             Decode.map2 ListScrolled
@@ -522,10 +520,9 @@ listKeydown :
     Data a
     -> String
     -> List a
-    -> List a
     -> KeyInfo
     -> Decoder ( Msg a, Bool )
-listKeydown ({ id, uniqueId, behaviour, allEntries } as data) keyboardFocus visibleEntries selection { code, shiftDown, controlDown } =
+listKeydown ({ id, uniqueId, behaviour } as data) keyboardFocus visibleEntries { code, shiftDown, controlDown } =
     case Debug.log "code" code of
         "ArrowUp" ->
             Decode.oneOf
@@ -535,7 +532,7 @@ listKeydown ({ id, uniqueId, behaviour, allEntries } as data) keyboardFocus visi
                     |> Maybe.withDefault (Decode.succeed Nothing)
                 , Decode.succeed Nothing
                 ]
-                |> Decode.map (ListArrowUpPressed data shiftDown selection)
+                |> Decode.map (ListArrowUpPressed data shiftDown)
                 |> preventDefault
 
         "ArrowDown" ->
@@ -546,11 +543,11 @@ listKeydown ({ id, uniqueId, behaviour, allEntries } as data) keyboardFocus visi
                     |> Maybe.withDefault (Decode.succeed Nothing)
                 , Decode.succeed Nothing
                 ]
-                |> Decode.map (ListArrowDownPressed data shiftDown selection)
+                |> Decode.map (ListArrowDownPressed data shiftDown)
                 |> preventDefault
 
         "Enter" ->
-            Decode.succeed (ListEnterPressed id uniqueId allEntries selection)
+            Decode.succeed (ListEnterPressed id uniqueId)
                 |> preventDefault
 
         "Escape" ->
@@ -559,10 +556,10 @@ listKeydown ({ id, uniqueId, behaviour, allEntries } as data) keyboardFocus visi
 
         " " ->
             if shiftDown then
-                Decode.succeed (ListShiftSpacePressed id uniqueId allEntries)
+                Decode.succeed (ListShiftSpacePressed id uniqueId)
                     |> preventDefault
             else
-                Decode.succeed (ListSpacePressed id uniqueId allEntries selection)
+                Decode.succeed (ListSpacePressed id uniqueId)
                     |> preventDefault
 
         "Home" ->
@@ -589,7 +586,7 @@ listKeydown ({ id, uniqueId, behaviour, allEntries } as data) keyboardFocus visi
 
         "a" ->
             if controlDown then
-                Decode.succeed (ListControlAPressed uniqueId allEntries selection)
+                Decode.succeed (ListControlAPressed uniqueId)
                     |> preventDefault
             else
                 case behaviour.typeAhead of
@@ -659,7 +656,6 @@ viewEntries config ids maybeKeyboardFocus maybeMouseFocus selection maybeQuery r
                 (List.member a selection)
                 (maybeKeyboardFocus == Just (config.uniqueId a))
                 (maybeMouseFocus == Just (config.uniqueId a))
-                selection
                 a
     in
     List.concat
@@ -693,10 +689,9 @@ viewEntry :
     -> Bool
     -> Bool
     -> Bool
-    -> List a
     -> a
     -> Html (Msg a)
-viewEntry config behaviour maybeQuery selected keyboardFocused mouseFocused selection a =
+viewEntry config behaviour maybeQuery selected keyboardFocused mouseFocused a =
     let
         { attributes, children } =
             config.li
@@ -710,7 +705,7 @@ viewEntry config behaviour maybeQuery selected keyboardFocused mouseFocused sele
     Html.li
         ([ Events.onMouseEnter (EntryMouseEntered behaviour (config.uniqueId a))
          , Events.onMouseLeave (EntryMouseLeft behaviour)
-         , Events.onClick (EntryClicked behaviour config.id config.uniqueId selection a)
+         , Events.onClick (EntryClicked behaviour config.id config.uniqueId a)
          , Attributes.id (printEntryId config.id (config.uniqueId a))
          , Attributes.attribute "role" "option"
          ]
@@ -771,20 +766,20 @@ type Msg a
     = NoOp
       -- LIST
     | ListMouseDown
-    | ListFocused (Data a) (List a) (Maybe ScrollData)
+    | ListFocused (Data a) (Maybe ScrollData)
     | ListBlured
     | ListScrolled Float Float
-    | ListArrowUpPressed (Data a) Bool (List a) (Maybe ScrollData)
-    | ListArrowDownPressed (Data a) Bool (List a) (Maybe ScrollData)
-    | ListEnterPressed String (a -> String) (List a) (List a)
+    | ListArrowUpPressed (Data a) Bool (Maybe ScrollData)
+    | ListArrowDownPressed (Data a) Bool (Maybe ScrollData)
+    | ListEnterPressed String (a -> String)
     | ListEscapePressed
-    | ListSpacePressed String (a -> String) (List a) (List a)
-    | ListShiftSpacePressed String (a -> String) (List a)
+    | ListSpacePressed String (a -> String)
+    | ListShiftSpacePressed String (a -> String)
     | ListHomePressed (Data a)
     | ListControlShiftHomePressed (Data a)
     | ListEndPressed (Data a)
     | ListControlShiftEndPressed (Data a)
-    | ListControlAPressed (a -> String) (List a) (List a)
+    | ListControlAPressed (a -> String)
       -- QUERY
     | ListKeyPressed (Data a) Int (String -> a -> Bool) String
     | CurrentTimeReceived (Data a) Int (String -> a -> Bool) String Time.Posix
@@ -792,14 +787,13 @@ type Msg a
       -- ENTRY
     | EntryMouseEntered (Behaviour a) String
     | EntryMouseLeft (Behaviour a)
-    | EntryClicked (Behaviour a) String (a -> String) (List a) a
+    | EntryClicked (Behaviour a) String (a -> String) a
 
 
 type alias Data a =
     { behaviour : Behaviour a
     , id : String
     , uniqueId : a -> String
-    , allEntries : List a
     }
 
 
@@ -965,14 +959,20 @@ sendEscapeDown events =
 
 {-| TODO
 -}
-update : List (Event a outMsg) -> Listbox -> Msg a -> ( Listbox, Cmd (Msg a), Maybe outMsg )
-update events listbox msg =
+update :
+    List (Event a outMsg)
+    -> Listbox
+    -> List a
+    -> List a
+    -> Msg a
+    -> ( Listbox, Cmd (Msg a), Maybe outMsg )
+update events listbox allEntries selection msg =
     case listbox of
         Unfocused unfocusedData ->
-            updateUnfocused events unfocusedData msg
+            updateUnfocused events allEntries selection unfocusedData msg
 
         Focused focusedData ->
-            updateFocused events focusedData msg
+            updateFocused events allEntries selection focusedData msg
 
         Empty ->
             ( listbox, Cmd.none, Nothing )
@@ -980,10 +980,12 @@ update events listbox msg =
 
 updateUnfocused :
     List (Event a outMsg)
+    -> List a
+    -> List a
     -> UnfocusedData
     -> Msg a
     -> ( Listbox, Cmd (Msg a), Maybe outMsg )
-updateUnfocused events data msg =
+updateUnfocused events allEntries selection data msg =
     case msg of
         -- LIST
         ListMouseDown ->
@@ -992,7 +994,7 @@ updateUnfocused events data msg =
             , Nothing
             )
 
-        ListFocused { behaviour, id, uniqueId, allEntries } selection maybeScrollData ->
+        ListFocused { behaviour, id, uniqueId } maybeScrollData ->
             let
                 maybeNewFocus =
                     data.maybeLastSelectedEntry
@@ -1070,7 +1072,7 @@ updateUnfocused events data msg =
             , Nothing
             )
 
-        EntryClicked behaviour id uniqueId selection a ->
+        EntryClicked behaviour id uniqueId a ->
             ( Focused
                 { query = NoQuery
 
@@ -1093,10 +1095,12 @@ updateUnfocused events data msg =
 
 updateFocused :
     List (Event a outMsg)
+    -> List a
+    -> List a
     -> FocusedData
     -> Msg a
     -> ( Listbox, Cmd (Msg a), Maybe outMsg )
-updateFocused events data msg =
+updateFocused events allEntries selection data msg =
     case msg of
         -- LIST
         ListBlured ->
@@ -1122,7 +1126,7 @@ updateFocused events data msg =
             , Nothing
             )
 
-        ListArrowUpPressed { behaviour, id, uniqueId, allEntries } shiftDown selection maybeScrollData ->
+        ListArrowUpPressed { behaviour, id, uniqueId } shiftDown maybeScrollData ->
             case findPrevious uniqueId data.keyboardFocus allEntries of
                 Just (Last lastEntry) ->
                     if behaviour.jumpAtEnds then
@@ -1146,7 +1150,7 @@ updateFocused events data msg =
                     , Nothing
                     )
 
-        ListArrowDownPressed { behaviour, id, uniqueId, allEntries } shiftDown selection maybeScrollData ->
+        ListArrowDownPressed { behaviour, id, uniqueId } shiftDown maybeScrollData ->
             case findNext uniqueId data.keyboardFocus allEntries of
                 Just (First firstEntry) ->
                     if behaviour.jumpAtEnds then
@@ -1170,7 +1174,7 @@ updateFocused events data msg =
                     , Nothing
                     )
 
-        ListEnterPressed id uniqueId allEntries selection ->
+        ListEnterPressed id uniqueId ->
             case find uniqueId data.keyboardFocus allEntries of
                 Nothing ->
                     ( Focused data
@@ -1196,7 +1200,7 @@ updateFocused events data msg =
             , sendEscapeDown events
             )
 
-        ListSpacePressed id uniqueId allEntries selection ->
+        ListSpacePressed id uniqueId ->
             case find uniqueId data.keyboardFocus allEntries of
                 Nothing ->
                     ( Focused data
@@ -1216,7 +1220,7 @@ updateFocused events data msg =
                         , sendEntrySelected a events
                         )
 
-        ListShiftSpacePressed id uniqueId allEntries ->
+        ListShiftSpacePressed id uniqueId ->
             case data.maybeLastSelectedEntry of
                 Nothing ->
                     ( Focused data
@@ -1238,7 +1242,7 @@ updateFocused events data msg =
                             , sendEntriesSelected events selectedEntries
                             )
 
-        ListHomePressed { behaviour, id, uniqueId, allEntries } ->
+        ListHomePressed { behaviour, id, uniqueId } ->
             case List.head allEntries of
                 Nothing ->
                     ( Focused data
@@ -1251,7 +1255,7 @@ updateFocused events data msg =
                         |> updateFocus behaviour uniqueId events [] False firstEntry
                         |> andDo (scrollListToTop id)
 
-        ListControlShiftHomePressed { behaviour, id, uniqueId, allEntries } ->
+        ListControlShiftHomePressed { behaviour, id, uniqueId } ->
             case List.head allEntries of
                 Nothing ->
                     ( Focused data
@@ -1286,7 +1290,7 @@ updateFocused events data msg =
                             , sendEntriesSelected events selectedEntries
                             )
 
-        ListEndPressed { behaviour, id, uniqueId, allEntries } ->
+        ListEndPressed { behaviour, id, uniqueId } ->
             case List.head (List.reverse allEntries) of
                 Nothing ->
                     ( Focused data, Cmd.none, Nothing )
@@ -1296,7 +1300,7 @@ updateFocused events data msg =
                         |> updateFocus behaviour uniqueId events [] False lastEntry
                         |> andDo (scrollListToBottom id)
 
-        ListControlShiftEndPressed { behaviour, id, uniqueId, allEntries } ->
+        ListControlShiftEndPressed { behaviour, id, uniqueId } ->
             case List.head (List.reverse allEntries) of
                 Nothing ->
                     ( Focused data
@@ -1331,7 +1335,7 @@ updateFocused events data msg =
                             , sendEntriesSelected events selectedEntries
                             )
 
-        ListControlAPressed uniqueId allEntries selection ->
+        ListControlAPressed uniqueId ->
             let
                 allEntriesSet =
                     allEntries
@@ -1360,7 +1364,7 @@ updateFocused events data msg =
             , Nothing
             )
 
-        CurrentTimeReceived { behaviour, id, uniqueId, allEntries } timeout matchesQuery code currentTime ->
+        CurrentTimeReceived { behaviour, id, uniqueId } timeout matchesQuery code currentTime ->
             let
                 ( newQuery, queryText ) =
                     case data.query of
@@ -1435,7 +1439,7 @@ updateFocused events data msg =
             , Nothing
             )
 
-        EntryClicked behaviour id uniqueId selection a ->
+        EntryClicked behaviour id uniqueId a ->
             let
                 newFocus =
                     uniqueId a
