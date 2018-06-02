@@ -984,57 +984,44 @@ updateUnfocused events data msg =
             )
 
         ListFocused { behaviour, id, uniqueId, allEntries } selection maybeScrollData ->
-            case selection of
-                [] ->
-                    case data.maybeKeyboardFocus of
+            let
+                maybeNewFocus =
+                    data.maybeLastSelectedEntry
+                        |> or (Maybe.map uniqueId (List.head selection))
+                        |> or data.maybeKeyboardFocus
+                        |> or (Maybe.map uniqueId (List.head allEntries))
+
+                or fallback default =
+                    case default of
                         Nothing ->
-                            case List.head allEntries of
-                                Nothing ->
-                                    ( Empty
-                                    , Cmd.none
-                                    , Nothing
-                                    )
+                            fallback
 
-                                Just firstEntry ->
-                                    ( unfocusedToFocused behaviour (uniqueId firstEntry) data
-                                    , if data.preventScroll then
-                                        Cmd.none
-                                      else
-                                        scrollListToTop id
-                                    , if behaviour.selectionFollowsFocus then
-                                        sendEntrySelected firstEntry events
-                                      else
-                                        Nothing
-                                    )
+                        Just _ ->
+                            default
+            in
+            case maybeNewFocus of
+                Nothing ->
+                    ( Empty
+                    , Cmd.none
+                    , Nothing
+                    )
 
-                        Just keyboardFocus ->
-                            ( unfocusedToFocused behaviour keyboardFocus data
-                            , if data.preventScroll then
-                                Cmd.none
-                              else
-                                adjustScrollTop id keyboardFocus maybeScrollData
-                            , if behaviour.selectionFollowsFocus then
-                                case find uniqueId keyboardFocus allEntries of
-                                    Nothing ->
-                                        Nothing
-
-                                    Just ( _, a ) ->
-                                        sendEntrySelected a events
-                              else
+                Just newFocus ->
+                    ( unfocusedToFocused behaviour newFocus data
+                    , if data.preventScroll then
+                        Cmd.none
+                      else
+                        adjustScrollTop id newFocus maybeScrollData
+                    , if behaviour.selectionFollowsFocus then
+                        case find uniqueId newFocus allEntries of
+                            Nothing ->
                                 Nothing
-                            )
 
-                firstSelection :: _ ->
-                    if List.member firstSelection allEntries then
-                        ( unfocusedToFocused behaviour (uniqueId firstSelection) data
-                        , if data.preventScroll then
-                            Cmd.none
-                          else
-                            adjustScrollTop id (uniqueId firstSelection) maybeScrollData
-                        , Nothing
-                        )
-                    else
-                        ( Empty, Cmd.none, Nothing )
+                            Just ( _, a ) ->
+                                sendEntrySelected a events
+                      else
+                        Nothing
+                    )
 
         ListScrolled ulScrollTop ulClientHeight ->
             ( Unfocused
