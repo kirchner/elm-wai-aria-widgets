@@ -337,21 +337,22 @@ update (UpdateConfig uniqueId behaviour) entrySelected state allEntries maybeSel
     in
     case state of
         Closed ->
-            updateClosed uniqueId behaviour entrySelected allEntries maybeSelection msg
+            updateClosed listboxConfig uniqueId behaviour entrySelected allEntries maybeSelection msg
 
         Open stuff ->
             updateOpen listboxConfig entrySelected allEntries maybeSelection stuff msg
 
 
 updateClosed :
-    (a -> String)
+    Listbox.UpdateConfig a
+    -> (a -> String)
     -> Behaviour a
     -> (a -> outMsg)
     -> List a
     -> Maybe a
     -> Msg a
     -> ( Dropdown, Cmd (Msg a), Maybe outMsg )
-updateClosed uniqueId behaviour entrySelected allEntries maybeSelection msg =
+updateClosed listboxConfig uniqueId behaviour entrySelected allEntries maybeSelection msg =
     case msg of
         NoOp ->
             ( Closed, Cmd.none, Nothing )
@@ -367,7 +368,7 @@ updateClosed uniqueId behaviour entrySelected allEntries maybeSelection msg =
                         Just firstEntry ->
                             let
                                 ( listbox, listboxCmd ) =
-                                    Listbox.focused (printListboxId id) (uniqueId firstEntry)
+                                    Listbox.focused listboxConfig (printListboxId id) firstEntry
                             in
                             ( Open
                                 { preventBlur = False
@@ -384,7 +385,7 @@ updateClosed uniqueId behaviour entrySelected allEntries maybeSelection msg =
                     if List.member selection allEntries then
                         let
                             ( listbox, listboxCmd ) =
-                                Listbox.focused (printListboxId id) (uniqueId selection)
+                                Listbox.focused listboxConfig (printListboxId id) selection
                         in
                         ( Open
                             { preventBlur = False
@@ -406,7 +407,7 @@ updateClosed uniqueId behaviour entrySelected allEntries maybeSelection msg =
                         Just lastEntry ->
                             let
                                 ( listbox, listboxCmd ) =
-                                    Listbox.focused (printListboxId id) (uniqueId lastEntry)
+                                    Listbox.focused listboxConfig (printListboxId id) lastEntry
                             in
                             ( Open
                                 { preventBlur = False
@@ -425,7 +426,7 @@ updateClosed uniqueId behaviour entrySelected allEntries maybeSelection msg =
                             if behaviour.jumpAtEnds then
                                 let
                                     ( listbox, listboxCmd ) =
-                                        Listbox.focused (printListboxId id) (uniqueId lastEntry)
+                                        Listbox.focused listboxConfig (printListboxId id) lastEntry
                                 in
                                 ( Open
                                     { preventBlur = False
@@ -440,7 +441,7 @@ updateClosed uniqueId behaviour entrySelected allEntries maybeSelection msg =
                             else
                                 let
                                     ( listbox, listboxCmd ) =
-                                        Listbox.focused (printListboxId id) (uniqueId selection)
+                                        Listbox.focused listboxConfig (printListboxId id) selection
                                 in
                                 ( Open
                                     { preventBlur = False
@@ -453,7 +454,7 @@ updateClosed uniqueId behaviour entrySelected allEntries maybeSelection msg =
                         Just (Previous newIndex newEntry) ->
                             let
                                 ( listbox, listboxCmd ) =
-                                    Listbox.focused (printListboxId id) (uniqueId newEntry)
+                                    Listbox.focused listboxConfig (printListboxId id) newEntry
                             in
                             ( Open
                                 { preventBlur = False
@@ -479,7 +480,7 @@ updateClosed uniqueId behaviour entrySelected allEntries maybeSelection msg =
                         Just firstEntry ->
                             let
                                 ( listbox, listboxCmd ) =
-                                    Listbox.focused (printListboxId id) (uniqueId firstEntry)
+                                    Listbox.focused listboxConfig (printListboxId id) firstEntry
                             in
                             ( Open
                                 { preventBlur = False
@@ -498,7 +499,7 @@ updateClosed uniqueId behaviour entrySelected allEntries maybeSelection msg =
                             if behaviour.jumpAtEnds then
                                 let
                                     ( listbox, listboxCmd ) =
-                                        Listbox.focused (printListboxId id) (uniqueId firstEntry)
+                                        Listbox.focused listboxConfig (printListboxId id) firstEntry
                                 in
                                 ( Open
                                     { preventBlur = False
@@ -513,7 +514,7 @@ updateClosed uniqueId behaviour entrySelected allEntries maybeSelection msg =
                             else
                                 let
                                     ( listbox, listboxCmd ) =
-                                        Listbox.focused (printListboxId id) (uniqueId selection)
+                                        Listbox.focused listboxConfig (printListboxId id) selection
                                 in
                                 ( Open
                                     { preventBlur = False
@@ -526,7 +527,7 @@ updateClosed uniqueId behaviour entrySelected allEntries maybeSelection msg =
                         Just (Next newIndex newEntry) ->
                             let
                                 ( listbox, listboxCmd ) =
-                                    Listbox.focused (printListboxId id) (uniqueId newEntry)
+                                    Listbox.focused listboxConfig (printListboxId id) newEntry
                             in
                             ( Open
                                 { preventBlur = False

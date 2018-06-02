@@ -161,18 +161,18 @@ unfocused =
 
 {-| TODO
 -}
-focused : String -> String -> ( Listbox, Cmd (Msg a) )
-focused id keyboardFocus =
+focused : UpdateConfig a -> String -> a -> ( Listbox, Cmd (Msg a) )
+focused (UpdateConfig uniqueId _) id focusedEntry =
     ( Focused
         { query = NoQuery
-        , keyboardFocus = keyboardFocus
+        , keyboardFocus = uniqueId focusedEntry
         , maybeMouseFocus = Nothing
         , maybeLastSelectedEntry = Nothing
         , ulScrollTop = 0
         , ulClientHeight = 1000
         }
     , Cmd.batch
-        [ Browser.scrollIntoView (printEntryId id keyboardFocus)
+        [ Browser.scrollIntoView (printEntryId id (uniqueId focusedEntry))
             |> Task.attempt (\_ -> NoOp)
         , focusList id
         ]
