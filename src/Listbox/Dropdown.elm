@@ -1,17 +1,20 @@
 module Listbox.Dropdown
     exposing
         ( Behaviour
-        , Config
         , Dropdown
         , HtmlAttributes
         , HtmlDetails
         , Ids
         , Msg
-        , View
+        , UpdateConfig
+        , ViewConfig
+        , Views
         , closed
         , subscriptions
         , update
+        , updateConfig
         , view
+        , viewConfig
         )
 
 {-|
@@ -82,33 +85,25 @@ closed =
 
 
 
----- CONFIG
+---- VIEW CONFIG
 
 
 {-| TODO
 -}
-type alias Config a =
-    { uniqueId : a -> String
-    , behaviour : Behaviour a
-    , view : View a
-    }
+type ViewConfig a
+    = ViewConfig (a -> String) (Views a)
 
 
 {-| TODO
 -}
-type alias Behaviour a =
-    { jumpAtEnds : Bool
-    , closeAfterMouseSelection : Bool
-    , separateFocus : Bool
-    , selectionFollowsFocus : Bool
-    , handleHomeAndEnd : Bool
-    , typeAhead : TypeAhead a
-    }
+viewConfig : (a -> String) -> Views a -> ViewConfig a
+viewConfig =
+    ViewConfig
 
 
 {-| TODO
 -}
-type alias View a =
+type alias Views a =
     { container : HtmlAttributes
     , button :
         { maybeSelection : Maybe a
@@ -142,6 +137,35 @@ type alias HtmlDetails =
 
 
 
+---- UPDATE CONFIG
+
+
+{-| TODO
+-}
+type UpdateConfig a
+    = UpdateConfig (a -> String) (Behaviour a)
+
+
+{-| TODO
+-}
+updateConfig : (a -> String) -> Behaviour a -> UpdateConfig a
+updateConfig =
+    UpdateConfig
+
+
+{-| TODO
+-}
+type alias Behaviour a =
+    { jumpAtEnds : Bool
+    , closeAfterMouseSelection : Bool
+    , separateFocus : Bool
+    , selectionFollowsFocus : Bool
+    , handleHomeAndEnd : Bool
+    , typeAhead : TypeAhead a
+    }
+
+
+
 ---- VIEW
 
 
@@ -155,43 +179,27 @@ type alias Ids =
 
 {-| TODO
 -}
-view : Config a -> Ids -> Dropdown -> List a -> Maybe a -> Html (Msg a)
-view config ids state allEntries maybeSelection =
+view : ViewConfig a -> Ids -> Dropdown -> List a -> Maybe a -> Html (Msg a)
+view (ViewConfig uniqueId views) ids state allEntries maybeSelection =
     let
-        data =
-            { behaviour = config.behaviour
-            , id = ids.id
-            , uniqueId = config.uniqueId
-            }
-
         buttonHtmlDetails =
-            config.view.button
+            views.button
                 { maybeSelection = maybeSelection
                 , open = True
                 }
     in
     case state of
         Closed ->
-            viewClosed data config.view.container buttonHtmlDetails ids.labelledBy maybeSelection
+            viewClosed ids.id views.container buttonHtmlDetails ids.labelledBy maybeSelection
 
         Open { listbox } ->
             let
                 listboxConfig =
-                    { uniqueId = config.uniqueId
-                    , behaviour =
-                        { jumpAtEnds = config.behaviour.jumpAtEnds
-                        , separateFocus = config.behaviour.separateFocus
-                        , selectionFollowsFocus = config.behaviour.selectionFollowsFocus
-                        , handleHomeAndEnd = config.behaviour.handleHomeAndEnd
-                        , typeAhead = config.behaviour.typeAhead
+                    Listbox.viewConfig uniqueId
+                        { ul = Attributes.style "position" "absolute" :: views.ul
+                        , li = views.li
+                        , empty = Html.text ""
                         }
-                    , view =
-                        { ul =
-                            Attributes.style "position" "absolute" :: config.view.ul
-                        , li = config.view.li
-                        , empty = Html.div [] []
-                        }
-                    }
 
                 selection =
                     case maybeSelection of
@@ -202,8 +210,8 @@ view config ids state allEntries maybeSelection =
                             [ actualSelection ]
             in
             Html.div
-                (appendAttributes config.view.container [])
-                [ viewButton data buttonHtmlDetails ids.labelledBy maybeSelection True
+                (appendAttributes views.container [])
+                [ viewButton ids.id buttonHtmlDetails ids.labelledBy maybeSelection True
                 , Listbox.view listboxConfig
                     { id = printListboxId ids.id
                     , labelledBy = ids.labelledBy
@@ -215,15 +223,15 @@ view config ids state allEntries maybeSelection =
                 ]
 
 
-viewClosed : Data a -> HtmlAttributes -> HtmlDetails -> String -> Maybe a -> Html (Msg a)
-viewClosed data containerHtmlAttributes buttonHtmlDetails labelledBy selection =
+viewClosed : String -> HtmlAttributes -> HtmlDetails -> String -> Maybe a -> Html (Msg a)
+viewClosed id containerHtmlAttributes buttonHtmlDetails labelledBy selection =
     Html.div
         (appendAttributes containerHtmlAttributes [])
-        [ viewButton data buttonHtmlDetails labelledBy selection False ]
+        [ viewButton id buttonHtmlDetails labelledBy selection False ]
 
 
-viewButton : Data a -> HtmlDetails -> String -> Maybe a -> Bool -> Html (Msg a)
-viewButton ({ id } as data) { attributes, children } labelledBy selection open =
+viewButton : String -> HtmlDetails -> String -> Maybe a -> Bool -> Html (Msg a)
+viewButton id { attributes, children } labelledBy selection open =
     Html.button
         ([ Attributes.id (printButtonId id)
          , Attributes.type_ "button"
@@ -232,10 +240,10 @@ viewButton ({ id } as data) { attributes, children } labelledBy selection open =
             (printButtonId id ++ " " ++ labelledBy)
          , Attributes.style "position" "relative"
          , Attributes.tabindex 0
-         , Events.onClick (ButtonClicked data)
+         , Events.onClick (ButtonClicked id)
          , Events.on "keydown"
             (Decode.field "key" Decode.string
-                |> Decode.andThen (buttonKeyDown data)
+                |> Decode.andThen (buttonKeyDown id)
             )
          ]
             |> setAriaExpanded open
@@ -244,14 +252,14 @@ viewButton ({ id } as data) { attributes, children } labelledBy selection open =
         (List.map (Html.map (\_ -> NoOp)) children)
 
 
-buttonKeyDown : Data a -> String -> Decoder (Msg a)
-buttonKeyDown data code =
+buttonKeyDown : String -> String -> Decoder (Msg a)
+buttonKeyDown id code =
     case code of
         "ArrowUp" ->
-            Decode.succeed (ButtonArrowUpPressed data)
+            Decode.succeed (ButtonArrowUpPressed id)
 
         "ArrowDown" ->
-            Decode.succeed (ButtonArrowDownPressed data)
+            Decode.succeed (ButtonArrowDownPressed id)
 
         _ ->
             Decode.fail "not handling that key here"
@@ -292,9 +300,9 @@ printListboxId id =
 type Msg a
     = NoOp
       -- BUTTON
-    | ButtonClicked (Data a)
-    | ButtonArrowUpPressed (Data a)
-    | ButtonArrowDownPressed (Data a)
+    | ButtonClicked String
+    | ButtonArrowUpPressed String
+    | ButtonArrowDownPressed String
       -- LISTBOX
     | ListboxMsg (Maybe String) (Listbox.Msg a)
 
@@ -309,34 +317,47 @@ type alias Data a =
 {-| TODO
 -}
 update :
-    (a -> outMsg)
+    UpdateConfig a
+    -> (a -> outMsg)
     -> Dropdown
     -> List a
     -> Maybe a
     -> Msg a
     -> ( Dropdown, Cmd (Msg a), Maybe outMsg )
-update entrySelected state allEntries maybeSelection msg =
+update (UpdateConfig uniqueId behaviour) entrySelected state allEntries maybeSelection msg =
+    let
+        listboxConfig =
+            Listbox.updateConfig uniqueId
+                { jumpAtEnds = behaviour.jumpAtEnds
+                , separateFocus = behaviour.separateFocus
+                , selectionFollowsFocus = behaviour.selectionFollowsFocus
+                , handleHomeAndEnd = behaviour.handleHomeAndEnd
+                , typeAhead = behaviour.typeAhead
+                }
+    in
     case state of
         Closed ->
-            updateClosed entrySelected allEntries maybeSelection msg
+            updateClosed uniqueId behaviour entrySelected allEntries maybeSelection msg
 
         Open stuff ->
-            updateOpen entrySelected allEntries maybeSelection stuff msg
+            updateOpen listboxConfig entrySelected allEntries maybeSelection stuff msg
 
 
 updateClosed :
-    (a -> outMsg)
+    (a -> String)
+    -> Behaviour a
+    -> (a -> outMsg)
     -> List a
     -> Maybe a
     -> Msg a
     -> ( Dropdown, Cmd (Msg a), Maybe outMsg )
-updateClosed entrySelected allEntries maybeSelection msg =
+updateClosed uniqueId behaviour entrySelected allEntries maybeSelection msg =
     case msg of
         NoOp ->
             ( Closed, Cmd.none, Nothing )
 
         -- BUTTON
-        ButtonClicked { behaviour, id, uniqueId } ->
+        ButtonClicked id ->
             case maybeSelection of
                 Nothing ->
                     case List.head allEntries of
@@ -375,7 +396,7 @@ updateClosed entrySelected allEntries maybeSelection msg =
                     else
                         ( Closed, Cmd.none, Nothing )
 
-        ButtonArrowUpPressed { behaviour, id, uniqueId } ->
+        ButtonArrowUpPressed id ->
             case maybeSelection of
                 Nothing ->
                     case List.head (List.reverse allEntries) of
@@ -448,7 +469,7 @@ updateClosed entrySelected allEntries maybeSelection msg =
                         Nothing ->
                             ( Closed, Cmd.none, Nothing )
 
-        ButtonArrowDownPressed { behaviour, id, uniqueId } ->
+        ButtonArrowDownPressed id ->
             case maybeSelection of
                 Nothing ->
                     case List.head allEntries of
@@ -532,13 +553,14 @@ type OutMsg a
 
 
 updateOpen :
-    (a -> outMsg)
+    Listbox.UpdateConfig a
+    -> (a -> outMsg)
     -> List a
     -> Maybe a
     -> OpenData
     -> Msg a
     -> ( Dropdown, Cmd (Msg a), Maybe outMsg )
-updateOpen entrySelected allEntries maybeSelection stuff msg =
+updateOpen listboxConfig entrySelected allEntries maybeSelection stuff msg =
     case msg of
         ListboxMsg maybeId listboxMsg ->
             let
@@ -551,7 +573,7 @@ updateOpen entrySelected allEntries maybeSelection stuff msg =
                             [ actualSelection ]
 
                 ( newListbox, listboxCmd, maybeOutMsg ) =
-                    Listbox.update
+                    Listbox.update listboxConfig
                         [ Listbox.onEntrySelect EntrySelected
                         , Listbox.onListboxBlur ListboxBlured
                         , Listbox.onEscapeDown ListboxEscapePressed

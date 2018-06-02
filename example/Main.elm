@@ -80,7 +80,7 @@ update msg model =
         ListboxMsg listboxMsg ->
             let
                 ( newListbox, listboxCmd, maybeOutMsg ) =
-                    Listbox.update
+                    Listbox.update listboxUpdateConfig
                         [ Listbox.onEntrySelect EntrySelected
                         , Listbox.onEntriesSelect EntriesSelected
                         , Listbox.onEntryUnselect EntryUnselected
@@ -122,7 +122,8 @@ update msg model =
         DropdownMsg dropdownMsg ->
             let
                 ( newDropdown, dropdownCmd, maybeOutMsg ) =
-                    Dropdown.update EntrySelected
+                    Dropdown.update dropdownUpdateConfig
+                        EntrySelected
                         model.dropdown
                         locales
                         model.selectedLocale
@@ -177,7 +178,7 @@ view model =
                                 [ model.selectedLocales
                                     |> Set.toList
                                     |> Listbox.viewLazy (\_ -> 42)
-                                        listboxConfig
+                                        listboxViewConfig
                                         { id = "locales"
                                         , labelledBy = "locales-label"
                                         }
@@ -211,7 +212,7 @@ view model =
                             , Html.div
                                 [ Attributes.class "control" ]
                                 [ model.selectedLocale
-                                    |> Dropdown.view dropdownConfig
+                                    |> Dropdown.view dropdownViewConfig
                                         { id = "locales-dropdown"
                                         , labelledBy = "locales-dropdown-label"
                                         }
@@ -241,10 +242,9 @@ view model =
 ---- CONFIG
 
 
-listboxConfig : Listbox.Config String
-listboxConfig =
-    { uniqueId = identity
-    , behaviour =
+listboxUpdateConfig : Listbox.UpdateConfig String
+listboxUpdateConfig =
+    Listbox.updateConfig identity
         { jumpAtEnds = True
         , separateFocus = True
         , selectionFollowsFocus = False
@@ -255,7 +255,11 @@ listboxConfig =
                     String.toLower value
                         |> String.contains (String.toLower query)
         }
-    , view =
+
+
+listboxViewConfig : Listbox.ViewConfig String
+listboxViewConfig =
+    Listbox.viewConfig identity
         { ul = [ Attributes.class "list" ]
         , li =
             \{ selected, keyboardFocused, mouseFocused, maybeQuery } name ->
@@ -271,13 +275,11 @@ listboxConfig =
                 }
         , empty = Html.div [] [ Html.text "this list is empty" ]
         }
-    }
 
 
-dropdownConfig : Dropdown.Config String
-dropdownConfig =
-    { uniqueId = identity
-    , behaviour =
+dropdownUpdateConfig : Dropdown.UpdateConfig String
+dropdownUpdateConfig =
+    Dropdown.updateConfig identity
         { jumpAtEnds = True
         , closeAfterMouseSelection = True
         , separateFocus = True
@@ -289,7 +291,11 @@ dropdownConfig =
                     String.toLower value
                         |> String.contains (String.toLower query)
         }
-    , view =
+
+
+dropdownViewConfig : Dropdown.ViewConfig String
+dropdownViewConfig =
+    Dropdown.viewConfig identity
         { container = []
         , button =
             \{ maybeSelection, open } ->
@@ -319,7 +325,6 @@ dropdownConfig =
                 , children = liChildren maybeQuery name
                 }
         }
-    }
 
 
 liChildren : Maybe String -> String -> List (Html Never)

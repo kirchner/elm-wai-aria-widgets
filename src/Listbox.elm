@@ -1,7 +1,6 @@
 module Listbox
     exposing
         ( Behaviour
-        , Config
         , Event
         , HtmlAttributes
         , HtmlDetails
@@ -9,7 +8,9 @@ module Listbox
         , Listbox
         , Msg
         , TypeAhead
-        , View
+        , UpdateConfig
+        , ViewConfig
+        , Views
         , focused
         , noTypeAhead
         , onAllEntriesSelect
@@ -24,7 +25,9 @@ module Listbox
         , typeAhead
         , unfocused
         , update
+        , updateConfig
         , view
+        , viewConfig
         , viewLazy
         )
 
@@ -177,16 +180,67 @@ focused id keyboardFocus =
 
 
 
----- CONFIG
+---- VIEW CONFIG
 
 
 {-| TODO
 -}
-type alias Config a =
-    { uniqueId : a -> String
-    , behaviour : Behaviour a
-    , view : View a
+type ViewConfig a
+    = ViewConfig (a -> String) (Views a)
+
+
+{-| TODO
+-}
+viewConfig : (a -> String) -> Views a -> ViewConfig a
+viewConfig =
+    ViewConfig
+
+
+{-| TODO
+-}
+type alias Views a =
+    { ul : HtmlAttributes
+    , li :
+        { selected : Bool
+        , keyboardFocused : Bool
+        , mouseFocused : Bool
+        , maybeQuery : Maybe String
+        }
+        -> a
+        -> HtmlDetails
+    , empty : Html Never
     }
+
+
+{-| TODO
+-}
+type alias HtmlAttributes =
+    List (Html.Attribute Never)
+
+
+{-| TODO
+-}
+type alias HtmlDetails =
+    { attributes : List (Html.Attribute Never)
+    , children : List (Html Never)
+    }
+
+
+
+---- UPDATE CONFIG
+
+
+{-| TODO
+-}
+type UpdateConfig a
+    = UpdateConfig (a -> String) (Behaviour a)
+
+
+{-| TODO
+-}
+updateConfig : (a -> String) -> Behaviour a -> UpdateConfig a
+updateConfig =
+    UpdateConfig
 
 
 {-| TODO
@@ -231,36 +285,6 @@ typeAhead =
     TypeAhead
 
 
-{-| TODO
--}
-type alias View a =
-    { ul : HtmlAttributes
-    , li :
-        { selected : Bool
-        , keyboardFocused : Bool
-        , mouseFocused : Bool
-        , maybeQuery : Maybe String
-        }
-        -> a
-        -> HtmlDetails
-    , empty : Html Never
-    }
-
-
-{-| TODO
--}
-type alias HtmlAttributes =
-    List (Html.Attribute Never)
-
-
-{-| TODO
--}
-type alias HtmlDetails =
-    { attributes : List (Html.Attribute Never)
-    , children : List (Html Never)
-    }
-
-
 
 ---- VIEW
 
@@ -275,8 +299,8 @@ type alias Ids =
 
 {-| TODO
 -}
-view : Config a -> Ids -> Listbox -> List a -> List a -> Html (Msg a)
-view config ids listbox allEntries selection =
+view : ViewConfig a -> Ids -> Listbox -> List a -> List a -> Html (Msg a)
+view (ViewConfig uniqueId views) ids listbox allEntries selection =
     let
         renderedEntries =
             { spaceAboveFirst = 0
@@ -292,13 +316,13 @@ view config ids listbox allEntries selection =
             , entriesBelow = []
             }
     in
-    viewHelp renderedEntries config ids listbox allEntries selection
+    viewHelp renderedEntries uniqueId views ids listbox allEntries selection
 
 
 {-| TODO
 -}
-viewLazy : (a -> Float) -> Config a -> Ids -> Listbox -> List a -> List a -> Html (Msg a)
-viewLazy entryHeight config ids listbox allEntries selection =
+viewLazy : (a -> Float) -> ViewConfig a -> Ids -> Listbox -> List a -> List a -> Html (Msg a)
+viewLazy entryHeight (ViewConfig uniqueId views) ids listbox allEntries selection =
     let
         renderedEntries =
             case listbox of
@@ -310,7 +334,7 @@ viewLazy entryHeight config ids listbox allEntries selection =
                                     Nothing
 
                                 Just keyboardFocus ->
-                                    find config.uniqueId keyboardFocus allEntries
+                                    find uniqueId keyboardFocus allEntries
                                         |> Maybe.map Tuple.first
                     in
                     computeRenderedEntries
@@ -323,7 +347,7 @@ viewLazy entryHeight config ids listbox allEntries selection =
                 Focused data ->
                     let
                         maybeFocusIndex =
-                            find config.uniqueId data.keyboardFocus allEntries
+                            find uniqueId data.keyboardFocus allEntries
                                 |> Maybe.map Tuple.first
                     in
                     computeRenderedEntries
@@ -347,30 +371,31 @@ viewLazy entryHeight config ids listbox allEntries selection =
                     , entriesBelow = []
                     }
     in
-    viewHelp renderedEntries config ids listbox allEntries selection
+    viewHelp renderedEntries uniqueId views ids listbox allEntries selection
 
 
-viewHelp : RenderedEntries a -> Config a -> Ids -> Listbox -> List a -> List a -> Html (Msg a)
-viewHelp renderedEntries config ids listbox allEntries selection =
+viewHelp :
+    RenderedEntries a
+    -> (a -> String)
+    -> Views a
+    -> Ids
+    -> Listbox
+    -> List a
+    -> List a
+    -> Html (Msg a)
+viewHelp renderedEntries uniqueId views ids listbox allEntries selection =
     case listbox of
         Unfocused data ->
-            let
-                viewData =
-                    { behaviour = config.behaviour
-                    , id = ids.id
-                    , uniqueId = config.uniqueId
-                    }
-            in
-            viewUnfocused
-                config
+            viewUnfocused uniqueId
+                views
                 ids
-                viewData
                 data.maybeKeyboardFocus
                 selection
                 allEntries
                 renderedEntries.visibleEntries
                 (viewEntries
-                    config
+                    uniqueId
+                    views
                     ids
                     data.maybeKeyboardFocus
                     data.maybeMouseFocus
@@ -389,14 +414,16 @@ viewHelp renderedEntries config ids listbox allEntries selection =
                         Query _ _ query ->
                             Just query
             in
-            viewFocused config
+            viewFocused
+                uniqueId
+                views
                 ids
                 data.keyboardFocus
                 renderedEntries.visibleEntries
                 allEntries
-                selection
                 (viewEntries
-                    config
+                    uniqueId
+                    views
                     ids
                     (Just data.keyboardFocus)
                     data.maybeMouseFocus
@@ -406,21 +433,20 @@ viewHelp renderedEntries config ids listbox allEntries selection =
                 )
 
         Empty ->
-            config.view.empty
-                |> Html.map (\_ -> NoOp)
+            Html.map (\_ -> NoOp) views.empty
 
 
 viewUnfocused :
-    Config a
+    (a -> String)
+    -> Views a
     -> Ids
-    -> Data a
     -> Maybe String
     -> List a
     -> List a
     -> List a
     -> List (Html (Msg a))
     -> Html (Msg a)
-viewUnfocused config ids data maybeKeyboardFocus selection allEntries visibleEntries =
+viewUnfocused uniqueId views ids maybeKeyboardFocus selection allEntries visibleEntries =
     Html.ul
         ([ Attributes.id (printListId ids.id)
          , Attributes.attribute "role" "listbox"
@@ -441,7 +467,7 @@ viewUnfocused config ids data maybeKeyboardFocus selection allEntries visibleEnt
 
                             Just keyboardFocus ->
                                 visibleEntries
-                                    |> indexOf config.uniqueId keyboardFocus
+                                    |> indexOf uniqueId keyboardFocus
                                     |> Maybe.map
                                         (\index ->
                                             Decode.map Just (scrollDataDecoder (index + 2))
@@ -450,36 +476,29 @@ viewUnfocused config ids data maybeKeyboardFocus selection allEntries visibleEnt
 
                     firstSelection :: _ ->
                         visibleEntries
-                            |> indexOf config.uniqueId (config.uniqueId firstSelection)
+                            |> indexOf uniqueId (uniqueId firstSelection)
                             |> Maybe.map (\index -> Decode.map Just (scrollDataDecoder (index + 2)))
                             |> Maybe.withDefault (Decode.succeed Nothing)
                 , Decode.succeed Nothing
                 ]
-                |> Decode.map (ListFocused data)
+                |> Decode.map (ListFocused ids.id)
             )
          ]
-            |> setAriaActivedescendant ids.id config.uniqueId maybeKeyboardFocus allEntries
-            |> appendAttributes config.view.ul
+            |> setAriaActivedescendant ids.id uniqueId maybeKeyboardFocus allEntries
+            |> appendAttributes views.ul
         )
 
 
 viewFocused :
-    Config a
+    (a -> String)
+    -> Views a
     -> Ids
     -> String
     -> List a
     -> List a
-    -> List a
     -> List (Html (Msg a))
     -> Html (Msg a)
-viewFocused config ids keyboardFocus visibleEntries allEntries selection =
-    let
-        data =
-            { behaviour = config.behaviour
-            , id = ids.id
-            , uniqueId = config.uniqueId
-            }
-    in
+viewFocused uniqueId views ids keyboardFocus visibleEntries allEntries =
     Html.ul
         ([ Attributes.id (printListId ids.id)
          , Attributes.attribute "role" "listbox"
@@ -488,7 +507,8 @@ viewFocused config ids keyboardFocus visibleEntries allEntries selection =
          , Events.preventDefaultOn "keydown"
             (keyInfoDecoder
                 |> Decode.andThen
-                    (listKeydown data keyboardFocus visibleEntries)
+                    (listKeydown uniqueId ids.id keyboardFocus visibleEntries)
+                |> preventDefault
             )
          , Events.on "scroll" <|
             Decode.map2 ListScrolled
@@ -496,8 +516,8 @@ viewFocused config ids keyboardFocus visibleEntries allEntries selection =
                 (Decode.at [ "target", "clientHeight" ] Decode.float)
          , Events.on "blur" (Decode.succeed ListBlured)
          ]
-            |> setAriaActivedescendant ids.id config.uniqueId (Just keyboardFocus) allEntries
-            |> appendAttributes config.view.ul
+            |> setAriaActivedescendant ids.id uniqueId (Just keyboardFocus) allEntries
+            |> appendAttributes views.ul
         )
 
 
@@ -516,14 +536,9 @@ keyInfoDecoder =
         |> Decode.required "ctrlKey" Decode.bool
 
 
-listKeydown :
-    Data a
-    -> String
-    -> List a
-    -> KeyInfo
-    -> Decoder ( Msg a, Bool )
-listKeydown ({ id, uniqueId, behaviour } as data) keyboardFocus visibleEntries { code, shiftDown, controlDown } =
-    case Debug.log "code" code of
+listKeydown : (a -> String) -> String -> String -> List a -> KeyInfo -> Decoder (Msg a)
+listKeydown uniqueId id keyboardFocus visibleEntries { code, shiftDown, controlDown } =
+    case code of
         "ArrowUp" ->
             Decode.oneOf
                 [ visibleEntries
@@ -532,8 +547,7 @@ listKeydown ({ id, uniqueId, behaviour } as data) keyboardFocus visibleEntries {
                     |> Maybe.withDefault (Decode.succeed Nothing)
                 , Decode.succeed Nothing
                 ]
-                |> Decode.map (ListArrowUpPressed data shiftDown)
-                |> preventDefault
+                |> Decode.map (ListArrowUpPressed id shiftDown)
 
         "ArrowDown" ->
             Decode.oneOf
@@ -543,76 +557,45 @@ listKeydown ({ id, uniqueId, behaviour } as data) keyboardFocus visibleEntries {
                     |> Maybe.withDefault (Decode.succeed Nothing)
                 , Decode.succeed Nothing
                 ]
-                |> Decode.map (ListArrowDownPressed data shiftDown)
-                |> preventDefault
+                |> Decode.map (ListArrowDownPressed id shiftDown)
 
         "Enter" ->
-            Decode.succeed (ListEnterPressed id uniqueId)
-                |> preventDefault
+            Decode.succeed (ListEnterPressed id)
 
         "Escape" ->
             Decode.succeed ListEscapePressed
-                |> preventDefault
 
         " " ->
             if shiftDown then
-                Decode.succeed (ListShiftSpacePressed id uniqueId)
-                    |> preventDefault
+                Decode.succeed (ListShiftSpacePressed id)
             else
-                Decode.succeed (ListSpacePressed id uniqueId)
-                    |> preventDefault
+                Decode.succeed (ListSpacePressed id)
 
         "Home" ->
-            if behaviour.handleHomeAndEnd then
-                if shiftDown && controlDown then
-                    Decode.succeed (ListControlShiftHomePressed data)
-                        |> preventDefault
-                else
-                    Decode.succeed (ListHomePressed data)
-                        |> preventDefault
+            if shiftDown && controlDown then
+                Decode.succeed (ListControlShiftHomePressed id)
             else
-                Decode.fail "not handling that key here"
+                Decode.succeed (ListHomePressed id)
 
         "End" ->
-            if behaviour.handleHomeAndEnd then
-                if shiftDown && controlDown then
-                    Decode.succeed (ListControlShiftEndPressed data)
-                        |> preventDefault
-                else
-                    Decode.succeed (ListEndPressed data)
-                        |> preventDefault
+            if shiftDown && controlDown then
+                Decode.succeed (ListControlShiftEndPressed id)
             else
-                Decode.fail "not handling that key here"
+                Decode.succeed (ListEndPressed id)
 
         "a" ->
             if controlDown then
-                Decode.succeed (ListControlAPressed uniqueId)
-                    |> preventDefault
+                Decode.succeed ListControlAPressed
+            else if String.length code == 1 then
+                Decode.succeed (ListKeyPressed id code)
             else
-                case behaviour.typeAhead of
-                    NoTypeAhead ->
-                        Decode.fail "not handling that key here"
-
-                    TypeAhead timeout matchesQuery ->
-                        if String.length code == 1 then
-                            ListKeyPressed data timeout matchesQuery code
-                                |> Decode.succeed
-                                |> preventDefault
-                        else
-                            Decode.fail "not handling that key here"
+                Decode.fail "not handling that key here"
 
         _ ->
-            case behaviour.typeAhead of
-                NoTypeAhead ->
-                    Decode.fail "not handling that key here"
-
-                TypeAhead timeout matchesQuery ->
-                    if String.length code == 1 then
-                        ListKeyPressed data timeout matchesQuery code
-                            |> Decode.succeed
-                            |> preventDefault
-                    else
-                        Decode.fail "not handling that key here"
+            if String.length code == 1 then
+                Decode.succeed (ListKeyPressed id code)
+            else
+                Decode.fail "not handling that key here"
 
 
 scrollDataDecoder : Int -> Decoder ScrollData
@@ -633,7 +616,8 @@ scrollDataDecoder index =
 
 
 viewEntries :
-    Config a
+    (a -> String)
+    -> Views a
     -> Ids
     -> Maybe String
     -> Maybe String
@@ -641,21 +625,20 @@ viewEntries :
     -> Maybe String
     -> RenderedEntries a
     -> List (Html (Msg a))
-viewEntries config ids maybeKeyboardFocus maybeMouseFocus selection maybeQuery renderedEntries =
+viewEntries uniqueId views ids maybeKeyboardFocus maybeMouseFocus selection maybeQuery renderedEntries =
     let
         entryConfig =
             { id = ids.id
-            , li = config.view.li
-            , uniqueId = config.uniqueId
+            , li = views.li
+            , uniqueId = uniqueId
             }
 
         viewEntryWrapper a =
             viewEntry entryConfig
-                config.behaviour
                 maybeQuery
                 (List.member a selection)
-                (maybeKeyboardFocus == Just (config.uniqueId a))
-                (maybeMouseFocus == Just (config.uniqueId a))
+                (maybeKeyboardFocus == Just (uniqueId a))
+                (maybeMouseFocus == Just (uniqueId a))
                 a
     in
     List.concat
@@ -684,14 +667,13 @@ viewEntry :
         -> HtmlDetails
     , uniqueId : a -> String
     }
-    -> Behaviour a
     -> Maybe String
     -> Bool
     -> Bool
     -> Bool
     -> a
     -> Html (Msg a)
-viewEntry config behaviour maybeQuery selected keyboardFocused mouseFocused a =
+viewEntry config maybeQuery selected keyboardFocused mouseFocused a =
     let
         { attributes, children } =
             config.li
@@ -703,9 +685,9 @@ viewEntry config behaviour maybeQuery selected keyboardFocused mouseFocused a =
                 a
     in
     Html.li
-        ([ Events.onMouseEnter (EntryMouseEntered behaviour (config.uniqueId a))
-         , Events.onMouseLeave (EntryMouseLeft behaviour)
-         , Events.onClick (EntryClicked behaviour config.id config.uniqueId a)
+        ([ Events.onMouseEnter (EntryMouseEntered (config.uniqueId a))
+         , Events.onMouseLeave EntryMouseLeft
+         , Events.onClick (EntryClicked config.id a)
          , Attributes.id (printEntryId config.id (config.uniqueId a))
          , Attributes.attribute "role" "option"
          ]
@@ -766,35 +748,28 @@ type Msg a
     = NoOp
       -- LIST
     | ListMouseDown
-    | ListFocused (Data a) (Maybe ScrollData)
+    | ListFocused String (Maybe ScrollData)
     | ListBlured
     | ListScrolled Float Float
-    | ListArrowUpPressed (Data a) Bool (Maybe ScrollData)
-    | ListArrowDownPressed (Data a) Bool (Maybe ScrollData)
-    | ListEnterPressed String (a -> String)
+    | ListArrowUpPressed String Bool (Maybe ScrollData)
+    | ListArrowDownPressed String Bool (Maybe ScrollData)
+    | ListEnterPressed String
     | ListEscapePressed
-    | ListSpacePressed String (a -> String)
-    | ListShiftSpacePressed String (a -> String)
-    | ListHomePressed (Data a)
-    | ListControlShiftHomePressed (Data a)
-    | ListEndPressed (Data a)
-    | ListControlShiftEndPressed (Data a)
-    | ListControlAPressed (a -> String)
+    | ListSpacePressed String
+    | ListShiftSpacePressed String
+    | ListHomePressed String
+    | ListControlShiftHomePressed String
+    | ListEndPressed String
+    | ListControlShiftEndPressed String
+    | ListControlAPressed
       -- QUERY
-    | ListKeyPressed (Data a) Int (String -> a -> Bool) String
-    | CurrentTimeReceived (Data a) Int (String -> a -> Bool) String Time.Posix
+    | ListKeyPressed String String
+    | CurrentTimeReceived String String Time.Posix
     | Tick Time.Posix
       -- ENTRY
-    | EntryMouseEntered (Behaviour a) String
-    | EntryMouseLeft (Behaviour a)
-    | EntryClicked (Behaviour a) String (a -> String) a
-
-
-type alias Data a =
-    { behaviour : Behaviour a
-    , id : String
-    , uniqueId : a -> String
-    }
+    | EntryMouseEntered String
+    | EntryMouseLeft
+    | EntryClicked String a
 
 
 type alias ScrollData =
@@ -960,32 +935,34 @@ sendEscapeDown events =
 {-| TODO
 -}
 update :
-    List (Event a outMsg)
+    UpdateConfig a
+    -> List (Event a outMsg)
     -> Listbox
     -> List a
     -> List a
     -> Msg a
     -> ( Listbox, Cmd (Msg a), Maybe outMsg )
-update events listbox allEntries selection msg =
+update config events listbox allEntries selection msg =
     case listbox of
         Unfocused unfocusedData ->
-            updateUnfocused events allEntries selection unfocusedData msg
+            updateUnfocused config events allEntries selection unfocusedData msg
 
         Focused focusedData ->
-            updateFocused events allEntries selection focusedData msg
+            updateFocused config events allEntries selection focusedData msg
 
         Empty ->
             ( listbox, Cmd.none, Nothing )
 
 
 updateUnfocused :
-    List (Event a outMsg)
+    UpdateConfig a
+    -> List (Event a outMsg)
     -> List a
     -> List a
     -> UnfocusedData
     -> Msg a
     -> ( Listbox, Cmd (Msg a), Maybe outMsg )
-updateUnfocused events allEntries selection data msg =
+updateUnfocused (UpdateConfig uniqueId behaviour) events allEntries selection data msg =
     case msg of
         -- LIST
         ListMouseDown ->
@@ -994,7 +971,7 @@ updateUnfocused events allEntries selection data msg =
             , Nothing
             )
 
-        ListFocused { behaviour, id, uniqueId } maybeScrollData ->
+        ListFocused id maybeScrollData ->
             let
                 maybeNewFocus =
                     data.maybeLastSelectedEntry
@@ -1045,7 +1022,7 @@ updateUnfocused events allEntries selection data msg =
             )
 
         -- ENTRY
-        EntryMouseEntered behaviour newFocus ->
+        EntryMouseEntered newFocus ->
             ( Unfocused
                 { data
                     | maybeKeyboardFocus =
@@ -1059,7 +1036,7 @@ updateUnfocused events allEntries selection data msg =
             , Nothing
             )
 
-        EntryMouseLeft behaviour ->
+        EntryMouseLeft ->
             ( Unfocused
                 { data
                     | maybeMouseFocus =
@@ -1072,7 +1049,7 @@ updateUnfocused events allEntries selection data msg =
             , Nothing
             )
 
-        EntryClicked behaviour id uniqueId a ->
+        EntryClicked id a ->
             ( Focused
                 { query = NoQuery
 
@@ -1094,13 +1071,14 @@ updateUnfocused events allEntries selection data msg =
 
 
 updateFocused :
-    List (Event a outMsg)
+    UpdateConfig a
+    -> List (Event a outMsg)
     -> List a
     -> List a
     -> FocusedData
     -> Msg a
     -> ( Listbox, Cmd (Msg a), Maybe outMsg )
-updateFocused events allEntries selection data msg =
+updateFocused (UpdateConfig uniqueId behaviour) events allEntries selection data msg =
     case msg of
         -- LIST
         ListBlured ->
@@ -1126,7 +1104,7 @@ updateFocused events allEntries selection data msg =
             , Nothing
             )
 
-        ListArrowUpPressed { behaviour, id, uniqueId } shiftDown maybeScrollData ->
+        ListArrowUpPressed id shiftDown maybeScrollData ->
             case findPrevious uniqueId data.keyboardFocus allEntries of
                 Just (Last lastEntry) ->
                     if behaviour.jumpAtEnds then
@@ -1150,7 +1128,7 @@ updateFocused events allEntries selection data msg =
                     , Nothing
                     )
 
-        ListArrowDownPressed { behaviour, id, uniqueId } shiftDown maybeScrollData ->
+        ListArrowDownPressed id shiftDown maybeScrollData ->
             case findNext uniqueId data.keyboardFocus allEntries of
                 Just (First firstEntry) ->
                     if behaviour.jumpAtEnds then
@@ -1174,7 +1152,7 @@ updateFocused events allEntries selection data msg =
                     , Nothing
                     )
 
-        ListEnterPressed id uniqueId ->
+        ListEnterPressed id ->
             case find uniqueId data.keyboardFocus allEntries of
                 Nothing ->
                     ( Focused data
@@ -1200,7 +1178,7 @@ updateFocused events allEntries selection data msg =
             , sendEscapeDown events
             )
 
-        ListSpacePressed id uniqueId ->
+        ListSpacePressed id ->
             case find uniqueId data.keyboardFocus allEntries of
                 Nothing ->
                     ( Focused data
@@ -1220,7 +1198,7 @@ updateFocused events allEntries selection data msg =
                         , sendEntrySelected a events
                         )
 
-        ListShiftSpacePressed id uniqueId ->
+        ListShiftSpacePressed id ->
             case data.maybeLastSelectedEntry of
                 Nothing ->
                     ( Focused data
@@ -1242,7 +1220,7 @@ updateFocused events allEntries selection data msg =
                             , sendEntriesSelected events selectedEntries
                             )
 
-        ListHomePressed { behaviour, id, uniqueId } ->
+        ListHomePressed id ->
             case List.head allEntries of
                 Nothing ->
                     ( Focused data
@@ -1255,7 +1233,7 @@ updateFocused events allEntries selection data msg =
                         |> updateFocus behaviour uniqueId events [] False firstEntry
                         |> andDo (scrollListToTop id)
 
-        ListControlShiftHomePressed { behaviour, id, uniqueId } ->
+        ListControlShiftHomePressed id ->
             case List.head allEntries of
                 Nothing ->
                     ( Focused data
@@ -1290,7 +1268,7 @@ updateFocused events allEntries selection data msg =
                             , sendEntriesSelected events selectedEntries
                             )
 
-        ListEndPressed { behaviour, id, uniqueId } ->
+        ListEndPressed id ->
             case List.head (List.reverse allEntries) of
                 Nothing ->
                     ( Focused data, Cmd.none, Nothing )
@@ -1300,7 +1278,7 @@ updateFocused events allEntries selection data msg =
                         |> updateFocus behaviour uniqueId events [] False lastEntry
                         |> andDo (scrollListToBottom id)
 
-        ListControlShiftEndPressed { behaviour, id, uniqueId } ->
+        ListControlShiftEndPressed id ->
             case List.head (List.reverse allEntries) of
                 Nothing ->
                     ( Focused data
@@ -1335,7 +1313,7 @@ updateFocused events allEntries selection data msg =
                             , sendEntriesSelected events selectedEntries
                             )
 
-        ListControlAPressed uniqueId ->
+        ListControlAPressed ->
             let
                 allEntriesSet =
                     allEntries
@@ -1356,46 +1334,62 @@ updateFocused events allEntries selection data msg =
             )
 
         -- QUERY
-        ListKeyPressed viewData timeout matchesQuery code ->
-            ( Focused data
-            , Time.now
-                |> Task.perform
-                    (CurrentTimeReceived viewData timeout matchesQuery code)
-            , Nothing
-            )
-
-        CurrentTimeReceived { behaviour, id, uniqueId } timeout matchesQuery code currentTime ->
-            let
-                ( newQuery, queryText ) =
-                    case data.query of
-                        NoQuery ->
-                            ( Query timeout currentTime code, code )
-
-                        Query _ _ query ->
-                            ( Query timeout currentTime (query ++ code), query ++ code )
-
-                newKeyboardFocus =
-                    findWith matchesQuery uniqueId data.keyboardFocus queryText allEntries
-            in
-            case newKeyboardFocus of
-                Nothing ->
-                    ( Focused data, Cmd.none, Nothing )
-
-                Just newFocus ->
-                    ( Focused
-                        { data
-                            | query = newQuery
-                            , keyboardFocus = newFocus
-                            , maybeMouseFocus =
-                                if behaviour.separateFocus then
-                                    data.maybeMouseFocus
-                                else
-                                    Just newFocus
-                        }
-                    , Browser.scrollIntoView (printEntryId id newFocus)
-                        |> Task.attempt (\_ -> NoOp)
+        ListKeyPressed id code ->
+            case behaviour.typeAhead of
+                NoTypeAhead ->
+                    ( Focused data
+                    , Cmd.none
                     , Nothing
                     )
+
+                TypeAhead _ _ ->
+                    ( Focused data
+                    , Time.now
+                        |> Task.perform
+                            (CurrentTimeReceived id code)
+                    , Nothing
+                    )
+
+        CurrentTimeReceived id code currentTime ->
+            case behaviour.typeAhead of
+                NoTypeAhead ->
+                    ( Focused data
+                    , Cmd.none
+                    , Nothing
+                    )
+
+                TypeAhead timeout matchesQuery ->
+                    let
+                        ( newQuery, queryText ) =
+                            case data.query of
+                                NoQuery ->
+                                    ( Query timeout currentTime code, code )
+
+                                Query _ _ query ->
+                                    ( Query timeout currentTime (query ++ code), query ++ code )
+
+                        newKeyboardFocus =
+                            findWith matchesQuery uniqueId data.keyboardFocus queryText allEntries
+                    in
+                    case newKeyboardFocus of
+                        Nothing ->
+                            ( Focused data, Cmd.none, Nothing )
+
+                        Just newFocus ->
+                            ( Focused
+                                { data
+                                    | query = newQuery
+                                    , keyboardFocus = newFocus
+                                    , maybeMouseFocus =
+                                        if behaviour.separateFocus then
+                                            data.maybeMouseFocus
+                                        else
+                                            Just newFocus
+                                }
+                            , Browser.scrollIntoView (printEntryId id newFocus)
+                                |> Task.attempt (\_ -> NoOp)
+                            , Nothing
+                            )
 
         Tick currentTime ->
             ( case data.query of
@@ -1412,7 +1406,7 @@ updateFocused events allEntries selection data msg =
             )
 
         -- ENTRY
-        EntryMouseEntered behaviour newFocus ->
+        EntryMouseEntered newFocus ->
             ( Focused
                 { data
                     | keyboardFocus =
@@ -1426,7 +1420,7 @@ updateFocused events allEntries selection data msg =
             , Nothing
             )
 
-        EntryMouseLeft behaviour ->
+        EntryMouseLeft ->
             ( Focused
                 { data
                     | maybeMouseFocus =
@@ -1439,7 +1433,7 @@ updateFocused events allEntries selection data msg =
             , Nothing
             )
 
-        EntryClicked behaviour id uniqueId a ->
+        EntryClicked id a ->
             let
                 newFocus =
                     uniqueId a
