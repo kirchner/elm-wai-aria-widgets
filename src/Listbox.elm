@@ -558,15 +558,23 @@ listKeydown ({ id, uniqueId, behaviour, allEntries } as data) keyboardFocus visi
 
         "Home" ->
             if behaviour.handleHomeAndEnd then
-                Decode.succeed (ListHomePressed data)
-                    |> preventDefault
+                if shiftDown && controlDown then
+                    Decode.succeed (ListControlShiftHomePressed data)
+                        |> preventDefault
+                else
+                    Decode.succeed (ListHomePressed data)
+                        |> preventDefault
             else
                 Decode.fail "not handling that key here"
 
         "End" ->
             if behaviour.handleHomeAndEnd then
-                Decode.succeed (ListEndPressed data)
-                    |> preventDefault
+                if shiftDown && controlDown then
+                    Decode.succeed (ListControlShiftEndPressed data)
+                        |> preventDefault
+                else
+                    Decode.succeed (ListEndPressed data)
+                        |> preventDefault
             else
                 Decode.fail "not handling that key here"
 
@@ -764,7 +772,9 @@ type Msg a
     | ListSpacePressed String (a -> String) (List a) (List a)
     | ListShiftSpacePressed String (a -> String) (List a)
     | ListHomePressed (Data a)
+    | ListControlShiftHomePressed (Data a)
     | ListEndPressed (Data a)
+    | ListControlShiftEndPressed (Data a)
     | ListControlAPressed (a -> String) (List a) (List a)
       -- QUERY
     | ListKeyPressed (Data a) Int (String -> a -> Bool) String
@@ -1161,7 +1171,7 @@ updateFocused events data msg =
 
                 Just ( _, a ) ->
                     if List.member a selection then
-                        ( Focused data
+                        ( Focused { data | maybeLastSelectedEntry = Nothing }
                         , Cmd.none
                         , sendEntryUnselected a events
                         )
@@ -1187,7 +1197,7 @@ updateFocused events data msg =
 
                 Just ( _, a ) ->
                     if List.member a selection then
-                        ( Focused data
+                        ( Focused { data | maybeLastSelectedEntry = Nothing }
                         , Cmd.none
                         , sendEntryUnselected a events
                         )
@@ -1232,6 +1242,41 @@ updateFocused events data msg =
                         |> updateFocus behaviour uniqueId events [] False firstEntry
                         |> andDo (scrollListToTop id)
 
+        ListControlShiftHomePressed { behaviour, id, uniqueId, allEntries } ->
+            case List.head allEntries of
+                Nothing ->
+                    ( Focused data
+                    , Cmd.none
+                    , Nothing
+                    )
+
+                Just firstEntry ->
+                    let
+                        newFocus =
+                            uniqueId firstEntry
+                    in
+                    case range uniqueId newFocus data.keyboardFocus allEntries of
+                        [] ->
+                            ( Focused data
+                            , Cmd.none
+                            , Nothing
+                            )
+
+                        selectedEntries ->
+                            ( Focused
+                                { data
+                                    | keyboardFocus = newFocus
+                                    , maybeMouseFocus =
+                                        if behaviour.separateFocus then
+                                            data.maybeMouseFocus
+                                        else
+                                            Just newFocus
+                                    , maybeLastSelectedEntry = Just newFocus
+                                }
+                            , scrollListToTop id
+                            , sendEntriesSelected events selectedEntries
+                            )
+
         ListEndPressed { behaviour, id, uniqueId, allEntries } ->
             case List.head (List.reverse allEntries) of
                 Nothing ->
@@ -1241,6 +1286,41 @@ updateFocused events data msg =
                     data
                         |> updateFocus behaviour uniqueId events [] False lastEntry
                         |> andDo (scrollListToBottom id)
+
+        ListControlShiftEndPressed { behaviour, id, uniqueId, allEntries } ->
+            case List.head (List.reverse allEntries) of
+                Nothing ->
+                    ( Focused data
+                    , Cmd.none
+                    , Nothing
+                    )
+
+                Just lastEntry ->
+                    let
+                        newFocus =
+                            uniqueId lastEntry
+                    in
+                    case range uniqueId newFocus data.keyboardFocus allEntries of
+                        [] ->
+                            ( Focused data
+                            , Cmd.none
+                            , Nothing
+                            )
+
+                        selectedEntries ->
+                            ( Focused
+                                { data
+                                    | keyboardFocus = newFocus
+                                    , maybeMouseFocus =
+                                        if behaviour.separateFocus then
+                                            data.maybeMouseFocus
+                                        else
+                                            Just newFocus
+                                    , maybeLastSelectedEntry = Just newFocus
+                                }
+                            , scrollListToBottom id
+                            , sendEntriesSelected events selectedEntries
+                            )
 
         ListControlAPressed uniqueId allEntries selection ->
             let
