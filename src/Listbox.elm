@@ -575,7 +575,17 @@ listKeydown ({ id, uniqueId, behaviour, allEntries } as data) keyboardFocus visi
                 Decode.succeed (ListControlAPressed uniqueId allEntries selection)
                     |> preventDefault
             else
-                Decode.fail "not handling that key here"
+                case behaviour.typeAhead of
+                    NoTypeAhead ->
+                        Decode.fail "not handling that key here"
+
+                    TypeAhead timeout matchesQuery ->
+                        if String.length code == 1 then
+                            ListKeyPressed data timeout matchesQuery code
+                                |> Decode.succeed
+                                |> preventDefault
+                        else
+                            Decode.fail "not handling that key here"
 
         _ ->
             case behaviour.typeAhead of
