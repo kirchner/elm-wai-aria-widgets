@@ -53,9 +53,9 @@ module Listbox
 
 # Configuration
 
-@docs Config, Behaviour, View
+@docs UpdateConfig, updateConfig, Behaviour
 
-@docs HtmlAttributes, HtmlDetails
+@docs ViewConfig, viewConfig, Views, HtmlAttributes, HtmlDetails
 
 
 ## Type ahead
