@@ -7,6 +7,7 @@ module Internal.Entries
         , findPrevious
         , findWith
         , indexOf
+        , range
         )
 
 
@@ -155,3 +156,31 @@ findNextHelp first index entryId currentId entries =
                         Just (Next (index + 1) next)
                     else
                         findNextHelp first (index + 1) entryId currentId rest
+
+
+range : (a -> String) -> String -> String -> List a -> List a
+range uniqueId start end entries =
+    case entries of
+        [] ->
+            []
+
+        entry :: rest ->
+            if uniqueId entry == start then
+                rangeHelp uniqueId [ entry ] end rest
+            else if uniqueId entry == end then
+                rangeHelp uniqueId [ entry ] start rest
+            else
+                range uniqueId start end rest
+
+
+rangeHelp : (a -> String) -> List a -> String -> List a -> List a
+rangeHelp uniqueId collected end entries =
+    case entries of
+        [] ->
+            []
+
+        entry :: rest ->
+            if uniqueId entry == end then
+                entry :: collected
+            else
+                rangeHelp uniqueId (entry :: collected) end rest

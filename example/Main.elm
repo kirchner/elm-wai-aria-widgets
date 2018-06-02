@@ -69,6 +69,7 @@ type Msg
 
 type OutMsg
     = EntrySelected String
+    | EntriesSelected (List String)
     | EntryUnselected String
     | AllEntriesSelected
     | AllEntriesUnselected
@@ -81,6 +82,7 @@ update msg model =
                 ( newListbox, listboxCmd, maybeOutMsg ) =
                     Listbox.update
                         [ Listbox.onEntrySelect EntrySelected
+                        , Listbox.onEntriesSelect EntriesSelected
                         , Listbox.onEntryUnselect EntryUnselected
                         , Listbox.onAllEntriesSelect AllEntriesSelected
                         , Listbox.onAllEntriesUnselect AllEntriesUnselected
@@ -97,6 +99,11 @@ update msg model =
 
                         Just (EntrySelected locale) ->
                             Set.insert locale model.selectedLocales
+
+                        Just (EntriesSelected newLocales) ->
+                            Set.union
+                                (Set.fromList newLocales)
+                                model.selectedLocales
 
                         Just (EntryUnselected locale) ->
                             Set.remove locale model.selectedLocales
