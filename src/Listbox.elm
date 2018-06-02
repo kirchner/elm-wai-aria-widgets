@@ -634,47 +634,27 @@ viewEntries config ids maybeKeyboardFocus maybeMouseFocus selection maybeQuery r
             , li = config.view.li
             , uniqueId = config.uniqueId
             }
+
+        viewEntryWrapper a =
+            viewEntry entryConfig
+                config.behaviour
+                maybeQuery
+                (List.member a selection)
+                (maybeKeyboardFocus == Just (config.uniqueId a))
+                (maybeMouseFocus == Just (config.uniqueId a))
+                selection
+                a
     in
     List.concat
         [ spacer renderedEntries.spaceAboveFirst
         , renderedEntries.entriesAbove
-            |> List.map
-                (\a ->
-                    viewEntry entryConfig
-                        config.behaviour
-                        maybeQuery
-                        (List.member a selection)
-                        (maybeKeyboardFocus == Just (config.uniqueId a))
-                        (maybeMouseFocus == Just (config.uniqueId a))
-                        selection
-                        a
-                )
+            |> List.map viewEntryWrapper
         , spacer renderedEntries.spaceAboveSecond
         , renderedEntries.visibleEntries
-            |> List.map
-                (\a ->
-                    viewEntry entryConfig
-                        config.behaviour
-                        maybeQuery
-                        (List.member a selection)
-                        (maybeKeyboardFocus == Just (config.uniqueId a))
-                        (maybeMouseFocus == Just (config.uniqueId a))
-                        selection
-                        a
-                )
+            |> List.map viewEntryWrapper
         , spacer renderedEntries.spaceBelowFirst
         , renderedEntries.entriesBelow
-            |> List.map
-                (\a ->
-                    viewEntry entryConfig
-                        config.behaviour
-                        maybeQuery
-                        (List.member a selection)
-                        (maybeKeyboardFocus == Just (config.uniqueId a))
-                        (maybeMouseFocus == Just (config.uniqueId a))
-                        selection
-                        a
-                )
+            |> List.map viewEntryWrapper
         , spacer renderedEntries.spaceBelowSecond
         ]
 
