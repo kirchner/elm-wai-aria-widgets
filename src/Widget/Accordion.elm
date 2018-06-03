@@ -185,12 +185,20 @@ viewSection views lift id panelStates sectionIds (Section initialState data) =
     in
     [ Html.dt
         ([ Attributes.attribute "role" "heading"
-         , Attributes.attribute "aria-level" (String.fromInt -1) -- FIXME
+         , Attributes.attribute "aria-level" (String.fromInt 3) -- TODO is this always correct?
          ]
             |> appendAttributes noOp views.dt
         )
         [ Html.button
             ([ Attributes.id buttonId
+             , Attributes.attribute "aria-expanded" <|
+                case actualState of
+                    Collapsed ->
+                        "false"
+
+                    Expanded ->
+                        "true"
+             , Attributes.attribute "aria-controls" panelId
              , Events.onClick
                 (panelStates
                     |> Dict.update data.id
@@ -253,6 +261,7 @@ viewSection views lift id panelStates sectionIds (Section initialState data) =
     ]
 
 
+focusPreviousHeader : msg -> List String -> String -> String -> Cmd msg
 focusPreviousHeader noOp sectionIds id currentSectionId =
     focusNextHeader noOp (List.reverse sectionIds) id currentSectionId
 
