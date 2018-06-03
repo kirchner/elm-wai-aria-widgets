@@ -22,6 +22,7 @@ import Browser
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Set exposing (Set)
+import Widget.Accordion as Accordion
 import Widget.ComboBox as ComboBox exposing (ComboBox)
 import Widget.Listbox as Listbox exposing (Listbox)
 import Widget.Listbox.Dropdown as Dropdown exposing (Dropdown)
@@ -71,6 +72,7 @@ type Msg
     = ListboxMsg (Listbox.Msg String)
     | DropdownMsg (Dropdown.Msg String)
     | ComboBoxMsg (ComboBox.Msg String)
+    | AccordionMsg Accordion.Msg
 
 
 type OutMsg
@@ -171,6 +173,9 @@ update msg model =
             , Cmd.map ComboBoxMsg comboBoxCmd
             )
 
+        AccordionMsg accordionMsg ->
+            ( model, Cmd.none )
+
 
 
 ---- SUBSCRIPTIONS
@@ -193,108 +198,159 @@ view model =
         [ Attributes.class "section" ]
         [ Html.div
             [ Attributes.class "container" ]
-            [ Html.div
-                [ Attributes.class "columns" ]
-                [ Html.div
-                    [ Attributes.class "column" ]
-                    [ Html.form []
-                        [ Html.div
-                            [ Attributes.class "field" ]
-                            [ Html.label
-                                [ Attributes.id "locales-label" ]
-                                [ Html.text "Locale" ]
-                            , Html.div
-                                [ Attributes.class "control" ]
-                                [ model.selectedLocales
-                                    |> Set.toList
-                                    |> Listbox.viewLazy (\_ -> 42)
-                                        listboxViewConfig
-                                        { id = "locales"
-                                        , labelledBy = "locales-label"
-                                        }
-                                        model.listbox
-                                        locales
-                                    |> Html.map ListboxMsg
+            [ Accordion.view accordionViewConfig AccordionMsg "examples" <|
+                [ Accordion.section
+                    { id = "listboxes"
+                    , header =
+                        \collapsed ->
+                            { attributes = [ Attributes.class "accordion-button" ]
+                            , children =
+                                [ Html.span [] [ Html.text "Listboxes" ]
+                                , Html.span
+                                    [ Attributes.class "icon"
+                                    , Attributes.style "float" "right"
+                                    ]
+                                    [ Html.i
+                                        [ Attributes.class "fas"
+                                        , Attributes.class <|
+                                            if collapsed then
+                                                "fa-angle-up"
+                                            else
+                                                "fa-angle-down"
+                                        ]
+                                        []
+                                    ]
                                 ]
-                            , Html.p
-                                [ Attributes.class "help" ]
-                                [ Html.text <|
-                                    if Set.isEmpty model.selectedLocales then
-                                        "nothing selected"
-                                    else
-                                        "currently selected: "
-                                            ++ (model.selectedLocales
-                                                    |> Set.toList
-                                                    |> String.join ", "
-                                               )
-                                ]
-                            ]
-                        ]
-                    ]
-                , Html.div
-                    [ Attributes.class "column" ]
-                    [ Html.form []
-                        [ Html.div
-                            [ Attributes.class "field" ]
-                            [ Html.label
-                                [ Attributes.id "locales-dropdown-label" ]
-                                [ Html.text "Locale" ]
-                            , Html.div
-                                [ Attributes.class "control" ]
-                                [ model.selectedLocale
-                                    |> Dropdown.view dropdownViewConfig
-                                        { id = "locales-dropdown"
-                                        , labelledBy = "locales-dropdown-label"
-                                        }
-                                        model.dropdown
-                                        locales
-                                    |> Html.map DropdownMsg
-                                ]
-                            , Html.p
-                                [ Attributes.class "help" ]
-                                [ Html.text <|
-                                    case model.selectedLocale of
-                                        Nothing ->
+                            }
+                    , panel =
+                        [ Html.form
+                            [ Attributes.style "width" "100%" ]
+                            [ Html.div
+                                [ Attributes.class "field" ]
+                                [ Html.label
+                                    [ Attributes.id "locales-label" ]
+                                    [ Html.text "Locale" ]
+                                , Html.div
+                                    [ Attributes.class "control" ]
+                                    [ model.selectedLocales
+                                        |> Set.toList
+                                        |> Listbox.viewLazy (\_ -> 42)
+                                            listboxViewConfig
+                                            { id = "locales"
+                                            , labelledBy = "locales-label"
+                                            }
+                                            model.listbox
+                                            locales
+                                        |> Html.map ListboxMsg
+                                    ]
+                                , Html.p
+                                    [ Attributes.class "help" ]
+                                    [ Html.text <|
+                                        if Set.isEmpty model.selectedLocales then
                                             "nothing selected"
-
-                                        Just selectedLocale ->
-                                            "currently selected: " ++ selectedLocale
+                                        else
+                                            "currently selected: "
+                                                ++ (model.selectedLocales
+                                                        |> Set.toList
+                                                        |> String.join ", "
+                                                   )
+                                    ]
                                 ]
                             ]
                         ]
-                    ]
-                , Html.div
-                    [ Attributes.class "column" ]
-                    [ Html.form []
-                        [ Html.div
-                            [ Attributes.class "field" ]
-                            [ Html.label
-                                [ Attributes.id "locales-combo-box-label" ]
-                                [ Html.text "Locale" ]
-                            , Html.div
-                                [ Attributes.class "control" ]
-                                [ model.selectedLocale2
-                                    |> ComboBox.view comboBoxViewConfig
-                                        { id = "locales-combo-box"
-                                        , labelledBy = "locales-combo-box-label"
-                                        }
-                                        model.comboBox
-                                        locales
-                                    |> Html.map ComboBoxMsg
+                    }
+                , Accordion.section
+                    { id = "dropdown-menus"
+                    , header =
+                        \collapsed ->
+                            { attributes = [ Attributes.class "accordion-button" ]
+                            , children =
+                                [ Html.span [] [ Html.text "Dropdown Menus" ]
+                                , Html.span
+                                    [ Attributes.class "icon"
+                                    , Attributes.style "float" "right"
+                                    ]
+                                    [ Html.i
+                                        [ Attributes.class "fas"
+                                        , Attributes.class <|
+                                            if collapsed then
+                                                "fa-angle-up"
+                                            else
+                                                "fa-angle-down"
+                                        ]
+                                        []
+                                    ]
                                 ]
-                            , Html.p
-                                [ Attributes.class "help" ]
-                                [ Html.text <|
-                                    case model.selectedLocale2 of
-                                        Nothing ->
-                                            "nothing selected"
+                            }
+                    , panel =
+                        [ Html.form
+                            [ Attributes.style "width" "100%" ]
+                            [ Html.div
+                                [ Attributes.class "columns" ]
+                                [ Html.div
+                                    [ Attributes.class "column" ]
+                                    [ Html.div
+                                        [ Attributes.class "field" ]
+                                        [ Html.label
+                                            [ Attributes.id "locales-dropdown-label" ]
+                                            [ Html.text "Locale" ]
+                                        , Html.div
+                                            [ Attributes.class "control" ]
+                                            [ model.selectedLocale
+                                                |> Dropdown.view dropdownViewConfig
+                                                    { id = "locales-dropdown"
+                                                    , labelledBy = "locales-dropdown-label"
+                                                    }
+                                                    model.dropdown
+                                                    locales
+                                                |> Html.map DropdownMsg
+                                            ]
+                                        , Html.p
+                                            [ Attributes.class "help" ]
+                                            [ Html.text <|
+                                                case model.selectedLocale of
+                                                    Nothing ->
+                                                        "nothing selected"
 
-                                        Just selectedLocale2 ->
-                                            "currently selected: " ++ selectedLocale2
+                                                    Just selectedLocale ->
+                                                        "currently selected: " ++ selectedLocale
+                                            ]
+                                        ]
+                                    ]
+                                , Html.div
+                                    [ Attributes.class "column" ]
+                                    [ Html.div
+                                        [ Attributes.class "field" ]
+                                        [ Html.label
+                                            [ Attributes.id "locales-combo-box-label" ]
+                                            [ Html.text "Locale" ]
+                                        , Html.div
+                                            [ Attributes.class "control" ]
+                                            [ model.selectedLocale2
+                                                |> ComboBox.view comboBoxViewConfig
+                                                    { id = "locales-combo-box"
+                                                    , labelledBy = "locales-combo-box-label"
+                                                    }
+                                                    model.comboBox
+                                                    locales
+                                                |> Html.map ComboBoxMsg
+                                            ]
+                                        , Html.p
+                                            [ Attributes.class "help" ]
+                                            [ Html.text <|
+                                                case model.selectedLocale2 of
+                                                    Nothing ->
+                                                        "nothing selected"
+
+                                                    Just selectedLocale2 ->
+                                                        "currently selected: " ++ selectedLocale2
+                                            ]
+                                        ]
+                                    ]
                                 ]
                             ]
                         ]
-                    ]
+                    }
                 ]
             ]
         ]
@@ -302,6 +358,15 @@ view model =
 
 
 ---- CONFIG
+
+
+accordionViewConfig : Accordion.ViewConfig
+accordionViewConfig =
+    Accordion.viewConfig
+        { dl = [ Attributes.class "panel" ]
+        , dt = [ Attributes.class "panel-heading" ]
+        , dd = [ Attributes.class "panel-block" ]
+        }
 
 
 listboxUpdateConfig : Listbox.UpdateConfig String
