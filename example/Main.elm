@@ -19,12 +19,12 @@ module Main exposing (main)
 -}
 
 import Browser
-import ComboBox exposing (ComboBox)
 import Html exposing (Html)
 import Html.Attributes as Attributes
-import Listbox exposing (Listbox)
-import Listbox.Dropdown as Dropdown exposing (Dropdown)
 import Set exposing (Set)
+import Widget.ComboBox as ComboBox exposing (ComboBox)
+import Widget.Listbox as Listbox exposing (Listbox)
+import Widget.Listbox.Dropdown as Dropdown exposing (Dropdown)
 
 
 main : Program {} Model Msg

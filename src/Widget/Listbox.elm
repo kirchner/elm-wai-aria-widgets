@@ -1,4 +1,4 @@
-module Listbox
+module Widget.Listbox
     exposing
         ( Behaviour
         , Event

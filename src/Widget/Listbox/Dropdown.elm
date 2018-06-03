@@ -1,4 +1,4 @@
-module Listbox.Dropdown
+module Widget.Listbox.Dropdown
     exposing
         ( Behaviour
         , Dropdown
@@ -60,8 +60,8 @@ import Internal.Entries
         , findPrevious
         )
 import Json.Decode as Decode exposing (Decoder)
-import Listbox exposing (Listbox, TypeAhead)
 import Task
+import Widget.Listbox as Listbox exposing (Listbox, TypeAhead)
 
 
 {-| TODO
