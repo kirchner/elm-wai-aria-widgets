@@ -29,13 +29,13 @@ indexOfHelp index uniqueId id entries =
                 indexOfHelp (index + 1) uniqueId id rest
 
 
-find : (a -> String) -> String -> List a -> Maybe ( Int, a )
+find : (a -> String) -> List a -> String -> Maybe ( Int, a )
 find =
     findHelp 0
 
 
-findHelp : Int -> (a -> String) -> String -> List a -> Maybe ( Int, a )
-findHelp index entryId selectedId entries =
+findHelp : Int -> (a -> String) -> List a -> String -> Maybe ( Int, a )
+findHelp index entryId entries selectedId =
     case entries of
         [] ->
             Nothing
@@ -44,7 +44,7 @@ findHelp index entryId selectedId entries =
             if entryId entry == selectedId then
                 Just ( index, entry )
             else
-                findHelp (index + 1) entryId selectedId rest
+                findHelp (index + 1) entryId rest selectedId
 
 
 findWith : (String -> a -> Bool) -> (a -> String) -> String -> String -> List a -> Maybe String
@@ -85,8 +85,8 @@ type Previous a
     | Last a
 
 
-findPrevious : (a -> String) -> String -> List a -> Maybe (Previous a)
-findPrevious entryId currentId entries =
+findPrevious : (a -> String) -> List a -> String -> Maybe (Previous a)
+findPrevious entryId entries currentId =
     case entries of
         [] ->
             Nothing
@@ -119,8 +119,8 @@ type Next a
     | First a
 
 
-findNext : (a -> String) -> String -> List a -> Maybe (Next a)
-findNext entryId currentId entries =
+findNext : (a -> String) -> List a -> String -> Maybe (Next a)
+findNext entryId entries currentId =
     case entries of
         [] ->
             Nothing

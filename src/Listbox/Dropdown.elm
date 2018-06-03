@@ -421,7 +421,7 @@ updateClosed listboxConfig uniqueId behaviour entrySelected allEntries maybeSele
                             )
 
                 Just selection ->
-                    case findPrevious uniqueId (uniqueId selection) allEntries of
+                    case findPrevious uniqueId allEntries (uniqueId selection) of
                         Just (Last lastEntry) ->
                             if behaviour.jumpAtEnds then
                                 let
@@ -494,7 +494,7 @@ updateClosed listboxConfig uniqueId behaviour entrySelected allEntries maybeSele
                             )
 
                 Just selection ->
-                    case findNext uniqueId (uniqueId selection) allEntries of
+                    case findNext uniqueId allEntries (uniqueId selection) of
                         Just (First firstEntry) ->
                             if behaviour.jumpAtEnds then
                                 let
