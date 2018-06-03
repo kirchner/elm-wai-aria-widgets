@@ -261,6 +261,7 @@ view (ViewConfig uniqueId matchesQuery views) ids (ComboBox data) allEntries may
                 |> Maybe.withDefault views.placeholder
                 |> Attributes.placeholder
              , Attributes.value data.query
+             , Attributes.autocomplete False
              , Events.onFocus (TextfieldFocused ids.id)
              , Events.onBlur (TextfieldBlured ids.id)
              , Events.onInput TextfieldChanged
