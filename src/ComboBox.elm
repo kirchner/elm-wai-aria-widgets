@@ -3,6 +3,9 @@ module ComboBox
         ( Behaviour
         , ComboBox
         , DisplayCondition
+        , HtmlAttributes
+        , HtmlDetails
+        , Ids
         , Msg
         , UpdateConfig
         , ViewConfig
@@ -20,7 +23,16 @@ module ComboBox
 
 {-|
 
-    TODO
+@docs ComboBox, closed, view, Ids, update, Msg, subscriptions
+
+
+# Configuration
+
+@docs UpdateConfig, updateConfig, Behaviour
+
+@docs DisplayCondition, matchingQuery, onFocus, onDemand
+
+@docs ViewConfig, viewConfig, Views, HtmlAttributes, HtmlDetails
 
 -}
 
@@ -160,22 +172,30 @@ type alias Behaviour =
     }
 
 
+{-| TODO
+-}
 type DisplayCondition
     = MatchingQuery Int
     | OnFocus
     | OnDemand
 
 
+{-| TODO
+-}
 matchingQuery : Int -> DisplayCondition
 matchingQuery =
     MatchingQuery
 
 
+{-| TODO
+-}
 onFocus : DisplayCondition
 onFocus =
     OnFocus
 
 
+{-| TODO
+-}
 onDemand : DisplayCondition
 onDemand =
     OnDemand
