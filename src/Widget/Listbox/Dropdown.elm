@@ -2,8 +2,6 @@ module Widget.Listbox.Dropdown
     exposing
         ( Behaviour
         , Dropdown
-        , HtmlAttributes
-        , HtmlDetails
         , Ids
         , Msg
         , UpdateConfig
@@ -26,7 +24,7 @@ module Widget.Listbox.Dropdown
 
 @docs UpdateConfig, updateConfig, Behaviour
 
-@docs ViewConfig, viewConfig, Views, HtmlAttributes, HtmlDetails
+@docs ViewConfig, viewConfig, Views
 
 -}
 
@@ -61,6 +59,7 @@ import Internal.Entries
         )
 import Json.Decode as Decode exposing (Decoder)
 import Task
+import Widget exposing (HtmlAttributes, HtmlDetails)
 import Widget.Listbox as Listbox exposing (Listbox, TypeAhead)
 
 
@@ -119,20 +118,6 @@ type alias Views a =
         }
         -> a
         -> HtmlDetails
-    }
-
-
-{-| TODO
--}
-type alias HtmlAttributes =
-    List (Html.Attribute Never)
-
-
-{-| TODO
--}
-type alias HtmlDetails =
-    { attributes : List (Html.Attribute Never)
-    , children : List (Html Never)
     }
 
 

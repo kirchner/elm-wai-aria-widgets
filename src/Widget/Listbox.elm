@@ -2,8 +2,6 @@ module Widget.Listbox
     exposing
         ( Behaviour
         , Event
-        , HtmlAttributes
-        , HtmlDetails
         , Ids
         , Listbox
         , Msg
@@ -50,7 +48,7 @@ module Widget.Listbox
 
 @docs UpdateConfig, updateConfig, Behaviour
 
-@docs ViewConfig, viewConfig, Views, HtmlAttributes, HtmlDetails
+@docs ViewConfig, viewConfig, Views
 
 
 ## Type ahead
@@ -124,6 +122,7 @@ import Json.Decode.Pipeline as Decode
 import Set
 import Task
 import Time
+import Widget exposing (HtmlAttributes, HtmlDetails)
 
 
 {-| TODO
@@ -336,20 +335,6 @@ type alias Views a =
         -> HtmlDetails
     , empty : Html Never
     , focusable : Bool
-    }
-
-
-{-| TODO
--}
-type alias HtmlAttributes =
-    List (Html.Attribute Never)
-
-
-{-| TODO
--}
-type alias HtmlDetails =
-    { attributes : List (Html.Attribute Never)
-    , children : List (Html Never)
     }
 
 

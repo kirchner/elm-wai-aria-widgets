@@ -5,6 +5,7 @@
     "license": "Apache-2.0",
     "version": "1.0.0",
     "exposed-modules": [
+        "Widget",
         "Widget.ComboBox",
         "Widget.Listbox",
         "Widget.Listbox.Dropdown"
