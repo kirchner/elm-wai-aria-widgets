@@ -1,9 +1,11 @@
 module Widget.Accordion
     exposing
-        ( Msg
+        ( Accordion
+        , PanelState(..)
         , Section
         , ViewConfig
         , Views
+        , init
         , section
         , view
         , viewConfig
@@ -33,20 +35,42 @@ module Widget.Accordion
 
 -}
 
+import Dict exposing (Dict)
 import Html exposing (Html)
 import Html.Attributes as Attributes
+import Html.Events as Events
 import Widget exposing (HtmlAttributes, HtmlDetails)
 
 
 {-| TODO
 -}
+type Accordion
+    = Accordion (Dict String PanelState)
+
+
+{-| TODO
+-}
+init : Accordion
+init =
+    Accordion Dict.empty
+
+
+{-| TODO
+-}
+type PanelState
+    = Collapsed
+    | Expanded
+
+
+{-| TODO
+-}
 type Section msg
-    = Section (SectionData msg)
+    = Section PanelState (SectionData msg)
 
 
 type alias SectionData msg =
     { id : String
-    , header : Bool -> HtmlDetails
+    , header : PanelState -> HtmlDetails
     , panel : List (Html msg)
     }
 
@@ -54,10 +78,12 @@ type alias SectionData msg =
 {-| TODO
 -}
 section :
-    { id : String
-    , header : Bool -> HtmlDetails
-    , panel : List (Html msg)
-    }
+    PanelState
+    ->
+        { id : String
+        , header : PanelState -> HtmlDetails
+        , panel : List (Html msg)
+        }
     -> Section msg
 section =
     Section
@@ -95,22 +121,32 @@ type alias Views =
 
 {-| TODO
 -}
-view : ViewConfig -> (Msg -> msg) -> String -> List (Section msg) -> Html msg
-view (ViewConfig views) lift id sections =
+view : ViewConfig -> (Accordion -> msg) -> String -> Accordion -> List (Section msg) -> Html msg
+view (ViewConfig views) lift id (Accordion panelStates) sections =
+    let
+        noOp =
+            lift (Accordion panelStates)
+    in
     Html.dl
         ([ Attributes.id id
          , Attributes.attribute "role" "presentation"
          ]
-            |> appendAttributes lift views.dl
+            |> appendAttributes noOp views.dl
         )
         (sections
-            |> List.map (viewSection views lift id)
+            |> List.map (viewSection views lift id panelStates)
             |> List.concat
         )
 
 
-viewSection : Views -> (Msg -> msg) -> String -> Section msg -> List (Html msg)
-viewSection views lift id (Section data) =
+viewSection :
+    Views
+    -> (Accordion -> msg)
+    -> String
+    -> Dict String PanelState
+    -> Section msg
+    -> List (Html msg)
+viewSection views lift id panelStates (Section initialState data) =
     let
         buttonId =
             id ++ "--" ++ data.id ++ "__accordion-header"
@@ -119,31 +155,71 @@ viewSection views lift id (Section data) =
             id ++ "--" ++ data.id ++ "__accordion-panel"
 
         header =
-            -- FIXME use collapsed state
-            data.header False
+            data.header actualState
+
+        actualState =
+            panelStates
+                |> Dict.get data.id
+                |> Maybe.withDefault initialState
+
+        noOp =
+            lift (Accordion panelStates)
     in
     [ Html.dt
         ([ Attributes.attribute "role" "heading"
          , Attributes.attribute "aria-level" (String.fromInt -1) -- FIXME
          ]
-            |> appendAttributes lift views.dt
+            |> appendAttributes noOp views.dt
         )
         [ Html.button
-            (appendAttributes lift
-                header.attributes
-                [ Attributes.id buttonId ]
+            ([ Attributes.id buttonId
+             , Events.onClick
+                (panelStates
+                    |> Dict.update data.id
+                        (\maybePanelState ->
+                            case maybePanelState of
+                                Nothing ->
+                                    case initialState of
+                                        Collapsed ->
+                                            Just Expanded
+
+                                        Expanded ->
+                                            Just Collapsed
+
+                                Just Collapsed ->
+                                    Just Expanded
+
+                                Just Expanded ->
+                                    Just Collapsed
+                        )
+                    |> Accordion
+                    |> lift
+                )
+             ]
+                |> appendAttributes noOp header.attributes
             )
-            (List.map (Html.map (\_ -> lift NoOp)) header.children)
+            (List.map (Html.map (\_ -> noOp)) header.children)
         ]
     , Html.dd
         ([ Attributes.attribute "role" "region"
          , Attributes.attribute "aria-labelledby" buttonId
          , Attributes.id panelId
          ]
-            |> appendAttributes lift views.dd
+            |> applyPanelState actualState
+            |> appendAttributes noOp views.dd
         )
         data.panel
     ]
+
+
+applyPanelState : PanelState -> List (Html.Attribute msg) -> List (Html.Attribute msg)
+applyPanelState panelState attrs =
+    case panelState of
+        Collapsed ->
+            Attributes.style "display" "none" :: attrs
+
+        Expanded ->
+            attrs
 
 
 
@@ -151,21 +227,11 @@ viewSection views lift id (Section data) =
 
 
 appendAttributes :
-    (Msg -> msg)
+    msg
     -> List (Html.Attribute Never)
     -> List (Html.Attribute msg)
     -> List (Html.Attribute msg)
-appendAttributes lift neverAttrs attrs =
+appendAttributes noOp neverAttrs attrs =
     neverAttrs
-        |> List.map (Attributes.map (\_ -> lift NoOp))
+        |> List.map (Attributes.map (\_ -> noOp))
         |> List.append attrs
-
-
-
----- UPDATE
-
-
-{-| TODO
--}
-type Msg
-    = NoOp

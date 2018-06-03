@@ -22,7 +22,7 @@ import Browser
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Set exposing (Set)
-import Widget.Accordion as Accordion
+import Widget.Accordion as Accordion exposing (Accordion, PanelState(..))
 import Widget.ComboBox as ComboBox exposing (ComboBox)
 import Widget.Listbox as Listbox exposing (Listbox)
 import Widget.Listbox.Dropdown as Dropdown exposing (Dropdown)
@@ -49,6 +49,7 @@ type alias Model =
     , dropdown : Dropdown
     , selectedLocale2 : Maybe String
     , comboBox : ComboBox
+    , accordion : Accordion
     }
 
 
@@ -59,6 +60,7 @@ init _ =
       , dropdown = Dropdown.closed
       , selectedLocale2 = Nothing
       , comboBox = ComboBox.closed
+      , accordion = Accordion.init
       }
     , Cmd.none
     )
@@ -72,7 +74,7 @@ type Msg
     = ListboxMsg (Listbox.Msg String)
     | DropdownMsg (Dropdown.Msg String)
     | ComboBoxMsg (ComboBox.Msg String)
-    | AccordionMsg Accordion.Msg
+    | AccordionMsg Accordion
 
 
 type OutMsg
@@ -173,8 +175,10 @@ update msg model =
             , Cmd.map ComboBoxMsg comboBoxCmd
             )
 
-        AccordionMsg accordionMsg ->
-            ( model, Cmd.none )
+        AccordionMsg newAccordion ->
+            ( { model | accordion = newAccordion }
+            , Cmd.none
+            )
 
 
 
@@ -198,11 +202,11 @@ view model =
         [ Attributes.class "section" ]
         [ Html.div
             [ Attributes.class "container" ]
-            [ Accordion.view accordionViewConfig AccordionMsg "examples" <|
-                [ Accordion.section
+            [ Accordion.view accordionViewConfig AccordionMsg "examples" model.accordion <|
+                [ Accordion.section Expanded
                     { id = "listboxes"
                     , header =
-                        \collapsed ->
+                        \panelState ->
                             { attributes = [ Attributes.class "accordion-button" ]
                             , children =
                                 [ Html.span [] [ Html.text "Listboxes" ]
@@ -213,10 +217,12 @@ view model =
                                     [ Html.i
                                         [ Attributes.class "fas"
                                         , Attributes.class <|
-                                            if collapsed then
-                                                "fa-angle-up"
-                                            else
-                                                "fa-angle-down"
+                                            case panelState of
+                                                Collapsed ->
+                                                    "fa-angle-up"
+
+                                                Expanded ->
+                                                    "fa-angle-down"
                                         ]
                                         []
                                     ]
@@ -259,10 +265,10 @@ view model =
                             ]
                         ]
                     }
-                , Accordion.section
+                , Accordion.section Collapsed
                     { id = "dropdown-menus"
                     , header =
-                        \collapsed ->
+                        \panelState ->
                             { attributes = [ Attributes.class "accordion-button" ]
                             , children =
                                 [ Html.span [] [ Html.text "Dropdown Menus" ]
@@ -273,10 +279,12 @@ view model =
                                     [ Html.i
                                         [ Attributes.class "fas"
                                         , Attributes.class <|
-                                            if collapsed then
-                                                "fa-angle-up"
-                                            else
-                                                "fa-angle-down"
+                                            case panelState of
+                                                Collapsed ->
+                                                    "fa-angle-up"
+
+                                                Expanded ->
+                                                    "fa-angle-down"
                                         ]
                                         []
                                     ]
