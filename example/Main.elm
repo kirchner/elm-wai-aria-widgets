@@ -74,7 +74,7 @@ type Msg
     = ListboxMsg (Listbox.Msg String)
     | DropdownMsg (Dropdown.Msg String)
     | ComboBoxMsg (ComboBox.Msg String)
-    | AccordionMsg Accordion
+    | AccordionMsg (Cmd Msg) Accordion
 
 
 type OutMsg
@@ -175,9 +175,9 @@ update msg model =
             , Cmd.map ComboBoxMsg comboBoxCmd
             )
 
-        AccordionMsg newAccordion ->
+        AccordionMsg cmd newAccordion ->
             ( { model | accordion = newAccordion }
-            , Cmd.none
+            , cmd
             )
 
 

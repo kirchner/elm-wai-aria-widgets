@@ -35,10 +35,13 @@ module Widget.Accordion
 
 -}
 
+import Browser
 import Dict exposing (Dict)
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
+import Json.Decode as Decode
+import Task
 import Widget exposing (HtmlAttributes, HtmlDetails)
 
 
@@ -121,11 +124,20 @@ type alias Views =
 
 {-| TODO
 -}
-view : ViewConfig -> (Accordion -> msg) -> String -> Accordion -> List (Section msg) -> Html msg
+view :
+    ViewConfig
+    -> (Cmd msg -> Accordion -> msg)
+    -> String
+    -> Accordion
+    -> List (Section msg)
+    -> Html msg
 view (ViewConfig views) lift id (Accordion panelStates) sections =
     let
         noOp =
-            lift (Accordion panelStates)
+            lift Cmd.none (Accordion panelStates)
+
+        sectionIds =
+            extractSectionIds sections
     in
     Html.dl
         ([ Attributes.id id
@@ -134,19 +146,25 @@ view (ViewConfig views) lift id (Accordion panelStates) sections =
             |> appendAttributes noOp views.dl
         )
         (sections
-            |> List.map (viewSection views lift id panelStates)
+            |> List.map (viewSection views lift id panelStates sectionIds)
             |> List.concat
         )
 
 
+extractSectionIds : List (Section msg) -> List String
+extractSectionIds =
+    List.map (\(Section _ { id }) -> id)
+
+
 viewSection :
     Views
-    -> (Accordion -> msg)
+    -> (Cmd msg -> Accordion -> msg)
     -> String
     -> Dict String PanelState
+    -> List String
     -> Section msg
     -> List (Html msg)
-viewSection views lift id panelStates (Section initialState data) =
+viewSection views lift id panelStates sectionIds (Section initialState data) =
     let
         buttonId =
             id ++ "--" ++ data.id ++ "__accordion-header"
@@ -163,7 +181,7 @@ viewSection views lift id panelStates (Section initialState data) =
                 |> Maybe.withDefault initialState
 
         noOp =
-            lift (Accordion panelStates)
+            lift Cmd.none (Accordion panelStates)
     in
     [ Html.dt
         ([ Attributes.attribute "role" "heading"
@@ -193,7 +211,30 @@ viewSection views lift id panelStates (Section initialState data) =
                                     Just Collapsed
                         )
                     |> Accordion
-                    |> lift
+                    |> lift Cmd.none
+                )
+             , Events.preventDefaultOn "keypress"
+                (Decode.field "key" Decode.string
+                    |> Decode.andThen
+                        (\code ->
+                            case code of
+                                "ArrowUp" ->
+                                    Decode.succeed
+                                        ( lift (focusPreviousHeader noOp sectionIds id data.id)
+                                            (Accordion panelStates)
+                                        , True
+                                        )
+
+                                "ArrowDown" ->
+                                    Decode.succeed
+                                        ( lift (focusNextHeader noOp sectionIds id data.id)
+                                            (Accordion panelStates)
+                                        , True
+                                        )
+
+                                _ ->
+                                    Decode.fail "not handling that key here"
+                        )
                 )
              ]
                 |> appendAttributes noOp header.attributes
@@ -210,6 +251,27 @@ viewSection views lift id panelStates (Section initialState data) =
         )
         data.panel
     ]
+
+
+focusPreviousHeader noOp sectionIds id currentSectionId =
+    focusNextHeader noOp (List.reverse sectionIds) id currentSectionId
+
+
+focusNextHeader : msg -> List String -> String -> String -> Cmd msg
+focusNextHeader noOp sectionIds id currentSectionId =
+    case sectionIds of
+        [] ->
+            Cmd.none
+
+        currentId :: [] ->
+            Cmd.none
+
+        currentId :: nextId :: rest ->
+            if currentId == currentSectionId then
+                Browser.focus (id ++ "--" ++ nextId ++ "__accordion-header")
+                    |> Task.attempt (\_ -> noOp)
+            else
+                focusNextHeader noOp (nextId :: rest) id currentSectionId
 
 
 applyPanelState : PanelState -> List (Html.Attribute msg) -> List (Html.Attribute msg)
