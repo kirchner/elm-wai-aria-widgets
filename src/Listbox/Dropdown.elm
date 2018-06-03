@@ -199,6 +199,7 @@ view (ViewConfig uniqueId views) ids state allEntries maybeSelection =
                         { ul = Attributes.style "position" "absolute" :: views.ul
                         , li = views.li
                         , empty = Html.text ""
+                        , focusable = True
                         }
 
                 selection =
@@ -305,13 +306,6 @@ type Msg a
     | ButtonArrowDownPressed String
       -- LISTBOX
     | ListboxMsg (Maybe String) (Listbox.Msg a)
-
-
-type alias Data a =
-    { behaviour : Behaviour a
-    , id : String
-    , uniqueId : a -> String
-    }
 
 
 {-| TODO

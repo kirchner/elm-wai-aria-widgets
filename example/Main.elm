@@ -19,6 +19,7 @@ module Main exposing (main)
 -}
 
 import Browser
+import ComboBox exposing (ComboBox)
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Listbox exposing (Listbox)
@@ -45,6 +46,8 @@ type alias Model =
     , listbox : Listbox
     , selectedLocale : Maybe String
     , dropdown : Dropdown
+    , selectedLocale2 : Maybe String
+    , comboBox : ComboBox
     }
 
 
@@ -53,6 +56,8 @@ init _ =
       , listbox = Listbox.unfocused
       , selectedLocale = Nothing
       , dropdown = Dropdown.closed
+      , selectedLocale2 = Nothing
+      , comboBox = ComboBox.closed
       }
     , Cmd.none
     )
@@ -65,6 +70,7 @@ init _ =
 type Msg
     = ListboxMsg (Listbox.Msg String)
     | DropdownMsg (Dropdown.Msg String)
+    | ComboBoxMsg (ComboBox.Msg String)
 
 
 type OutMsg
@@ -142,6 +148,29 @@ update msg model =
             , Cmd.map DropdownMsg dropdownCmd
             )
 
+        ComboBoxMsg comboBoxMsg ->
+            let
+                ( newComboBox, comboBoxCmd, maybeOutMsg ) =
+                    ComboBox.update comboBoxUpdateConfig
+                        EntrySelected
+                        model.comboBox
+                        locales
+                        model.selectedLocale2
+                        comboBoxMsg
+            in
+            ( { model
+                | comboBox = newComboBox
+                , selectedLocale2 =
+                    case maybeOutMsg of
+                        Just (EntrySelected locale) ->
+                            Just locale
+
+                        _ ->
+                            model.selectedLocale2
+              }
+            , Cmd.map ComboBoxMsg comboBoxCmd
+            )
+
 
 
 ---- SUBSCRIPTIONS
@@ -151,6 +180,7 @@ subscriptions model =
     Sub.batch
         [ Sub.map ListboxMsg (Listbox.subscriptions model.listbox)
         , Sub.map DropdownMsg (Dropdown.subscriptions model.dropdown)
+        , Sub.map ComboBoxMsg (ComboBox.subscriptions model.comboBox)
         ]
 
 
@@ -233,6 +263,38 @@ view model =
                             ]
                         ]
                     ]
+                , Html.div
+                    [ Attributes.class "column" ]
+                    [ Html.form []
+                        [ Html.div
+                            [ Attributes.class "field" ]
+                            [ Html.label
+                                [ Attributes.id "locales-combo-box-label" ]
+                                [ Html.text "Locale" ]
+                            , Html.div
+                                [ Attributes.class "control" ]
+                                [ model.selectedLocale2
+                                    |> ComboBox.view comboBoxViewConfig
+                                        { id = "locales-combo-box"
+                                        , labelledBy = "locales-combo-box-label"
+                                        }
+                                        model.comboBox
+                                        locales
+                                    |> Html.map ComboBoxMsg
+                                ]
+                            , Html.p
+                                [ Attributes.class "help" ]
+                                [ Html.text <|
+                                    case model.selectedLocale2 of
+                                        Nothing ->
+                                            "nothing selected"
+
+                                        Just selectedLocale2 ->
+                                            "currently selected: " ++ selectedLocale2
+                                ]
+                            ]
+                        ]
+                    ]
                 ]
             ]
         ]
@@ -274,6 +336,7 @@ listboxViewConfig =
                 , children = liChildren maybeQuery name
                 }
         , empty = Html.div [] [ Html.text "this list is empty" ]
+        , focusable = True
         }
 
 
@@ -325,6 +388,48 @@ dropdownViewConfig =
                 , children = liChildren maybeQuery name
                 }
         }
+
+
+comboBoxUpdateConfig : ComboBox.UpdateConfig String
+comboBoxUpdateConfig =
+    ComboBox.updateConfig identity matchesQuery <|
+        { jumpAtEnds = True
+        , closeAfterMouseSelection = True
+        , separateFocus = True
+        , selectionFollowsFocus = False
+        , handleHomeAndEnd = True
+        , displayCondition = ComboBox.matchingQuery 3
+        }
+
+
+comboBoxViewConfig : ComboBox.ViewConfig String
+comboBoxViewConfig =
+    ComboBox.viewConfig identity matchesQuery <|
+        { container = []
+        , placeholder = "Select a locale..."
+        , printEntry = identity
+        , textfield =
+            \{ maybeSelection, open } -> [ Attributes.class "textfield" ]
+        , ul = [ Attributes.class "dropdown-list" ]
+        , li =
+            \{ selected, keyboardFocused, mouseFocused, maybeQuery } name ->
+                { attributes =
+                    [ Attributes.class "entry"
+                    , Attributes.classList
+                        [ ( "entry--selected", selected )
+                        , ( "entry--keyboard-focused", keyboardFocused )
+                        , ( "entry--mouse-focused", mouseFocused )
+                        ]
+                    ]
+                , children = liChildren maybeQuery name
+                }
+        }
+
+
+matchesQuery : String -> String -> Bool
+matchesQuery query value =
+    String.toLower value
+        |> String.contains (String.toLower query)
 
 
 liChildren : Maybe String -> String -> List (Html Never)
