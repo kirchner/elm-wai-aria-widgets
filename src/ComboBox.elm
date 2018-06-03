@@ -460,7 +460,7 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
                     in
                     if
                         (String.length newQuery >= minimalLength)
-                            && (List.length filteredEntries > 1)
+                            && (List.length filteredEntries >= 1)
                     then
                         ComboBox
                             { data
