@@ -22,6 +22,7 @@ import Browser
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Set exposing (Set)
+import Widget exposing (HtmlDetails)
 import Widget.Accordion as Accordion exposing (Accordion, PanelState(..))
 import Widget.ComboBox as ComboBox exposing (ComboBox)
 import Widget.Listbox as Listbox exposing (Listbox)
@@ -205,29 +206,7 @@ view model =
             [ Accordion.view accordionViewConfig AccordionMsg "examples" model.accordion <|
                 [ Accordion.section Expanded
                     { id = "listboxes"
-                    , header =
-                        \panelState ->
-                            { attributes = [ Attributes.class "accordion-button" ]
-                            , children =
-                                [ Html.span [] [ Html.text "Listboxes" ]
-                                , Html.span
-                                    [ Attributes.class "icon"
-                                    , Attributes.style "float" "right"
-                                    ]
-                                    [ Html.i
-                                        [ Attributes.class "fas"
-                                        , Attributes.class <|
-                                            case panelState of
-                                                Collapsed ->
-                                                    "fa-angle-up"
-
-                                                Expanded ->
-                                                    "fa-angle-down"
-                                        ]
-                                        []
-                                    ]
-                                ]
-                            }
+                    , header = accordionHeader "Listboxes"
                     , panel =
                         [ Html.form
                             [ Attributes.style "width" "100%" ]
@@ -267,29 +246,7 @@ view model =
                     }
                 , Accordion.section Collapsed
                     { id = "dropdown-menus"
-                    , header =
-                        \panelState ->
-                            { attributes = [ Attributes.class "accordion-button" ]
-                            , children =
-                                [ Html.span [] [ Html.text "Dropdown Menus" ]
-                                , Html.span
-                                    [ Attributes.class "icon"
-                                    , Attributes.style "float" "right"
-                                    ]
-                                    [ Html.i
-                                        [ Attributes.class "fas"
-                                        , Attributes.class <|
-                                            case panelState of
-                                                Collapsed ->
-                                                    "fa-angle-up"
-
-                                                Expanded ->
-                                                    "fa-angle-down"
-                                        ]
-                                        []
-                                    ]
-                                ]
-                            }
+                    , header = accordionHeader "Dropdown Menus"
                     , panel =
                         [ Html.form
                             [ Attributes.style "width" "100%" ]
@@ -362,6 +319,31 @@ view model =
                 ]
             ]
         ]
+
+
+accordionHeader : String -> PanelState -> HtmlDetails
+accordionHeader label panelState =
+    { attributes = [ Attributes.class "accordion-button" ]
+    , children =
+        [ Html.span [] [ Html.text label ]
+        , Html.span
+            [ Attributes.class "icon"
+            , Attributes.style "float" "right"
+            ]
+            [ Html.i
+                [ Attributes.class "fas"
+                , Attributes.class <|
+                    case panelState of
+                        Collapsed ->
+                            "fa-angle-down"
+
+                        Expanded ->
+                            "fa-angle-up"
+                ]
+                []
+            ]
+        ]
+    }
 
 
 
