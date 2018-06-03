@@ -7,6 +7,7 @@ module ComboBox
         , HtmlDetails
         , Ids
         , Msg
+        , Shared
         , UpdateConfig
         , ViewConfig
         , Views
@@ -27,6 +28,8 @@ module ComboBox
 
 
 # Configuration
+
+@docs Shared
 
 @docs UpdateConfig, updateConfig, Behaviour
 
@@ -72,7 +75,7 @@ type ComboBox
 type alias Data =
     { preventBlur : Bool
     , open : Bool
-    , query : String
+    , query : Maybe String
     , listbox : Listbox
     }
 
@@ -84,9 +87,22 @@ closed =
     ComboBox
         { preventBlur = False
         , open = False
-        , query = ""
+        , query = Nothing
         , listbox = Listbox.unfocused
         }
+
+
+
+---- SHARED CONFIG
+
+
+{-| TODO
+-}
+type alias Shared a =
+    { uniqueId : a -> String
+    , matchesQuery : String -> a -> Bool
+    , printEntry : a -> String
+    }
 
 
 
@@ -96,12 +112,12 @@ closed =
 {-| TODO
 -}
 type ViewConfig a
-    = ViewConfig (a -> String) (String -> a -> Bool) (Views a)
+    = ViewConfig (Shared a) (Views a)
 
 
 {-| TODO
 -}
-viewConfig : (a -> String) -> (String -> a -> Bool) -> Views a -> ViewConfig a
+viewConfig : Shared a -> Views a -> ViewConfig a
 viewConfig =
     ViewConfig
 
@@ -111,7 +127,6 @@ viewConfig =
 type alias Views a =
     { container : HtmlAttributes
     , placeholder : String
-    , printEntry : a -> String
     , textfield :
         { maybeSelection : Maybe a
         , open : Bool
@@ -150,12 +165,12 @@ type alias HtmlDetails =
 {-| TODO
 -}
 type UpdateConfig a
-    = UpdateConfig (a -> String) (String -> a -> Bool) Behaviour
+    = UpdateConfig (Shared a) Behaviour
 
 
 {-| TODO
 -}
-updateConfig : (a -> String) -> (String -> a -> Bool) -> Behaviour -> UpdateConfig a
+updateConfig : Shared a -> Behaviour -> UpdateConfig a
 updateConfig =
     UpdateConfig
 
@@ -216,8 +231,11 @@ type alias Ids =
 {-| TODO
 -}
 view : ViewConfig a -> Ids -> ComboBox -> List a -> Maybe a -> Html (Msg a)
-view (ViewConfig uniqueId matchesQuery views) ids (ComboBox data) allEntries maybeSelection =
+view config ids (ComboBox data) allEntries maybeSelection =
     let
+        (ViewConfig { uniqueId, matchesQuery, printEntry } views) =
+            config
+
         textfieldHtmlAttributes open =
             views.textfield
                 { maybeSelection = maybeSelection
@@ -236,7 +254,7 @@ view (ViewConfig uniqueId matchesQuery views) ids (ComboBox data) allEntries may
                             { selected = selected
                             , keyboardFocused = keyboardFocused
                             , mouseFocused = mouseFocused
-                            , maybeQuery = Just data.query
+                            , maybeQuery = data.query
                             }
                 , empty = Html.text ""
                 , focusable = False
@@ -251,7 +269,12 @@ view (ViewConfig uniqueId matchesQuery views) ids (ComboBox data) allEntries may
                     [ actualSelection ]
 
         filteredEntries =
-            List.filter (matchesQuery data.query) allEntries
+            List.filter (matchesQuery query) allEntries
+
+        query =
+            data.query
+                |> or (Maybe.map printEntry maybeSelection)
+                |> Maybe.withDefault ""
     in
     Html.div
         (appendAttributes containerHtmlAttributes [])
@@ -263,11 +286,8 @@ view (ViewConfig uniqueId matchesQuery views) ids (ComboBox data) allEntries may
                 (printTextfieldId ids.id ++ " " ++ ids.labelledBy)
              , Attributes.style "position" "relative"
              , Attributes.tabindex 0
-             , maybeSelection
-                |> Maybe.map views.printEntry
-                |> Maybe.withDefault views.placeholder
-                |> Attributes.placeholder
-             , Attributes.value data.query
+             , Attributes.placeholder views.placeholder
+             , Attributes.value query
              , Attributes.autocomplete False
              , Events.onFocus (TextfieldFocused ids.id)
              , Events.onBlur (TextfieldBlured ids.id)
@@ -402,8 +422,13 @@ update :
     -> ( ComboBox, Cmd (Msg a), Maybe outMsg )
 update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelection msg =
     let
-        (UpdateConfig uniqueId matchesQuery behaviour) =
+        (UpdateConfig { uniqueId, matchesQuery, printEntry } behaviour) =
             config
+
+        query =
+            data.query
+                |> or (Maybe.map printEntry maybeSelection)
+                |> Maybe.withDefault ""
     in
     case msg of
         -- TEXTFIELD
@@ -412,10 +437,10 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
                 MatchingQuery minimalLength ->
                     let
                         filteredEntries =
-                            List.filter (matchesQuery data.query) allEntries
+                            List.filter (matchesQuery query) allEntries
                     in
                     if
-                        (String.length data.query >= minimalLength)
+                        (String.length query >= minimalLength)
                             && (List.length filteredEntries > 1)
                     then
                         ComboBox
@@ -465,20 +490,20 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
                         ComboBox
                             { data
                                 | open = True
-                                , query = newQuery
+                                , query = Just newQuery
                             }
                     else
                         ComboBox
                             { data
                                 | open = False
-                                , query = newQuery
+                                , query = Just newQuery
                             }
 
                 OnFocus ->
-                    ComboBox { data | query = newQuery }
+                    ComboBox { data | query = Just newQuery }
 
                 OnDemand ->
-                    ComboBox { data | query = newQuery }
+                    ComboBox { data | query = Just newQuery }
             , Cmd.none
             , Nothing
             )
@@ -486,7 +511,7 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
         TextfieldArrowUpPressed id maybeScrollData ->
             let
                 filteredEntries =
-                    List.filter (matchesQuery data.query) allEntries
+                    List.filter (matchesQuery query) allEntries
 
                 listboxConfig =
                     Listbox.updateConfig uniqueId
@@ -518,7 +543,7 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
         TextfieldArrowDownPressed id maybeScrollData ->
             let
                 filteredEntries =
-                    List.filter (matchesQuery data.query) allEntries
+                    List.filter (matchesQuery query) allEntries
 
                 listboxConfig =
                     Listbox.updateConfig uniqueId
@@ -559,7 +584,7 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
                         }
 
                 filteredEntries =
-                    List.filter (matchesQuery data.query) allEntries
+                    List.filter (matchesQuery query) allEntries
             in
             case Listbox.focusedEntry listboxConfig data.listbox filteredEntries of
                 Nothing ->
@@ -569,7 +594,7 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
                     ( ComboBox
                         { data
                             | open = False
-                            , query = ""
+                            , query = Nothing
                         }
                     , Cmd.none
                     , Just (entrySelected newEntry)
@@ -645,7 +670,7 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
                     ( ComboBox
                         { data
                             | open = False
-                            , query = ""
+                            , query = Nothing
                         }
                     , comboBoxCmd
                     , Just (entrySelected a)
@@ -659,6 +684,16 @@ focusTextfield : String -> Cmd (Msg a)
 focusTextfield id =
     Browser.focus (printTextfieldId id)
         |> Task.attempt (\_ -> NoOp)
+
+
+or : Maybe a -> Maybe a -> Maybe a
+or fallback default =
+    case default of
+        Nothing ->
+            fallback
+
+        Just _ ->
+            default
 
 
 

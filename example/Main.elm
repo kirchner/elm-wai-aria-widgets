@@ -390,9 +390,17 @@ dropdownViewConfig =
         }
 
 
+comboBoxSharedConfig : ComboBox.Shared String
+comboBoxSharedConfig =
+    { uniqueId = identity
+    , matchesQuery = matchesQuery
+    , printEntry = identity
+    }
+
+
 comboBoxUpdateConfig : ComboBox.UpdateConfig String
 comboBoxUpdateConfig =
-    ComboBox.updateConfig identity matchesQuery <|
+    ComboBox.updateConfig comboBoxSharedConfig
         { jumpAtEnds = True
         , closeAfterMouseSelection = True
         , separateFocus = True
@@ -404,10 +412,9 @@ comboBoxUpdateConfig =
 
 comboBoxViewConfig : ComboBox.ViewConfig String
 comboBoxViewConfig =
-    ComboBox.viewConfig identity matchesQuery <|
+    ComboBox.viewConfig comboBoxSharedConfig
         { container = []
         , placeholder = "Select a locale..."
-        , printEntry = identity
         , textfield =
             \{ maybeSelection, open } -> [ Attributes.class "textfield" ]
         , ul = [ Attributes.class "dropdown-list" ]
