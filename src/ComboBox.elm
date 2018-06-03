@@ -230,7 +230,14 @@ view (ViewConfig uniqueId matchesQuery views) ids (ComboBox data) allEntries may
         listboxConfig =
             Listbox.viewConfig uniqueId
                 { ul = Attributes.style "position" "absolute" :: views.ul
-                , li = views.li
+                , li =
+                    \{ selected, keyboardFocused, mouseFocused } ->
+                        views.li
+                            { selected = selected
+                            , keyboardFocused = keyboardFocused
+                            , mouseFocused = mouseFocused
+                            , maybeQuery = Just data.query
+                            }
                 , empty = Html.text ""
                 , focusable = False
                 }
