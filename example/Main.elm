@@ -206,7 +206,7 @@ view model =
             [ Accordion.view accordionViewConfig AccordionMsg "examples" model.accordion <|
                 [ Accordion.section Expanded
                     { id = "listboxes"
-                    , header = accordionHeader "Listboxes"
+                    , header = "Listboxes"
                     , panel =
                         [ Html.form
                             [ Attributes.style "width" "100%" ]
@@ -246,7 +246,7 @@ view model =
                     }
                 , Accordion.section Collapsed
                     { id = "dropdown-menus"
-                    , header = accordionHeader "Dropdown Menus"
+                    , header = "Dropdown Menus"
                     , panel =
                         [ Html.form
                             [ Attributes.style "width" "100%" ]
@@ -321,40 +321,38 @@ view model =
         ]
 
 
-accordionHeader : String -> PanelState -> HtmlDetails
-accordionHeader label panelState =
-    { attributes = [ Attributes.class "accordion-button" ]
-    , children =
-        [ Html.span [] [ Html.text label ]
-        , Html.span
-            [ Attributes.class "icon"
-            , Attributes.style "float" "right"
-            ]
-            [ Html.i
-                [ Attributes.class "fas"
-                , Attributes.class <|
-                    case panelState of
-                        Collapsed ->
-                            "fa-angle-down"
-
-                        Expanded ->
-                            "fa-angle-up"
-                ]
-                []
-            ]
-        ]
-    }
-
-
 
 ---- CONFIG
 
 
-accordionViewConfig : Accordion.ViewConfig
+accordionViewConfig : Accordion.ViewConfig String
 accordionViewConfig =
     Accordion.viewConfig
         { dl = [ Attributes.class "panel" ]
         , dt = [ Attributes.class "panel-heading" ]
+        , button =
+            \panelState label ->
+                { attributes = [ Attributes.class "accordion-button" ]
+                , children =
+                    [ Html.span [] [ Html.text label ]
+                    , Html.span
+                        [ Attributes.class "icon"
+                        , Attributes.style "float" "right"
+                        ]
+                        [ Html.i
+                            [ Attributes.class "fas"
+                            , Attributes.class <|
+                                case panelState of
+                                    Collapsed ->
+                                        "fa-angle-down"
+
+                                    Expanded ->
+                                        "fa-angle-up"
+                            ]
+                            []
+                        ]
+                    ]
+                }
         , dd = [ Attributes.class "panel-block" ]
         }
 

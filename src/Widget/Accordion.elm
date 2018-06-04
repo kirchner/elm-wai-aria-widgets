@@ -67,13 +67,13 @@ type PanelState
 
 {-| TODO
 -}
-type Section msg
-    = Section PanelState (SectionData msg)
+type Section header msg
+    = Section PanelState (SectionData header msg)
 
 
-type alias SectionData msg =
+type alias SectionData header msg =
     { id : String
-    , header : PanelState -> HtmlDetails
+    , header : header
     , panel : List (Html msg)
     }
 
@@ -84,10 +84,10 @@ section :
     PanelState
     ->
         { id : String
-        , header : PanelState -> HtmlDetails
+        , header : header
         , panel : List (Html msg)
         }
-    -> Section msg
+    -> Section header msg
 section =
     Section
 
@@ -98,22 +98,23 @@ section =
 
 {-| TODO
 -}
-type ViewConfig
-    = ViewConfig Views
+type ViewConfig header
+    = ViewConfig (Views header)
 
 
 {-| TODO
 -}
-viewConfig : Views -> ViewConfig
+viewConfig : Views header -> ViewConfig header
 viewConfig =
     ViewConfig
 
 
 {-| TODO
 -}
-type alias Views =
+type alias Views header =
     { dl : HtmlAttributes
     , dt : HtmlAttributes
+    , button : PanelState -> header -> HtmlDetails
     , dd : HtmlAttributes
     }
 
@@ -125,11 +126,11 @@ type alias Views =
 {-| TODO
 -}
 view :
-    ViewConfig
+    ViewConfig header
     -> (Cmd msg -> Accordion -> msg)
     -> String
     -> Accordion
-    -> List (Section msg)
+    -> List (Section header msg)
     -> Html msg
 view (ViewConfig views) lift id (Accordion panelStates) sections =
     let
@@ -151,18 +152,18 @@ view (ViewConfig views) lift id (Accordion panelStates) sections =
         )
 
 
-extractSectionIds : List (Section msg) -> List String
+extractSectionIds : List (Section header msg) -> List String
 extractSectionIds =
     List.map (\(Section _ { id }) -> id)
 
 
 viewSection :
-    Views
+    Views header
     -> (Cmd msg -> Accordion -> msg)
     -> String
     -> Dict String PanelState
     -> List String
-    -> Section msg
+    -> Section header msg
     -> List (Html msg)
 viewSection views lift id panelStates sectionIds (Section initialState data) =
     let
@@ -173,7 +174,7 @@ viewSection views lift id panelStates sectionIds (Section initialState data) =
             id ++ "--" ++ data.id ++ "__accordion-panel"
 
         header =
-            data.header actualState
+            views.button actualState data.header
 
         actualState =
             panelStates
