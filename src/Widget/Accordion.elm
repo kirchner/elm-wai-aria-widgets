@@ -254,6 +254,37 @@ viewSection views lift id panelStates sectionIds (Section initialState data) =
         ([ Attributes.attribute "role" "region"
          , Attributes.attribute "aria-labelledby" buttonId
          , Attributes.id panelId
+         , Events.preventDefaultOn "keypress"
+            (Decode.field "key" Decode.string
+                |> Decode.andThen
+                    (\code ->
+                        case code of
+                            "PageDown" ->
+                                let
+                                    _ =
+                                        Debug.log "PageUp" ()
+                                in
+                                Decode.succeed
+                                    ( lift (focusNextHeader noOp sectionIds id data.id)
+                                        (Accordion panelStates)
+                                    , True
+                                    )
+
+                            "PageUp" ->
+                                let
+                                    _ =
+                                        Debug.log "PageUp" ()
+                                in
+                                Decode.succeed
+                                    ( lift (focusPreviousHeader noOp sectionIds id data.id)
+                                        (Accordion panelStates)
+                                    , True
+                                    )
+
+                            _ ->
+                                Decode.fail "not handling that key here"
+                    )
+            )
          ]
             |> applyPanelState actualState
             |> appendAttributes noOp views.dd
