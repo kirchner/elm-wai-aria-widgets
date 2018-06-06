@@ -494,64 +494,52 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
             )
 
         TextfieldArrowUpPressed id maybeScrollData ->
-            let
-                filteredEntries =
-                    List.filter (matchesQuery query) allEntries
-
-                listboxConfig =
-                    Listbox.updateConfig uniqueId
-                        { jumpAtEnds = behaviour.jumpAtEnds
-                        , separateFocus = behaviour.separateFocus
-                        , selectionFollowsFocus = behaviour.selectionFollowsFocus
-                        , handleHomeAndEnd = behaviour.handleHomeAndEnd
-                        , typeAhead = Listbox.noTypeAhead
-                        }
-            in
             if data.open then
                 let
-                    ( newListbox, listboxCmd ) =
-                        Listbox.focusPreviousEntry
-                            listboxConfig
-                            (printListboxId id)
-                            filteredEntries
-                            []
-                            maybeScrollData
-                            data.listbox
+                    filteredEntries =
+                        List.filter (matchesQuery query) allEntries
+
+                    listboxConfig =
+                        Listbox.updateConfig uniqueId
+                            { jumpAtEnds = behaviour.jumpAtEnds
+                            , separateFocus = behaviour.separateFocus
+                            , selectionFollowsFocus = behaviour.selectionFollowsFocus
+                            , handleHomeAndEnd = behaviour.handleHomeAndEnd
+                            , typeAhead = Listbox.noTypeAhead
+                            }
+
+                    ( newListbox, maybeOutMsg ) =
+                        Listbox.focusPreviousOrFirstEntry listboxConfig filteredEntries data.listbox
                 in
                 ( ComboBox { data | listbox = newListbox }
-                , Cmd.map (ListboxMsg (Just id)) listboxCmd
+                , Cmd.map (ListboxMsg (Just id)) <|
+                    Listbox.scrollToFocus (printListboxId id) newListbox maybeScrollData
                 , Nothing
                 )
             else
                 ( comboBox, Cmd.none, Nothing )
 
         TextfieldArrowDownPressed id maybeScrollData ->
-            let
-                filteredEntries =
-                    List.filter (matchesQuery query) allEntries
-
-                listboxConfig =
-                    Listbox.updateConfig uniqueId
-                        { jumpAtEnds = behaviour.jumpAtEnds
-                        , separateFocus = behaviour.separateFocus
-                        , selectionFollowsFocus = behaviour.selectionFollowsFocus
-                        , handleHomeAndEnd = behaviour.handleHomeAndEnd
-                        , typeAhead = Listbox.noTypeAhead
-                        }
-            in
             if data.open then
                 let
-                    ( newListbox, listboxCmd ) =
-                        Listbox.focusFirstOrNextEntry
-                            listboxConfig
-                            (printListboxId id)
-                            filteredEntries
-                            []
-                            maybeScrollData
-                            data.listbox
+                    filteredEntries =
+                        List.filter (matchesQuery query) allEntries
+
+                    listboxConfig =
+                        Listbox.updateConfig uniqueId
+                            { jumpAtEnds = behaviour.jumpAtEnds
+                            , separateFocus = behaviour.separateFocus
+                            , selectionFollowsFocus = behaviour.selectionFollowsFocus
+                            , handleHomeAndEnd = behaviour.handleHomeAndEnd
+                            , typeAhead = Listbox.noTypeAhead
+                            }
+
+                    ( newListbox, maybeOutMsg ) =
+                        Listbox.focusNextOrFirstEntry listboxConfig filteredEntries data.listbox
                 in
                 ( ComboBox { data | listbox = newListbox }
-                , Cmd.map (ListboxMsg (Just id)) listboxCmd
+                , Cmd.map (ListboxMsg (Just id)) <|
+                    Listbox.scrollToFocus (printListboxId id) newListbox maybeScrollData
                 , Nothing
                 )
             else

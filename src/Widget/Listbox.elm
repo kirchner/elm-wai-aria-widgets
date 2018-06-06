@@ -12,8 +12,9 @@ module Widget.Listbox
         , Views
         , arrowDownDecoder
         , arrowUpDecoder
-        , focusFirstOrNextEntry
-        , focusPreviousEntry
+        , focus
+        , focusNextOrFirstEntry
+        , focusPreviousOrFirstEntry
         , focused
         , focusedEntry
         , noTypeAhead
@@ -26,6 +27,7 @@ module Widget.Listbox
         , onListboxBlur
         , onMouseDown
         , onMouseUp
+        , scrollToFocus
         , simpleTypeAhead
         , subscriptions
         , typeAhead
@@ -193,6 +195,13 @@ focused (UpdateConfig uniqueId _) id a =
 
 {-| TODO
 -}
+focus : String -> Cmd (Msg a)
+focus id =
+    focusList id
+
+
+{-| TODO
+-}
 focusedEntry : UpdateConfig a -> Listbox -> List a -> Maybe a
 focusedEntry (UpdateConfig uniqueId _) (Listbox { maybeKeyboardFocus }) allEntries =
     maybeKeyboardFocus
@@ -202,63 +211,20 @@ focusedEntry (UpdateConfig uniqueId _) (Listbox { maybeKeyboardFocus }) allEntri
 
 {-| TODO
 -}
-focusPreviousEntry :
-    UpdateConfig a
-    -> String
-    -> List a
-    -> List a
-    -> Maybe ScrollData
-    -> Listbox
-    -> ( Listbox, Cmd (Msg a) )
-focusPreviousEntry config id allEntries selection maybeScrollData listbox =
-    let
-        (UpdateConfig uniqueId behaviour) =
-            config
-
-        (Listbox data) =
-            listbox
-    in
-    case
-        data.maybeKeyboardFocus
-            |> Maybe.andThen (find uniqueId allEntries)
-    of
+scrollToFocus : String -> Listbox -> Maybe ScrollData -> Cmd (Msg a)
+scrollToFocus id (Listbox data) maybeScrollData =
+    case data.maybeKeyboardFocus of
         Nothing ->
-            ( listbox, Cmd.none )
+            Cmd.none
 
-        Just ( _, keyboardFocus ) ->
-            case findPrevious uniqueId allEntries (uniqueId keyboardFocus) of
-                Just (Last lastEntry) ->
-                    if behaviour.jumpAtEnds then
-                        ( data
-                            |> updateFocus behaviour uniqueId [] selection False lastEntry
-                            |> Tuple.first
-                        , scrollListToBottom id
-                        )
-                    else
-                        ( listbox, Cmd.none )
-
-                Just (Previous newIndex newEntry) ->
-                    ( data
-                        |> updateFocus behaviour uniqueId [] selection False newEntry
-                        |> Tuple.first
-                    , adjustScrollTop id (uniqueId newEntry) maybeScrollData
-                    )
-
-                Nothing ->
-                    ( listbox, Cmd.none )
+        Just keyboardFocus ->
+            adjustScrollTop id keyboardFocus maybeScrollData
 
 
 {-| TODO
 -}
-focusFirstOrNextEntry :
-    UpdateConfig a
-    -> String
-    -> List a
-    -> List a
-    -> Maybe ScrollData
-    -> Listbox
-    -> ( Listbox, Cmd (Msg a) )
-focusFirstOrNextEntry config id allEntries selection maybeScrollData listbox =
+focusNextOrFirstEntry : UpdateConfig a -> List a -> Listbox -> ( Listbox, Maybe outMsg )
+focusNextOrFirstEntry config allEntries listbox =
     let
         (UpdateConfig uniqueId behaviour) =
             config
@@ -278,30 +244,67 @@ focusFirstOrNextEntry config id allEntries selection maybeScrollData listbox =
                             |> List.head
                             |> Maybe.map uniqueId
                 }
-            , scrollListToTop id
+            , Nothing
             )
 
         Just ( _, keyboardFocus ) ->
             case findNext uniqueId allEntries (uniqueId keyboardFocus) of
                 Just (First firstEntry) ->
                     if behaviour.jumpAtEnds then
-                        ( data
-                            |> updateFocus behaviour uniqueId [] selection False firstEntry
-                            |> Tuple.first
-                        , scrollListToTop id
-                        )
+                        data
+                            |> updateFocus behaviour uniqueId [] [] False firstEntry
                     else
-                        ( listbox, Cmd.none )
+                        ( listbox, Nothing )
 
                 Just (Next newIndex newEntry) ->
-                    ( data
-                        |> updateFocus behaviour uniqueId [] selection False newEntry
-                        |> Tuple.first
-                    , adjustScrollTop id (uniqueId newEntry) maybeScrollData
-                    )
+                    data
+                        |> updateFocus behaviour uniqueId [] [] False newEntry
 
                 Nothing ->
-                    ( listbox, Cmd.none )
+                    ( listbox, Nothing )
+
+
+{-| TODO
+-}
+focusPreviousOrFirstEntry : UpdateConfig a -> List a -> Listbox -> ( Listbox, Maybe outMsg )
+focusPreviousOrFirstEntry config allEntries listbox =
+    let
+        (UpdateConfig uniqueId behaviour) =
+            config
+
+        (Listbox data) =
+            listbox
+    in
+    case
+        data.maybeKeyboardFocus
+            |> Maybe.andThen (find uniqueId allEntries)
+    of
+        Nothing ->
+            ( Listbox
+                { data
+                    | maybeKeyboardFocus =
+                        allEntries
+                            |> List.head
+                            |> Maybe.map uniqueId
+                }
+            , Nothing
+            )
+
+        Just ( _, keyboardFocus ) ->
+            case findPrevious uniqueId allEntries (uniqueId keyboardFocus) of
+                Just (Last lastEntry) ->
+                    if behaviour.jumpAtEnds then
+                        data
+                            |> updateFocus behaviour uniqueId [] [] False lastEntry
+                    else
+                        ( listbox, Nothing )
+
+                Just (Previous newIndex newEntry) ->
+                    data
+                        |> updateFocus behaviour uniqueId [] [] False newEntry
+
+                Nothing ->
+                    ( listbox, Nothing )
 
 
 
@@ -494,24 +497,14 @@ viewHelp renderedEntries uniqueId views ids (Listbox data) allEntries selection 
                 (Decode.at [ "target", "clientHeight" ] Decode.float)
          , Events.on "focus"
             (Decode.oneOf
-                [ case selection of
-                    [] ->
-                        case data.maybeKeyboardFocus of
-                            Nothing ->
-                                Decode.succeed Nothing
+                [ case data.maybeKeyboardFocus of
+                    Nothing ->
+                        Decode.succeed Nothing
 
-                            Just keyboardFocus ->
-                                Decode.oneOf
-                                    [ renderedEntries.visibleEntries
-                                        |> scrollDataDecoder [ "target" ] 2 uniqueId keyboardFocus
-                                        |> Decode.map Just
-                                    , Decode.succeed Nothing
-                                    ]
-
-                    firstSelection :: _ ->
+                    Just keyboardFocus ->
                         Decode.oneOf
                             [ renderedEntries.visibleEntries
-                                |> scrollDataDecoder [ "target" ] 2 uniqueId (uniqueId firstSelection)
+                                |> scrollDataDecoder [ "target" ] 0 uniqueId keyboardFocus
                                 |> Decode.map Just
                             , Decode.succeed Nothing
                             ]
@@ -564,7 +557,7 @@ listKeydown uniqueId id maybeKeyboardFocus visibleEntries { code, shiftDown, con
                     Just keyboardFocus ->
                         Decode.oneOf
                             [ visibleEntries
-                                |> scrollDataDecoder [ "target" ] 1 uniqueId keyboardFocus
+                                |> scrollDataDecoder [ "target" ] -1 uniqueId keyboardFocus
                                 |> Decode.map Just
                             , Decode.succeed Nothing
                             ]
@@ -581,7 +574,7 @@ listKeydown uniqueId id maybeKeyboardFocus visibleEntries { code, shiftDown, con
                     Just keyboardFocus ->
                         Decode.oneOf
                             [ visibleEntries
-                                |> scrollDataDecoder [ "target" ] 3 uniqueId keyboardFocus
+                                |> scrollDataDecoder [ "target" ] 1 uniqueId keyboardFocus
                                 |> Decode.map Just
                             , Decode.succeed Nothing
                             ]
@@ -638,7 +631,7 @@ arrowUpDecoder (ViewConfig uniqueId _) path (Listbox data) allEntries =
                 Decode.succeed Nothing
 
             Just keyboardFocus ->
-                scrollDataDecoder path 1 uniqueId keyboardFocus allEntries
+                scrollDataDecoder path -1 uniqueId keyboardFocus allEntries
                     |> Decode.map Just
         , Decode.succeed Nothing
         ]
@@ -654,7 +647,7 @@ arrowDownDecoder (ViewConfig uniqueId _) path (Listbox data) allEntries =
                 Decode.succeed Nothing
 
             Just keyboardFocus ->
-                scrollDataDecoder path 3 uniqueId keyboardFocus allEntries
+                scrollDataDecoder path 1 uniqueId keyboardFocus allEntries
                     |> Decode.map Just
         , Decode.succeed Nothing
         ]
@@ -675,10 +668,10 @@ scrollDataDecoder path offset uniqueId keyboardFocus visibleEntries =
                     (path ++ [ "clientHeight" ])
                     Decode.float
                 |> Decode.requiredAt
-                    (path ++ [ "childNodes", String.fromInt (index + offset), "offsetTop" ])
+                    (path ++ [ "childNodes", String.fromInt (index + 2 + offset), "offsetTop" ])
                     Decode.float
                 |> Decode.requiredAt
-                    (path ++ [ "childNodes", String.fromInt (index + offset), "offsetHeight" ])
+                    (path ++ [ "childNodes", String.fromInt (index + 2 + offset), "offsetHeight" ])
                     Decode.float
 
 
@@ -1075,8 +1068,8 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
         ListFocused id maybeScrollData ->
             let
                 maybeNewFocus =
-                    data.maybeLastSelectedEntry
-                        |> or data.maybeKeyboardFocus
+                    data.maybeKeyboardFocus
+                        |> or data.maybeLastSelectedEntry
             in
             case maybeNewFocus of
                 Nothing ->
