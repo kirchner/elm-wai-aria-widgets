@@ -455,7 +455,7 @@ handleOutMsg :
     -> Maybe (OutMsg a)
     -> ( Dropdown, Cmd (Msg a), Maybe outMsg )
 handleOutMsg entrySelected maybeId data cmd maybeOutMsg =
-    case Debug.log "maybeOutMsg" maybeOutMsg of
+    case maybeOutMsg of
         Nothing ->
             ( Dropdown data, cmd, Nothing )
 

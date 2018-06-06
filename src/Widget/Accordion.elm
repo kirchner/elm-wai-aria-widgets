@@ -260,10 +260,6 @@ viewSection views lift id panelStates sectionIds (Section initialState data) =
                     (\code ->
                         case code of
                             "PageDown" ->
-                                let
-                                    _ =
-                                        Debug.log "PageUp" ()
-                                in
                                 Decode.succeed
                                     ( lift (focusNextHeader noOp sectionIds id data.id)
                                         (Accordion panelStates)
@@ -271,10 +267,6 @@ viewSection views lift id panelStates sectionIds (Section initialState data) =
                                     )
 
                             "PageUp" ->
-                                let
-                                    _ =
-                                        Debug.log "PageUp" ()
-                                in
                                 Decode.succeed
                                     ( lift (focusPreviousHeader noOp sectionIds id data.id)
                                         (Accordion panelStates)
