@@ -21,6 +21,7 @@ module Main exposing (main)
 import Browser
 import Html exposing (Html)
 import Html.Attributes as Attributes
+import Html.Events as Events
 import Set exposing (Set)
 import Widget exposing (HtmlDetails)
 import Widget.Accordion as Accordion exposing (Accordion, PanelState(..))
@@ -44,23 +45,69 @@ main =
 
 
 type alias Model =
-    { selectedLocales : Set String
+    { accordion : Accordion
+
+    -- LISTBOX
+    , selectedLocales : Set String
     , listbox : Listbox
+    , listboxJumpAtEnds : Bool
+    , listboxSeparateFocus : Bool
+    , listboxSelectionFollowsFocus : Bool
+    , listboxHandleHomeAndEnd : Bool
+    , listboxTypeAhead : Bool
+
+    -- LISTBOX DROPDOWN
     , selectedLocale : Maybe String
     , dropdown : Dropdown
+    , dropdownJumpAtEnds : Bool
+    , dropdownCloseAfterMouseSelection : Bool
+    , dropdownSeparateFocus : Bool
+    , dropdownSelectionFollowsFocus : Bool
+    , dropdownHandleHomeAndEnd : Bool
+    , dropdownTypeAhead : Bool
+
+    -- COMBOBOX
     , selectedLocale2 : Maybe String
     , comboBox : ComboBox
-    , accordion : Accordion
+    , comboBoxJumpAtEnds : Bool
+    , comboBoxCloseAfterMouseSelection : Bool
+    , comboBoxSeparateFocus : Bool
+    , comboBoxSelectionFollowsFocus : Bool
+    , comboBoxHandleHomeAndEnd : Bool
+    , comboBoxDisplayCondition : SelectedDisplayCondition
     }
+
+
+type SelectedDisplayCondition
+    = MatchingQuery Int
+    | OnFocus
+    | OnDemand
 
 
 init _ =
     ( { selectedLocales = Set.empty
       , listbox = Listbox.unfocused
+      , listboxJumpAtEnds = True
+      , listboxSeparateFocus = True
+      , listboxSelectionFollowsFocus = False
+      , listboxHandleHomeAndEnd = True
+      , listboxTypeAhead = True
       , selectedLocale = Nothing
       , dropdown = Dropdown.closed
+      , dropdownJumpAtEnds = True
+      , dropdownCloseAfterMouseSelection = True
+      , dropdownSeparateFocus = True
+      , dropdownSelectionFollowsFocus = False
+      , dropdownHandleHomeAndEnd = True
+      , dropdownTypeAhead = True
       , selectedLocale2 = Nothing
       , comboBox = ComboBox.closed
+      , comboBoxJumpAtEnds = True
+      , comboBoxCloseAfterMouseSelection = True
+      , comboBoxSeparateFocus = True
+      , comboBoxSelectionFollowsFocus = False
+      , comboBoxHandleHomeAndEnd = True
+      , comboBoxDisplayCondition = MatchingQuery 3
       , accordion = Accordion.init
       }
     , Cmd.none
@@ -72,10 +119,31 @@ init _ =
 
 
 type Msg
-    = ListboxMsg (Listbox.Msg String)
+    = AccordionMsg (Cmd Msg) Accordion
+      -- LISTBOX
+    | ListboxMsg (Listbox.Msg String)
+    | ListboxJumpAtEndsChecked Bool
+    | ListboxSeparateFocusChecked Bool
+    | ListboxSelectionFollowsFocusChecked Bool
+    | ListboxHandleHomeAndEndChecked Bool
+    | ListboxTypeAheadChecked Bool
+      -- LISTBOX DROPDOWN
     | DropdownMsg (Dropdown.Msg String)
+    | DropdownJumpAtEndsChecked Bool
+    | DropdownCloseAfterMouseSelectionChecked Bool
+    | DropdownSeparateFocusChecked Bool
+    | DropdownSelectionFollowsFocusChecked Bool
+    | DropdownHandleHomeAndEndChecked Bool
+    | DropdownTypeAheadChecked Bool
+      -- COMBOBOX
     | ComboBoxMsg (ComboBox.Msg String)
-    | AccordionMsg (Cmd Msg) Accordion
+    | ComboBoxJumpAtEndsChecked Bool
+    | ComboBoxCloseAfterMouseSelectionChecked Bool
+    | ComboBoxSeparateFocusChecked Bool
+    | ComboBoxSelectionFollowsFocusChecked Bool
+    | ComboBoxHandleHomeAndEndChecked Bool
+    | ComboBoxDisplayConditionSelected SelectedDisplayCondition
+    | ComboBoxMatchingQueryCountChanged String
 
 
 type OutMsg
@@ -87,11 +155,24 @@ type OutMsg
 
 
 update msg model =
-    case Debug.log "msg" msg of
+    case msg of
+        AccordionMsg cmd newAccordion ->
+            ( { model | accordion = newAccordion }
+            , cmd
+            )
+
+        -- LISTBOX
         ListboxMsg listboxMsg ->
             let
                 ( newListbox, listboxCmd, maybeOutMsg ) =
-                    Listbox.update listboxUpdateConfig
+                    Listbox.update
+                        (listboxUpdateConfig
+                            model.listboxJumpAtEnds
+                            model.listboxSeparateFocus
+                            model.listboxSelectionFollowsFocus
+                            model.listboxHandleHomeAndEnd
+                            model.listboxTypeAhead
+                        )
                         [ Listbox.onEntrySelect EntrySelected
                         , Listbox.onEntriesSelect EntriesSelected
                         , Listbox.onEntryUnselect EntryUnselected
@@ -130,10 +211,44 @@ update msg model =
             , Cmd.map ListboxMsg listboxCmd
             )
 
+        ListboxJumpAtEndsChecked enabled ->
+            ( { model | listboxJumpAtEnds = enabled }
+            , Cmd.none
+            )
+
+        ListboxSeparateFocusChecked enabled ->
+            ( { model | listboxSeparateFocus = enabled }
+            , Cmd.none
+            )
+
+        ListboxSelectionFollowsFocusChecked enabled ->
+            ( { model | listboxSelectionFollowsFocus = enabled }
+            , Cmd.none
+            )
+
+        ListboxHandleHomeAndEndChecked enabled ->
+            ( { model | listboxHandleHomeAndEnd = enabled }
+            , Cmd.none
+            )
+
+        ListboxTypeAheadChecked enabled ->
+            ( { model | listboxTypeAhead = enabled }
+            , Cmd.none
+            )
+
+        -- LISTBOX DROPDOWN
         DropdownMsg dropdownMsg ->
             let
                 ( newDropdown, dropdownCmd, maybeOutMsg ) =
-                    Dropdown.update dropdownUpdateConfig
+                    Dropdown.update
+                        (dropdownUpdateConfig
+                            model.dropdownJumpAtEnds
+                            model.dropdownCloseAfterMouseSelection
+                            model.dropdownSeparateFocus
+                            model.dropdownSelectionFollowsFocus
+                            model.dropdownHandleHomeAndEnd
+                            model.dropdownTypeAhead
+                        )
                         EntrySelected
                         model.dropdown
                         locales
@@ -153,10 +268,49 @@ update msg model =
             , Cmd.map DropdownMsg dropdownCmd
             )
 
+        DropdownJumpAtEndsChecked enabled ->
+            ( { model | dropdownJumpAtEnds = enabled }
+            , Cmd.none
+            )
+
+        DropdownCloseAfterMouseSelectionChecked enabled ->
+            ( { model | dropdownCloseAfterMouseSelection = enabled }
+            , Cmd.none
+            )
+
+        DropdownSeparateFocusChecked enabled ->
+            ( { model | dropdownSeparateFocus = enabled }
+            , Cmd.none
+            )
+
+        DropdownSelectionFollowsFocusChecked enabled ->
+            ( { model | dropdownSelectionFollowsFocus = enabled }
+            , Cmd.none
+            )
+
+        DropdownHandleHomeAndEndChecked enabled ->
+            ( { model | dropdownHandleHomeAndEnd = enabled }
+            , Cmd.none
+            )
+
+        DropdownTypeAheadChecked enabled ->
+            ( { model | dropdownTypeAhead = enabled }
+            , Cmd.none
+            )
+
+        -- COMBO BOX
         ComboBoxMsg comboBoxMsg ->
             let
                 ( newComboBox, comboBoxCmd, maybeOutMsg ) =
-                    ComboBox.update comboBoxUpdateConfig
+                    ComboBox.update
+                        (comboBoxUpdateConfig
+                            model.comboBoxJumpAtEnds
+                            model.comboBoxCloseAfterMouseSelection
+                            model.comboBoxSeparateFocus
+                            model.comboBoxSelectionFollowsFocus
+                            model.comboBoxHandleHomeAndEnd
+                            model.comboBoxDisplayCondition
+                        )
                         EntrySelected
                         model.comboBox
                         locales
@@ -176,10 +330,50 @@ update msg model =
             , Cmd.map ComboBoxMsg comboBoxCmd
             )
 
-        AccordionMsg cmd newAccordion ->
-            ( { model | accordion = newAccordion }
-            , cmd
+        ComboBoxJumpAtEndsChecked enabled ->
+            ( { model | comboBoxJumpAtEnds = enabled }
+            , Cmd.none
             )
+
+        ComboBoxCloseAfterMouseSelectionChecked enabled ->
+            ( { model | comboBoxCloseAfterMouseSelection = enabled }
+            , Cmd.none
+            )
+
+        ComboBoxSeparateFocusChecked enabled ->
+            ( { model | comboBoxSeparateFocus = enabled }
+            , Cmd.none
+            )
+
+        ComboBoxSelectionFollowsFocusChecked enabled ->
+            ( { model | comboBoxSelectionFollowsFocus = enabled }
+            , Cmd.none
+            )
+
+        ComboBoxHandleHomeAndEndChecked enabled ->
+            ( { model | comboBoxHandleHomeAndEnd = enabled }
+            , Cmd.none
+            )
+
+        ComboBoxDisplayConditionSelected selectedDisplayCondition ->
+            ( { model | comboBoxDisplayCondition = selectedDisplayCondition }
+            , Cmd.none
+            )
+
+        ComboBoxMatchingQueryCountChanged rawCount ->
+            case model.comboBoxDisplayCondition of
+                MatchingQuery _ ->
+                    case String.toInt rawCount of
+                        Nothing ->
+                            ( model, Cmd.none )
+
+                        Just count ->
+                            ( { model | comboBoxDisplayCondition = MatchingQuery count }
+                            , Cmd.none
+                            )
+
+                _ ->
+                    ( model, Cmd.none )
 
 
 
@@ -204,7 +398,7 @@ view model =
         [ Html.div
             [ Attributes.class "container" ]
             [ Accordion.view accordionViewConfig AccordionMsg "examples" model.accordion <|
-                [ Accordion.section Expanded
+                [ Accordion.section Collapsed
                     { id = "listboxes"
                     , header = "Listboxes"
                     , panel =
@@ -241,10 +435,28 @@ view model =
                                                    )
                                     ]
                                 ]
+                            , Html.label
+                                [ Attributes.class "label" ]
+                                [ Html.text "Configuration" ]
+                            , viewCheckbox ListboxJumpAtEndsChecked
+                                model.listboxJumpAtEnds
+                                "Jump at ends"
+                            , viewCheckbox ListboxSeparateFocusChecked
+                                model.listboxSeparateFocus
+                                "Separate focus for mouse and keyboard"
+                            , viewCheckbox ListboxSelectionFollowsFocusChecked
+                                model.listboxSelectionFollowsFocus
+                                "Selection follows focus"
+                            , viewCheckbox ListboxHandleHomeAndEndChecked
+                                model.listboxHandleHomeAndEnd
+                                "Handle Home and End keys"
+                            , viewCheckbox ListboxTypeAheadChecked
+                                model.listboxTypeAhead
+                                "Type ahead"
                             ]
                         ]
                     }
-                , Accordion.section Collapsed
+                , Accordion.section Expanded
                     { id = "dropdown-menus"
                     , header = "Dropdown Menus"
                     , panel =
@@ -281,6 +493,27 @@ view model =
                                                         "currently selected: " ++ selectedLocale
                                             ]
                                         ]
+                                    , Html.label
+                                        [ Attributes.class "label" ]
+                                        [ Html.text "Configuration" ]
+                                    , viewCheckbox DropdownJumpAtEndsChecked
+                                        model.dropdownJumpAtEnds
+                                        "Jump at ends"
+                                    , viewCheckbox DropdownCloseAfterMouseSelectionChecked
+                                        model.dropdownCloseAfterMouseSelection
+                                        "Close after mouse selection"
+                                    , viewCheckbox DropdownSeparateFocusChecked
+                                        model.dropdownSeparateFocus
+                                        "Separate focus for mouse and keyboard"
+                                    , viewCheckbox DropdownSelectionFollowsFocusChecked
+                                        model.dropdownSelectionFollowsFocus
+                                        "Selection follows focus"
+                                    , viewCheckbox DropdownHandleHomeAndEndChecked
+                                        model.dropdownHandleHomeAndEnd
+                                        "Handle Home and End keys"
+                                    , viewCheckbox DropdownTypeAheadChecked
+                                        model.dropdownTypeAhead
+                                        "Type ahead"
                                     ]
                                 , Html.div
                                     [ Attributes.class "column" ]
@@ -311,11 +544,126 @@ view model =
                                                         "currently selected: " ++ selectedLocale2
                                             ]
                                         ]
+                                    , Html.label
+                                        [ Attributes.class "label" ]
+                                        [ Html.text "Configuration" ]
+                                    , viewCheckbox ComboBoxJumpAtEndsChecked
+                                        model.comboBoxJumpAtEnds
+                                        "Jump at ends"
+                                    , viewCheckbox ComboBoxCloseAfterMouseSelectionChecked
+                                        model.comboBoxCloseAfterMouseSelection
+                                        "Close after mouse selection"
+                                    , viewCheckbox ComboBoxSeparateFocusChecked
+                                        model.comboBoxSeparateFocus
+                                        "Separate focus for mouse and keyboard"
+                                    , viewCheckbox ComboBoxSelectionFollowsFocusChecked
+                                        model.comboBoxSelectionFollowsFocus
+                                        "Selection follows focus"
+                                    , viewCheckbox ComboBoxHandleHomeAndEndChecked
+                                        model.comboBoxHandleHomeAndEnd
+                                        "Handle Home and End keys"
+                                    , Html.div
+                                        [ Attributes.class "field" ]
+                                        [ Html.div
+                                            [ Attributes.class "control" ]
+                                            [ Html.label
+                                                [ Attributes.class "radio" ]
+                                                [ Html.input
+                                                    [ Attributes.type_ "radio"
+                                                    , Attributes.name "displayCondition"
+                                                    , Attributes.checked <|
+                                                        case model.comboBoxDisplayCondition of
+                                                            MatchingQuery _ ->
+                                                                True
+
+                                                            _ ->
+                                                                False
+                                                    , case model.comboBoxDisplayCondition of
+                                                        MatchingQuery count ->
+                                                            Events.onClick
+                                                                (ComboBoxDisplayConditionSelected (MatchingQuery count))
+
+                                                        _ ->
+                                                            Events.onClick
+                                                                (ComboBoxDisplayConditionSelected (MatchingQuery 3))
+                                                    ]
+                                                    []
+                                                , Html.text " Matching query"
+                                                ]
+                                            , Html.label
+                                                [ Attributes.class "radio" ]
+                                                [ Html.input
+                                                    [ Attributes.type_ "radio"
+                                                    , Attributes.name "displayCondition"
+                                                    , Attributes.checked
+                                                        (model.comboBoxDisplayCondition == OnFocus)
+                                                    , Events.onClick
+                                                        (ComboBoxDisplayConditionSelected OnFocus)
+                                                    ]
+                                                    []
+                                                , Html.text " On focus"
+                                                ]
+                                            , Html.label
+                                                [ Attributes.class "radio" ]
+                                                [ Html.input
+                                                    [ Attributes.type_ "radio"
+                                                    , Attributes.name "displayCondition"
+                                                    , Attributes.checked
+                                                        (model.comboBoxDisplayCondition == OnDemand)
+                                                    , Events.onClick
+                                                        (ComboBoxDisplayConditionSelected OnDemand)
+                                                    ]
+                                                    []
+                                                , Html.text " On demand"
+                                                ]
+                                            ]
+                                        ]
+                                    , case model.comboBoxDisplayCondition of
+                                        MatchingQuery count ->
+                                            Html.div
+                                                [ Attributes.class "field" ]
+                                                [ Html.div
+                                                    [ Attributes.class "control" ]
+                                                    [ Html.input
+                                                        [ Attributes.class "input"
+                                                        , Attributes.type_ "number"
+                                                        , Attributes.min "0"
+                                                        , Attributes.step "1"
+                                                        , Attributes.value
+                                                            (String.fromInt count)
+                                                        , Events.onInput
+                                                            ComboBoxMatchingQueryCountChanged
+                                                        ]
+                                                        []
+                                                    ]
+                                                ]
+
+                                        _ ->
+                                            Html.text ""
                                     ]
                                 ]
                             ]
                         ]
                     }
+                ]
+            ]
+        ]
+
+
+viewCheckbox checked enabled description =
+    Html.div
+        [ Attributes.class "field" ]
+        [ Html.div
+            [ Attributes.class "control" ]
+            [ Html.label
+                [ Attributes.class "checkbox" ]
+                [ Html.input
+                    [ Attributes.type_ "checkbox"
+                    , Attributes.checked enabled
+                    , Events.onCheck checked
+                    ]
+                    []
+                , Html.text (" " ++ description)
                 ]
             ]
         ]
@@ -357,18 +705,21 @@ accordionViewConfig =
         }
 
 
-listboxUpdateConfig : Listbox.UpdateConfig String
-listboxUpdateConfig =
+listboxUpdateConfig : Bool -> Bool -> Bool -> Bool -> Bool -> Listbox.UpdateConfig String
+listboxUpdateConfig jumpAtEnds separateFocus selectionFollowsFocus handleHomeAndEnd typeAhead =
     Listbox.updateConfig identity
-        { jumpAtEnds = True
-        , separateFocus = True
-        , selectionFollowsFocus = False
-        , handleHomeAndEnd = True
+        { jumpAtEnds = jumpAtEnds
+        , separateFocus = separateFocus
+        , selectionFollowsFocus = selectionFollowsFocus
+        , handleHomeAndEnd = handleHomeAndEnd
         , typeAhead =
-            Listbox.typeAhead 200 <|
-                \query value ->
-                    String.toLower value
-                        |> String.contains (String.toLower query)
+            if typeAhead then
+                Listbox.typeAhead 200 <|
+                    \query value ->
+                        String.toLower value
+                            |> String.contains (String.toLower query)
+            else
+                Listbox.noTypeAhead
         }
 
 
@@ -393,19 +744,22 @@ listboxViewConfig =
         }
 
 
-dropdownUpdateConfig : Dropdown.UpdateConfig String
-dropdownUpdateConfig =
+dropdownUpdateConfig : Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Dropdown.UpdateConfig String
+dropdownUpdateConfig jumpAtEnds closeAfterMouseSelection separateFocus selectionFollowsFocus handleHomeAndEnd typeAhead =
     Dropdown.updateConfig identity
-        { jumpAtEnds = True
-        , closeAfterMouseSelection = True
-        , separateFocus = True
-        , selectionFollowsFocus = False
-        , handleHomeAndEnd = True
+        { jumpAtEnds = jumpAtEnds
+        , closeAfterMouseSelection = closeAfterMouseSelection
+        , separateFocus = separateFocus
+        , selectionFollowsFocus = selectionFollowsFocus
+        , handleHomeAndEnd = handleHomeAndEnd
         , typeAhead =
-            Listbox.typeAhead 200 <|
-                \query value ->
-                    String.toLower value
-                        |> String.contains (String.toLower query)
+            if typeAhead then
+                Listbox.typeAhead 200 <|
+                    \query value ->
+                        String.toLower value
+                            |> String.contains (String.toLower query)
+            else
+                Listbox.noTypeAhead
         }
 
 
@@ -451,15 +805,24 @@ comboBoxSharedConfig =
     }
 
 
-comboBoxUpdateConfig : ComboBox.UpdateConfig String
-comboBoxUpdateConfig =
+comboBoxUpdateConfig : Bool -> Bool -> Bool -> Bool -> Bool -> SelectedDisplayCondition -> ComboBox.UpdateConfig String
+comboBoxUpdateConfig jumpAtEnds closeAfterMouseSelection separateFocus selectionFollowsFocus handleHomeAndEnd displayCondition =
     ComboBox.updateConfig comboBoxSharedConfig
-        { jumpAtEnds = True
-        , closeAfterMouseSelection = True
-        , separateFocus = True
-        , selectionFollowsFocus = False
-        , handleHomeAndEnd = True
-        , displayCondition = ComboBox.matchingQuery 3
+        { jumpAtEnds = jumpAtEnds
+        , closeAfterMouseSelection = closeAfterMouseSelection
+        , separateFocus = separateFocus
+        , selectionFollowsFocus = selectionFollowsFocus
+        , handleHomeAndEnd = handleHomeAndEnd
+        , displayCondition =
+            case displayCondition of
+                MatchingQuery count ->
+                    ComboBox.matchingQuery count
+
+                OnFocus ->
+                    ComboBox.onFocus
+
+                OnDemand ->
+                    ComboBox.onDemand
         }
 
 
