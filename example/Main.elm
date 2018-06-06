@@ -456,7 +456,7 @@ view model =
                             ]
                         ]
                     }
-                , Accordion.section Expanded
+                , Accordion.section Collapsed
                     { id = "dropdown-menus"
                     , header = "Dropdown Menus"
                     , panel =
