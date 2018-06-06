@@ -80,7 +80,9 @@ module Widget.Listbox
 
 ## Manage keyboard focus
 
-@docs focusedEntry, focusFirstOrNextEntry, focusPreviousEntry
+@docs focusedEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
+
+@docs focus, scrollToFocus
 
 @docs ScrollData, arrowDownDecoder, arrowUpDecoder
 

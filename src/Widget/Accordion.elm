@@ -1,6 +1,8 @@
 module Widget.Accordion
     exposing
         ( Accordion
+        , Behaviour
+        , Count(..)
         , PanelState(..)
         , Section
         , ViewConfig
@@ -13,7 +15,12 @@ module Widget.Accordion
 
 {-|
 
-    TODO
+@docs Accordion, init, view, section, Section, PanelState
+
+
+# Configuration
+
+@docs ViewConfig, viewConfig, Behaviour, Count, Views
 
 -}
 
@@ -99,12 +106,12 @@ section =
 {-| TODO
 -}
 type ViewConfig header
-    = ViewConfig (Views header)
+    = ViewConfig Behaviour (Views header)
 
 
 {-| TODO
 -}
-viewConfig : Views header -> ViewConfig header
+viewConfig : Behaviour -> Views header -> ViewConfig header
 viewConfig =
     ViewConfig
 
@@ -152,7 +159,7 @@ view :
     -> Accordion
     -> List (Section header msg)
     -> Html msg
-view (ViewConfig views) lift id (Accordion panelStates) sections =
+view (ViewConfig behaviour views) lift id (Accordion panelStates) sections =
     let
         noOp =
             lift Cmd.none (Accordion panelStates)
@@ -167,7 +174,7 @@ view (ViewConfig views) lift id (Accordion panelStates) sections =
             |> appendAttributes noOp views.dl
         )
         (sections
-            |> List.map (viewSection views lift id panelStates sectionIds)
+            |> List.map (viewSection behaviour views lift id panelStates sectionIds)
             |> List.concat
         )
 
@@ -178,20 +185,21 @@ extractSectionIds =
 
 
 viewSection :
-    Views header
+    Behaviour
+    -> Views header
     -> (Cmd msg -> Accordion -> msg)
     -> String
     -> Dict String PanelState
     -> List String
     -> Section header msg
     -> List (Html msg)
-viewSection views lift id panelStates sectionIds (Section initialState data) =
+viewSection behaviour views lift id panelStates sectionIds (Section initialState data) =
     let
         buttonId =
-            id ++ "--" ++ data.id ++ "__accordion-header"
+            printHeaderId id data.id
 
         panelId =
-            id ++ "--" ++ data.id ++ "__accordion-panel"
+            printPanelId id data.id
 
         header =
             views.button actualState data.header
@@ -203,6 +211,47 @@ viewSection views lift id panelStates sectionIds (Section initialState data) =
 
         noOp =
             lift Cmd.none (Accordion panelStates)
+
+        onPageDownPageUp attrs =
+            if behaviour.handlePageDownPageUp then
+                Events.preventDefaultOn "keypress"
+                    (Decode.field "key" Decode.string
+                        |> Decode.andThen
+                            (\code ->
+                                case code of
+                                    "PageDown" ->
+                                        Decode.succeed
+                                            ( lift
+                                                (focusNextHeader behaviour.jumpAtEnds
+                                                    noOp
+                                                    sectionIds
+                                                    id
+                                                    data.id
+                                                )
+                                                (Accordion panelStates)
+                                            , True
+                                            )
+
+                                    "PageUp" ->
+                                        Decode.succeed
+                                            ( lift
+                                                (focusPreviousHeader behaviour.jumpAtEnds
+                                                    noOp
+                                                    sectionIds
+                                                    id
+                                                    data.id
+                                                )
+                                                (Accordion panelStates)
+                                            , True
+                                            )
+
+                                    _ ->
+                                        Decode.fail "not handling that key here"
+                            )
+                    )
+                    :: attrs
+            else
+                attrs
     in
     [ Html.dt
         ([ Attributes.attribute "role" "heading"
@@ -249,17 +298,49 @@ viewSection views lift id panelStates sectionIds (Section initialState data) =
                             case code of
                                 "ArrowUp" ->
                                     Decode.succeed
-                                        ( lift (focusPreviousHeader noOp sectionIds id data.id)
+                                        ( lift
+                                            (focusPreviousHeader behaviour.jumpAtEnds
+                                                noOp
+                                                sectionIds
+                                                id
+                                                data.id
+                                            )
                                             (Accordion panelStates)
                                         , True
                                         )
 
                                 "ArrowDown" ->
                                     Decode.succeed
-                                        ( lift (focusNextHeader noOp sectionIds id data.id)
+                                        ( lift
+                                            (focusNextHeader behaviour.jumpAtEnds
+                                                noOp
+                                                sectionIds
+                                                id
+                                                data.id
+                                            )
                                             (Accordion panelStates)
                                         , True
                                         )
+
+                                "Home" ->
+                                    if behaviour.handleHomeAndEnd then
+                                        Decode.succeed
+                                            ( lift (focusFirstHeader noOp sectionIds id)
+                                                (Accordion panelStates)
+                                            , True
+                                            )
+                                    else
+                                        Decode.fail "not handling that key here"
+
+                                "End" ->
+                                    if behaviour.handleHomeAndEnd then
+                                        Decode.succeed
+                                            ( lift (focusLastHeader noOp sectionIds id)
+                                                (Accordion panelStates)
+                                            , True
+                                            )
+                                    else
+                                        Decode.fail "not handling that key here"
 
                                 _ ->
                                     Decode.fail "not handling that key here"
@@ -274,30 +355,8 @@ viewSection views lift id panelStates sectionIds (Section initialState data) =
         ([ Attributes.attribute "role" "region"
          , Attributes.attribute "aria-labelledby" buttonId
          , Attributes.id panelId
-         , Events.preventDefaultOn "keypress"
-            (Decode.field "key" Decode.string
-                |> Decode.andThen
-                    (\code ->
-                        case code of
-                            "PageDown" ->
-                                Decode.succeed
-                                    ( lift (focusNextHeader noOp sectionIds id data.id)
-                                        (Accordion panelStates)
-                                    , True
-                                    )
-
-                            "PageUp" ->
-                                Decode.succeed
-                                    ( lift (focusPreviousHeader noOp sectionIds id data.id)
-                                        (Accordion panelStates)
-                                    , True
-                                    )
-
-                            _ ->
-                                Decode.fail "not handling that key here"
-                    )
-            )
          ]
+            |> onPageDownPageUp
             |> applyPanelState actualState
             |> appendAttributes noOp views.dd
         )
@@ -305,26 +364,61 @@ viewSection views lift id panelStates sectionIds (Section initialState data) =
     ]
 
 
-focusPreviousHeader : msg -> List String -> String -> String -> Cmd msg
-focusPreviousHeader noOp sectionIds id currentSectionId =
-    focusNextHeader noOp (List.reverse sectionIds) id currentSectionId
+focusPreviousHeader : Bool -> msg -> List String -> String -> String -> Cmd msg
+focusPreviousHeader jumpAtEnds noOp sectionIds id currentSectionId =
+    focusNextHeader jumpAtEnds noOp (List.reverse sectionIds) id currentSectionId
 
 
-focusNextHeader : msg -> List String -> String -> String -> Cmd msg
-focusNextHeader noOp sectionIds id currentSectionId =
+focusNextHeader : Bool -> msg -> List String -> String -> String -> Cmd msg
+focusNextHeader jumpAtEnds noOp sectionIds id currentSectionId =
     case sectionIds of
         [] ->
             Cmd.none
 
-        currentId :: [] ->
+        firstId :: _ ->
+            focusNextHeaderHelp firstId jumpAtEnds noOp sectionIds id currentSectionId
+
+
+focusNextHeaderHelp : String -> Bool -> msg -> List String -> String -> String -> Cmd msg
+focusNextHeaderHelp firstId jumpAtEnds noOp sectionIds id currentSectionId =
+    let
+        focus headerId =
+            Browser.focus (printHeaderId id headerId)
+                |> Task.attempt (\_ -> noOp)
+    in
+    case sectionIds of
+        [] ->
             Cmd.none
 
-        currentId :: nextId :: rest ->
-            if currentId == currentSectionId then
-                Browser.focus (id ++ "--" ++ nextId ++ "__accordion-header")
-                    |> Task.attempt (\_ -> noOp)
-            else
-                focusNextHeader noOp (nextId :: rest) id currentSectionId
+        currentId :: rest ->
+            case rest of
+                [] ->
+                    if currentId == currentSectionId && jumpAtEnds then
+                        focus firstId
+                    else
+                        Cmd.none
+
+                nextId :: _ ->
+                    if currentId == currentSectionId then
+                        focus nextId
+                    else
+                        focusNextHeaderHelp firstId jumpAtEnds noOp rest id currentSectionId
+
+
+focusFirstHeader : msg -> List String -> String -> Cmd msg
+focusFirstHeader noOp sectionIds id =
+    case List.head sectionIds of
+        Nothing ->
+            Cmd.none
+
+        Just firstId ->
+            Browser.focus (printHeaderId id firstId)
+                |> Task.attempt (\_ -> noOp)
+
+
+focusLastHeader : msg -> List String -> String -> Cmd msg
+focusLastHeader noOp sectionIds id =
+    focusFirstHeader noOp (List.reverse sectionIds) id
 
 
 applyPanelState : PanelState -> List (Html.Attribute msg) -> List (Html.Attribute msg)
@@ -350,3 +444,17 @@ appendAttributes noOp neverAttrs attrs =
     neverAttrs
         |> List.map (Attributes.map (\_ -> noOp))
         |> List.append attrs
+
+
+
+-- IDS
+
+
+printHeaderId : String -> String -> String
+printHeaderId id headerId =
+    id ++ "--" ++ headerId ++ "__accordion-header"
+
+
+printPanelId : String -> String -> String
+printPanelId id panelId =
+    id ++ "--" ++ panelId ++ "__accordion-panel"

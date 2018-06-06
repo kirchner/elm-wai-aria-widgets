@@ -46,6 +46,9 @@ main =
 
 type alias Model =
     { accordion : Accordion
+    , accordionJumpAtEnds : Bool
+    , accordionHandleHomeAndEnd : Bool
+    , accordionHandlePageDownPageUp : Bool
 
     -- LISTBOX
     , selectedLocales : Set String
@@ -85,7 +88,11 @@ type SelectedDisplayCondition
 
 
 init _ =
-    ( { selectedLocales = Set.empty
+    ( { accordion = Accordion.init
+      , accordionJumpAtEnds = True
+      , accordionHandleHomeAndEnd = True
+      , accordionHandlePageDownPageUp = True
+      , selectedLocales = Set.empty
       , listbox = Listbox.unfocused
       , listboxJumpAtEnds = True
       , listboxSeparateFocus = True
@@ -108,7 +115,6 @@ init _ =
       , comboBoxSelectionFollowsFocus = False
       , comboBoxHandleHomeAndEnd = True
       , comboBoxDisplayCondition = MatchingQuery 3
-      , accordion = Accordion.init
       }
     , Cmd.none
     )
@@ -120,6 +126,9 @@ init _ =
 
 type Msg
     = AccordionMsg (Cmd Msg) Accordion
+    | AccordionJumpAtEndsChecked Bool
+    | AccordionHandleHomeAndEndChecked Bool
+    | AccordionHandlePageDownPageUpChecked Bool
       -- LISTBOX
     | ListboxMsg (Listbox.Msg String)
     | ListboxJumpAtEndsChecked Bool
@@ -159,6 +168,21 @@ update msg model =
         AccordionMsg cmd newAccordion ->
             ( { model | accordion = newAccordion }
             , cmd
+            )
+
+        AccordionJumpAtEndsChecked enabled ->
+            ( { model | accordionJumpAtEnds = enabled }
+            , Cmd.none
+            )
+
+        AccordionHandleHomeAndEndChecked enabled ->
+            ( { model | accordionHandleHomeAndEnd = enabled }
+            , Cmd.none
+            )
+
+        AccordionHandlePageDownPageUpChecked enabled ->
+            ( { model | accordionHandlePageDownPageUp = enabled }
+            , Cmd.none
             )
 
         -- LISTBOX
@@ -397,8 +421,37 @@ view model =
         [ Attributes.class "section" ]
         [ Html.div
             [ Attributes.class "container" ]
-            [ Accordion.view accordionViewConfig AccordionMsg "examples" model.accordion <|
-                [ Accordion.section Collapsed
+            [ Accordion.view
+                (accordionViewConfig
+                    model.accordionJumpAtEnds
+                    model.accordionHandleHomeAndEnd
+                    model.accordionHandlePageDownPageUp
+                )
+                AccordionMsg
+                "examples"
+                model.accordion
+                [ Accordion.section Expanded
+                    { id = "accordion"
+                    , header = "Accordion"
+                    , panel =
+                        [ Html.form
+                            [ Attributes.style "width" "100%" ]
+                            [ Html.label
+                                [ Attributes.class "label" ]
+                                [ Html.text "Configuration" ]
+                            , viewCheckbox AccordionJumpAtEndsChecked
+                                model.accordionJumpAtEnds
+                                "Jump at ends"
+                            , viewCheckbox AccordionHandleHomeAndEndChecked
+                                model.accordionHandleHomeAndEnd
+                                "Handle Home and End keys"
+                            , viewCheckbox AccordionHandlePageDownPageUpChecked
+                                model.accordionHandlePageDownPageUp
+                                "Handle Page Down and Page Up keys"
+                            ]
+                        ]
+                    }
+                , Accordion.section Collapsed
                     { id = "listboxes"
                     , header = "Listboxes"
                     , panel =
@@ -673,9 +726,15 @@ viewCheckbox checked enabled description =
 ---- CONFIG
 
 
-accordionViewConfig : Accordion.ViewConfig String
-accordionViewConfig =
+accordionViewConfig : Bool -> Bool -> Bool -> Accordion.ViewConfig String
+accordionViewConfig jumpAtEnds handleHomeAndEnd handlePageDownPageUp =
     Accordion.viewConfig
+        { jumpAtEnds = jumpAtEnds
+        , handleHomeAndEnd = handleHomeAndEnd
+        , handlePageDownPageUp = handlePageDownPageUp
+        , collapsedCount = Accordion.AnyNumber
+        , expandedCount = Accordion.AnyNumber
+        }
         { dl = [ Attributes.class "panel" ]
         , dt = [ Attributes.class "panel-heading" ]
         , button =

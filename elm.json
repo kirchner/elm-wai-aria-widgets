@@ -6,6 +6,7 @@
     "version": "1.0.0",
     "exposed-modules": [
         "Widget",
+        "Widget.Accordion",
         "Widget.ComboBox",
         "Widget.Listbox",
         "Widget.Listbox.Dropdown"
@@ -13,6 +14,7 @@
     "elm-version": "0.19.0 <= v < 0.20.0",
     "dependencies": {
         "NoRedInk/json-decode-pipeline": "1.0.0 <= v < 2.0.0",
+        "elm/animation-frame": "1.0.0 <= v < 2.0.0",
         "elm/browser": "1.0.0 <= v < 2.0.0",
         "elm/core": "1.0.0 <= v < 2.0.0",
         "elm/html": "1.0.0 <= v < 2.0.0",
