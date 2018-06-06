@@ -119,6 +119,26 @@ type alias Views header =
     }
 
 
+{-| TODO
+-}
+type alias Behaviour =
+    { jumpAtEnds : Bool
+    , handleHomeAndEnd : Bool
+    , handlePageDownPageUp : Bool
+    , collapsedCount : Count
+    , expandedCount : Count
+    }
+
+
+{-| TODO
+-}
+type Count
+    = AnyNumber
+    | AtLeast Int
+    | AtMost Int
+    | Exactly Int
+
+
 
 ---- VIEW
 
