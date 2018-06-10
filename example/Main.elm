@@ -22,6 +22,7 @@ import Browser
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
+import Html.Lazy as Html
 import Set exposing (Set)
 import Widget exposing (HtmlDetails)
 import Widget.Accordion as Accordion exposing (Accordion, PanelState(..))
@@ -493,21 +494,10 @@ view model =
                     { id = "accordion"
                     , header = "Accordion"
                     , panel =
-                        [ Html.form
-                            [ Attributes.style "width" "100%" ]
-                            [ Html.label
-                                [ Attributes.class "label" ]
-                                [ Html.text "Configuration" ]
-                            , viewCheckbox AccordionJumpAtEndsChecked
-                                model.accordionJumpAtEnds
-                                "Jump at ends"
-                            , viewCheckbox AccordionHandleHomeAndEndChecked
-                                model.accordionHandleHomeAndEnd
-                                "Handle Home and End keys"
-                            , viewCheckbox AccordionHandlePageDownPageUpChecked
-                                model.accordionHandlePageDownPageUp
-                                "Handle Page Down and Page Up keys"
-                            ]
+                        [ Html.lazy3 viewAccordionConfiguration
+                            model.accordionJumpAtEnds
+                            model.accordionHandleHomeAndEnd
+                            model.accordionHandlePageDownPageUp
                         ]
                     }
                 , Accordion.section Collapsed
@@ -516,57 +506,15 @@ view model =
                     , panel =
                         [ Html.form
                             [ Attributes.style "width" "100%" ]
-                            [ Html.div
-                                [ Attributes.class "field" ]
-                                [ Html.label
-                                    [ Attributes.id "locales-label" ]
-                                    [ Html.text "Locale" ]
-                                , Html.div
-                                    [ Attributes.class "control" ]
-                                    [ model.selectedLocales
-                                        |> Set.toList
-                                        |> Listbox.viewLazy
-                                            (\_ -> 42)
-                                            (\_ -> 31)
-                                            listboxViewConfig
-                                            { id = "locales"
-                                            , labelledBy = "locales-label"
-                                            }
-                                            model.listbox
-                                            locales
-                                        |> Html.map ListboxMsg
-                                    ]
-                                , Html.p
-                                    [ Attributes.class "help" ]
-                                    [ Html.text <|
-                                        if Set.isEmpty model.selectedLocales then
-                                            "nothing selected"
-                                        else
-                                            "currently selected: "
-                                                ++ (model.selectedLocales
-                                                        |> Set.toList
-                                                        |> String.join ", "
-                                                   )
-                                    ]
-                                ]
-                            , Html.label
-                                [ Attributes.class "label" ]
-                                [ Html.text "Configuration" ]
-                            , viewCheckbox ListboxJumpAtEndsChecked
+                            [ Html.lazy2 viewListbox
+                                model.listbox
+                                model.selectedLocales
+                            , Html.lazy5 viewListboxConfiguration
                                 model.listboxJumpAtEnds
-                                "Jump at ends"
-                            , viewCheckbox ListboxSeparateFocusChecked
                                 model.listboxSeparateFocus
-                                "Separate focus for mouse and keyboard"
-                            , viewCheckbox ListboxSelectionFollowsFocusChecked
                                 model.listboxSelectionFollowsFocus
-                                "Selection follows focus"
-                            , viewCheckbox ListboxHandleHomeAndEndChecked
                                 model.listboxHandleHomeAndEnd
-                                "Handle Home and End keys"
-                            , viewCheckbox ListboxTypeAheadChecked
                                 model.listboxTypeAhead
-                                "Type ahead"
                             ]
                         ]
                     }
@@ -576,39 +524,9 @@ view model =
                     , panel =
                         [ Html.form
                             [ Attributes.style "width" "100%" ]
-                            [ Html.div
-                                [ Attributes.class "field" ]
-                                [ Html.label
-                                    [ Attributes.id "muppets-label" ]
-                                    [ Html.text "Muppets" ]
-                                , Html.div
-                                    [ Attributes.class "control" ]
-                                    [ model.selectedMuppets
-                                        |> Set.toList
-                                        |> Listbox.viewLazy
-                                            (\_ -> 42)
-                                            (\_ -> 42)
-                                            listboxViewConfig
-                                            { id = "muppets"
-                                            , labelledBy = "muppets-label"
-                                            }
-                                            model.muppetsListbox
-                                            muppets
-                                        |> Html.map MuppetsListboxMsg
-                                    ]
-                                , Html.p
-                                    [ Attributes.class "help" ]
-                                    [ Html.text <|
-                                        if Set.isEmpty model.selectedMuppets then
-                                            "nothing selected"
-                                        else
-                                            "currently selected: "
-                                                ++ (model.selectedMuppets
-                                                        |> Set.toList
-                                                        |> String.join ", "
-                                                   )
-                                    ]
-                                ]
+                            [ Html.lazy2 viewMuppetsListbox
+                                model.muppetsListbox
+                                model.selectedMuppets
                             ]
                         ]
                     }
@@ -622,180 +540,25 @@ view model =
                                 [ Attributes.class "columns" ]
                                 [ Html.div
                                     [ Attributes.class "column" ]
-                                    [ Html.div
-                                        [ Attributes.class "field" ]
-                                        [ Html.label
-                                            [ Attributes.id "locales-dropdown-label" ]
-                                            [ Html.text "Locale" ]
-                                        , Html.div
-                                            [ Attributes.class "control" ]
-                                            [ model.selectedLocale
-                                                |> Dropdown.view dropdownViewConfig
-                                                    { id = "locales-dropdown"
-                                                    , labelledBy = "locales-dropdown-label"
-                                                    }
-                                                    model.dropdown
-                                                    locales
-                                                |> Html.map DropdownMsg
-                                            ]
-                                        , Html.p
-                                            [ Attributes.class "help" ]
-                                            [ Html.text <|
-                                                case model.selectedLocale of
-                                                    Nothing ->
-                                                        "nothing selected"
-
-                                                    Just selectedLocale ->
-                                                        "currently selected: " ++ selectedLocale
-                                            ]
-                                        ]
-                                    , Html.label
-                                        [ Attributes.class "label" ]
-                                        [ Html.text "Configuration" ]
-                                    , viewCheckbox DropdownJumpAtEndsChecked
+                                    [ Html.lazy2 viewDropdown model.dropdown model.selectedLocale
+                                    , Html.lazy6 viewDropdownConfiguration
                                         model.dropdownJumpAtEnds
-                                        "Jump at ends"
-                                    , viewCheckbox DropdownCloseAfterMouseSelectionChecked
                                         model.dropdownCloseAfterMouseSelection
-                                        "Close after mouse selection"
-                                    , viewCheckbox DropdownSeparateFocusChecked
                                         model.dropdownSeparateFocus
-                                        "Separate focus for mouse and keyboard"
-                                    , viewCheckbox DropdownSelectionFollowsFocusChecked
                                         model.dropdownSelectionFollowsFocus
-                                        "Selection follows focus"
-                                    , viewCheckbox DropdownHandleHomeAndEndChecked
                                         model.dropdownHandleHomeAndEnd
-                                        "Handle Home and End keys"
-                                    , viewCheckbox DropdownTypeAheadChecked
                                         model.dropdownTypeAhead
-                                        "Type ahead"
                                     ]
                                 , Html.div
                                     [ Attributes.class "column" ]
-                                    [ Html.div
-                                        [ Attributes.class "field" ]
-                                        [ Html.label
-                                            [ Attributes.id "locales-combo-box-label" ]
-                                            [ Html.text "Locale" ]
-                                        , Html.div
-                                            [ Attributes.class "control" ]
-                                            [ model.selectedLocale2
-                                                |> ComboBox.view comboBoxViewConfig
-                                                    { id = "locales-combo-box"
-                                                    , labelledBy = "locales-combo-box-label"
-                                                    }
-                                                    model.comboBox
-                                                    locales
-                                                |> Html.map ComboBoxMsg
-                                            ]
-                                        , Html.p
-                                            [ Attributes.class "help" ]
-                                            [ Html.text <|
-                                                case model.selectedLocale2 of
-                                                    Nothing ->
-                                                        "nothing selected"
-
-                                                    Just selectedLocale2 ->
-                                                        "currently selected: " ++ selectedLocale2
-                                            ]
-                                        ]
-                                    , Html.label
-                                        [ Attributes.class "label" ]
-                                        [ Html.text "Configuration" ]
-                                    , viewCheckbox ComboBoxJumpAtEndsChecked
+                                    [ Html.lazy2 viewComboBox model.comboBox model.selectedLocale2
+                                    , Html.lazy6 viewComboBoxConfiguration
                                         model.comboBoxJumpAtEnds
-                                        "Jump at ends"
-                                    , viewCheckbox ComboBoxCloseAfterMouseSelectionChecked
                                         model.comboBoxCloseAfterMouseSelection
-                                        "Close after mouse selection"
-                                    , viewCheckbox ComboBoxSeparateFocusChecked
                                         model.comboBoxSeparateFocus
-                                        "Separate focus for mouse and keyboard"
-                                    , viewCheckbox ComboBoxSelectionFollowsFocusChecked
                                         model.comboBoxSelectionFollowsFocus
-                                        "Selection follows focus"
-                                    , viewCheckbox ComboBoxHandleHomeAndEndChecked
                                         model.comboBoxHandleHomeAndEnd
-                                        "Handle Home and End keys"
-                                    , Html.div
-                                        [ Attributes.class "field" ]
-                                        [ Html.div
-                                            [ Attributes.class "control" ]
-                                            [ Html.label
-                                                [ Attributes.class "radio" ]
-                                                [ Html.input
-                                                    [ Attributes.type_ "radio"
-                                                    , Attributes.name "displayCondition"
-                                                    , Attributes.checked <|
-                                                        case model.comboBoxDisplayCondition of
-                                                            MatchingQuery _ ->
-                                                                True
-
-                                                            _ ->
-                                                                False
-                                                    , case model.comboBoxDisplayCondition of
-                                                        MatchingQuery count ->
-                                                            Events.onClick
-                                                                (ComboBoxDisplayConditionSelected (MatchingQuery count))
-
-                                                        _ ->
-                                                            Events.onClick
-                                                                (ComboBoxDisplayConditionSelected (MatchingQuery 3))
-                                                    ]
-                                                    []
-                                                , Html.text " Matching query"
-                                                ]
-                                            , Html.label
-                                                [ Attributes.class "radio" ]
-                                                [ Html.input
-                                                    [ Attributes.type_ "radio"
-                                                    , Attributes.name "displayCondition"
-                                                    , Attributes.checked
-                                                        (model.comboBoxDisplayCondition == OnFocus)
-                                                    , Events.onClick
-                                                        (ComboBoxDisplayConditionSelected OnFocus)
-                                                    ]
-                                                    []
-                                                , Html.text " On focus"
-                                                ]
-                                            , Html.label
-                                                [ Attributes.class "radio" ]
-                                                [ Html.input
-                                                    [ Attributes.type_ "radio"
-                                                    , Attributes.name "displayCondition"
-                                                    , Attributes.checked
-                                                        (model.comboBoxDisplayCondition == OnDemand)
-                                                    , Events.onClick
-                                                        (ComboBoxDisplayConditionSelected OnDemand)
-                                                    ]
-                                                    []
-                                                , Html.text " On demand"
-                                                ]
-                                            ]
-                                        ]
-                                    , case model.comboBoxDisplayCondition of
-                                        MatchingQuery count ->
-                                            Html.div
-                                                [ Attributes.class "field" ]
-                                                [ Html.div
-                                                    [ Attributes.class "control" ]
-                                                    [ Html.input
-                                                        [ Attributes.class "input"
-                                                        , Attributes.type_ "number"
-                                                        , Attributes.min "0"
-                                                        , Attributes.step "1"
-                                                        , Attributes.value
-                                                            (String.fromInt count)
-                                                        , Events.onInput
-                                                            ComboBoxMatchingQueryCountChanged
-                                                        ]
-                                                        []
-                                                    ]
-                                                ]
-
-                                        _ ->
-                                            Html.text ""
+                                        model.comboBoxDisplayCondition
                                     ]
                                 ]
                             ]
@@ -803,6 +566,306 @@ view model =
                     }
                 ]
             ]
+        ]
+
+
+viewAccordionConfiguration accordionJumpAtEnds accordionHandleHomeAndEnd accordionHandlePageDownPageUp =
+    Html.form
+        [ Attributes.style "width" "100%" ]
+        [ Html.label
+            [ Attributes.class "label" ]
+            [ Html.text "Configuration" ]
+        , viewCheckbox AccordionJumpAtEndsChecked
+            accordionJumpAtEnds
+            "Jump at ends"
+        , viewCheckbox AccordionHandleHomeAndEndChecked
+            accordionHandleHomeAndEnd
+            "Handle Home and End keys"
+        , viewCheckbox AccordionHandlePageDownPageUpChecked
+            accordionHandlePageDownPageUp
+            "Handle Page Down and Page Up keys"
+        ]
+
+
+viewListbox listbox selection =
+    Html.div
+        [ Attributes.class "field" ]
+        [ Html.label
+            [ Attributes.id "locales-label" ]
+            [ Html.text "Locale" ]
+        , Html.div
+            [ Attributes.class "control" ]
+            [ selection
+                |> Set.toList
+                |> Listbox.viewLazy
+                    (\_ -> 42)
+                    (\_ -> 31)
+                    listboxViewConfig
+                    { id = "locales"
+                    , labelledBy = "locales-label"
+                    }
+                    listbox
+                    locales
+                |> Html.map ListboxMsg
+            ]
+        , Html.p
+            [ Attributes.class "help" ]
+            [ Html.text <|
+                if Set.isEmpty selection then
+                    "nothing selected"
+                else
+                    "currently selected: "
+                        ++ (selection
+                                |> Set.toList
+                                |> String.join ", "
+                           )
+            ]
+        ]
+
+
+viewListboxConfiguration listboxJumpAtEnds listboxSeparateFocus listboxSelectionFollowsFocus listboxHandleHomeAndEnd listboxTypeAhead =
+    Html.div []
+        [ Html.label
+            [ Attributes.class "label" ]
+            [ Html.text "Configuration" ]
+        , viewCheckbox ListboxJumpAtEndsChecked
+            listboxJumpAtEnds
+            "Jump at ends"
+        , viewCheckbox ListboxSeparateFocusChecked
+            listboxSeparateFocus
+            "Separate focus for mouse and keyboard"
+        , viewCheckbox ListboxSelectionFollowsFocusChecked
+            listboxSelectionFollowsFocus
+            "Selection follows focus"
+        , viewCheckbox ListboxHandleHomeAndEndChecked
+            listboxHandleHomeAndEnd
+            "Handle Home and End keys"
+        , viewCheckbox ListboxTypeAheadChecked
+            listboxTypeAhead
+            "Type ahead"
+        ]
+
+
+viewMuppetsListbox listbox selection =
+    Html.div
+        [ Attributes.class "field" ]
+        [ Html.label
+            [ Attributes.id "muppets-label" ]
+            [ Html.text "Muppets" ]
+        , Html.div
+            [ Attributes.class "control" ]
+            [ selection
+                |> Set.toList
+                |> Listbox.viewLazy
+                    (\_ -> 42)
+                    (\_ -> 42)
+                    listboxViewConfig
+                    { id = "muppets"
+                    , labelledBy = "muppets-label"
+                    }
+                    listbox
+                    muppets
+                |> Html.map MuppetsListboxMsg
+            ]
+        , Html.p
+            [ Attributes.class "help" ]
+            [ Html.text <|
+                if Set.isEmpty selection then
+                    "nothing selected"
+                else
+                    "currently selected: "
+                        ++ (selection
+                                |> Set.toList
+                                |> String.join ", "
+                           )
+            ]
+        ]
+
+
+viewDropdown dropdown selection =
+    Html.div
+        [ Attributes.class "field" ]
+        [ Html.label
+            [ Attributes.id "locales-dropdown-label" ]
+            [ Html.text "Locale" ]
+        , Html.div
+            [ Attributes.class "control" ]
+            [ selection
+                |> Dropdown.view dropdownViewConfig
+                    { id = "locales-dropdown"
+                    , labelledBy = "locales-dropdown-label"
+                    }
+                    dropdown
+                    locales
+                |> Html.map DropdownMsg
+            ]
+        , Html.p
+            [ Attributes.class "help" ]
+            [ Html.text <|
+                case selection of
+                    Nothing ->
+                        "nothing selected"
+
+                    Just selectedLocale ->
+                        "currently selected: " ++ selectedLocale
+            ]
+        ]
+
+
+viewDropdownConfiguration dropdownJumpAtEnds dropdownCloseAfterMouseSelection dropdownSeparateFocus dropdownSelectionFollowsFocus dropdownHandleHomeAndEnd dropdownTypeAhead =
+    Html.div []
+        [ Html.label
+            [ Attributes.class "label" ]
+            [ Html.text "Configuration" ]
+        , viewCheckbox DropdownJumpAtEndsChecked
+            dropdownJumpAtEnds
+            "Jump at ends"
+        , viewCheckbox DropdownCloseAfterMouseSelectionChecked
+            dropdownCloseAfterMouseSelection
+            "Close after mouse selection"
+        , viewCheckbox DropdownSeparateFocusChecked
+            dropdownSeparateFocus
+            "Separate focus for mouse and keyboard"
+        , viewCheckbox DropdownSelectionFollowsFocusChecked
+            dropdownSelectionFollowsFocus
+            "Selection follows focus"
+        , viewCheckbox DropdownHandleHomeAndEndChecked
+            dropdownHandleHomeAndEnd
+            "Handle Home and End keys"
+        , viewCheckbox DropdownTypeAheadChecked
+            dropdownTypeAhead
+            "Type ahead"
+        ]
+
+
+viewComboBox comboBox selection =
+    Html.div
+        [ Attributes.class "field" ]
+        [ Html.label
+            [ Attributes.id "locales-combo-box-label" ]
+            [ Html.text "Locale" ]
+        , Html.div
+            [ Attributes.class "control" ]
+            [ selection
+                |> ComboBox.view comboBoxViewConfig
+                    { id = "locales-combo-box"
+                    , labelledBy = "locales-combo-box-label"
+                    }
+                    comboBox
+                    locales
+                |> Html.map ComboBoxMsg
+            ]
+        , Html.p
+            [ Attributes.class "help" ]
+            [ Html.text <|
+                case selection of
+                    Nothing ->
+                        "nothing selected"
+
+                    Just actualSelection ->
+                        "currently selected: " ++ actualSelection
+            ]
+        ]
+
+
+viewComboBoxConfiguration comboBoxJumpAtEnds comboBoxCloseAfterMouseSelection comboBoxSeparateFocus comboBoxSelectionFollowsFocus comboBoxHandleHomeAndEnd comboBoxDisplayCondition =
+    Html.div []
+        [ Html.label
+            [ Attributes.class "label" ]
+            [ Html.text "Configuration" ]
+        , viewCheckbox ComboBoxJumpAtEndsChecked
+            comboBoxJumpAtEnds
+            "Jump at ends"
+        , viewCheckbox ComboBoxCloseAfterMouseSelectionChecked
+            comboBoxCloseAfterMouseSelection
+            "Close after mouse selection"
+        , viewCheckbox ComboBoxSeparateFocusChecked
+            comboBoxSeparateFocus
+            "Separate focus for mouse and keyboard"
+        , viewCheckbox ComboBoxSelectionFollowsFocusChecked
+            comboBoxSelectionFollowsFocus
+            "Selection follows focus"
+        , viewCheckbox ComboBoxHandleHomeAndEndChecked
+            comboBoxHandleHomeAndEnd
+            "Handle Home and End keys"
+        , Html.div
+            [ Attributes.class "field" ]
+            [ Html.div
+                [ Attributes.class "control" ]
+                [ Html.label
+                    [ Attributes.class "radio" ]
+                    [ Html.input
+                        [ Attributes.type_ "radio"
+                        , Attributes.name "displayCondition"
+                        , Attributes.checked <|
+                            case comboBoxDisplayCondition of
+                                MatchingQuery _ ->
+                                    True
+
+                                _ ->
+                                    False
+                        , case comboBoxDisplayCondition of
+                            MatchingQuery count ->
+                                Events.onClick
+                                    (ComboBoxDisplayConditionSelected (MatchingQuery count))
+
+                            _ ->
+                                Events.onClick
+                                    (ComboBoxDisplayConditionSelected (MatchingQuery 3))
+                        ]
+                        []
+                    , Html.text " Matching query"
+                    ]
+                , Html.label
+                    [ Attributes.class "radio" ]
+                    [ Html.input
+                        [ Attributes.type_ "radio"
+                        , Attributes.name "displayCondition"
+                        , Attributes.checked
+                            (comboBoxDisplayCondition == OnFocus)
+                        , Events.onClick
+                            (ComboBoxDisplayConditionSelected OnFocus)
+                        ]
+                        []
+                    , Html.text " On focus"
+                    ]
+                , Html.label
+                    [ Attributes.class "radio" ]
+                    [ Html.input
+                        [ Attributes.type_ "radio"
+                        , Attributes.name "displayCondition"
+                        , Attributes.checked
+                            (comboBoxDisplayCondition == OnDemand)
+                        , Events.onClick
+                            (ComboBoxDisplayConditionSelected OnDemand)
+                        ]
+                        []
+                    , Html.text " On demand"
+                    ]
+                ]
+            ]
+        , case comboBoxDisplayCondition of
+            MatchingQuery count ->
+                Html.div
+                    [ Attributes.class "field" ]
+                    [ Html.div
+                        [ Attributes.class "control" ]
+                        [ Html.input
+                            [ Attributes.class "input"
+                            , Attributes.type_ "number"
+                            , Attributes.min "0"
+                            , Attributes.step "1"
+                            , Attributes.value
+                                (String.fromInt count)
+                            , Events.onInput
+                                ComboBoxMatchingQueryCountChanged
+                            ]
+                            []
+                        ]
+                    ]
+
+            _ ->
+                Html.text ""
         ]
 
 
