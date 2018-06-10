@@ -1,6 +1,7 @@
 module Widget.Listbox
     exposing
         ( Behaviour
+        , Entry
         , Event
         , Ids
         , Listbox
@@ -12,6 +13,8 @@ module Widget.Listbox
         , Views
         , arrowDownDecoder
         , arrowUpDecoder
+        , divider
+        , entry
         , focus
         , focusNextOrFirstEntry
         , focusPreviousOrFirstEntry
@@ -42,6 +45,8 @@ module Widget.Listbox
 {-|
 
 @docs Listbox, unfocused, view, Ids
+
+@docs Entry, entry, divider
 
 @docs update, Msg, subscriptions
 
@@ -110,17 +115,18 @@ import Browser
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
-import Internal.Entries
+import Internal.Entries as Internal
     exposing
-        ( Next(..)
+        ( Entry(..)
+        , Next(..)
         , Previous(..)
         , find
         , findNext
         , findPrevious
         , findWith
-        , indexOf
         , range
         )
+import Interval
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline as Decode
 import Set
@@ -191,6 +197,26 @@ focused (UpdateConfig uniqueId _) id a =
     )
 
 
+{-| TODO
+-}
+type alias Entry a divider =
+    Internal.Entry a divider
+
+
+{-| TODO
+-}
+entry : a -> Entry a divider
+entry =
+    Internal.Entry
+
+
+{-| TODO
+-}
+divider : divider -> Entry a divider
+divider =
+    Internal.Divider
+
+
 
 ---- EXTERNAL STATE MANIPULATION
 
@@ -204,7 +230,7 @@ focus id =
 
 {-| TODO
 -}
-focusedEntry : UpdateConfig a -> Listbox -> List a -> Maybe a
+focusedEntry : UpdateConfig a -> Listbox -> List (Entry a divider) -> Maybe a
 focusedEntry (UpdateConfig uniqueId _) (Listbox { maybeKeyboardFocus }) allEntries =
     maybeKeyboardFocus
         |> Maybe.andThen (find uniqueId allEntries)
@@ -220,12 +246,16 @@ scrollToFocus id (Listbox data) maybeScrollData =
             Cmd.none
 
         Just keyboardFocus ->
-            adjustScrollTop id keyboardFocus maybeScrollData
+            adjustScrollTopNew id keyboardFocus maybeScrollData
 
 
 {-| TODO
 -}
-focusNextOrFirstEntry : UpdateConfig a -> List a -> Listbox -> ( Listbox, Maybe outMsg )
+focusNextOrFirstEntry :
+    UpdateConfig a
+    -> List (Entry a divider)
+    -> Listbox
+    -> ( Listbox, Maybe outMsg )
 focusNextOrFirstEntry config allEntries listbox =
     let
         (UpdateConfig uniqueId behaviour) =
@@ -243,7 +273,7 @@ focusNextOrFirstEntry config allEntries listbox =
                 { data
                     | maybeKeyboardFocus =
                         allEntries
-                            |> List.head
+                            |> Internal.firstEntry
                             |> Maybe.map uniqueId
                 }
             , Nothing
@@ -258,7 +288,7 @@ focusNextOrFirstEntry config allEntries listbox =
                     else
                         ( listbox, Nothing )
 
-                Just (Next newIndex newEntry) ->
+                Just (Next newEntry) ->
                     data
                         |> updateFocus behaviour uniqueId [] [] False newEntry
 
@@ -268,7 +298,11 @@ focusNextOrFirstEntry config allEntries listbox =
 
 {-| TODO
 -}
-focusPreviousOrFirstEntry : UpdateConfig a -> List a -> Listbox -> ( Listbox, Maybe outMsg )
+focusPreviousOrFirstEntry :
+    UpdateConfig a
+    -> List (Entry a divider)
+    -> Listbox
+    -> ( Listbox, Maybe outMsg )
 focusPreviousOrFirstEntry config allEntries listbox =
     let
         (UpdateConfig uniqueId behaviour) =
@@ -276,6 +310,17 @@ focusPreviousOrFirstEntry config allEntries listbox =
 
         (Listbox data) =
             listbox
+
+        firstEntry entries =
+            case entries of
+                [] ->
+                    Nothing
+
+                (Internal.Divider _) :: rest ->
+                    firstEntry rest
+
+                (Internal.Entry a) :: _ ->
+                    Just a
     in
     case
         data.maybeKeyboardFocus
@@ -286,7 +331,7 @@ focusPreviousOrFirstEntry config allEntries listbox =
                 { data
                     | maybeKeyboardFocus =
                         allEntries
-                            |> List.head
+                            |> firstEntry
                             |> Maybe.map uniqueId
                 }
             , Nothing
@@ -301,7 +346,7 @@ focusPreviousOrFirstEntry config allEntries listbox =
                     else
                         ( listbox, Nothing )
 
-                Just (Previous newIndex newEntry) ->
+                Just (Previous newEntry) ->
                     data
                         |> updateFocus behaviour uniqueId [] [] False newEntry
 
@@ -315,20 +360,20 @@ focusPreviousOrFirstEntry config allEntries listbox =
 
 {-| TODO
 -}
-type ViewConfig a
-    = ViewConfig (a -> String) (Views a)
+type ViewConfig a divider
+    = ViewConfig (a -> String) (Views a divider)
 
 
 {-| TODO
 -}
-viewConfig : (a -> String) -> Views a -> ViewConfig a
+viewConfig : (a -> String) -> Views a divider -> ViewConfig a divider
 viewConfig =
     ViewConfig
 
 
 {-| TODO
 -}
-type alias Views a =
+type alias Views a divider =
     { ul : HtmlAttributes
     , li :
         { selected : Bool
@@ -338,6 +383,7 @@ type alias Views a =
         }
         -> a
         -> HtmlDetails
+    , liDivider : divider -> HtmlDetails
     , empty : Html Never
     , focusable : Bool
     }
@@ -390,8 +436,8 @@ noTypeAhead =
 simpleTypeAhead : Int -> (a -> String) -> TypeAhead a
 simpleTypeAhead timeout entryToString =
     TypeAhead timeout <|
-        \query entry ->
-            String.toLower (entryToString entry)
+        \query a ->
+            String.toLower (entryToString a)
                 |> String.startsWith (String.toLower query)
 
 
@@ -416,7 +462,13 @@ type alias Ids =
 
 {-| TODO
 -}
-view : ViewConfig a -> Ids -> Listbox -> List a -> List a -> Html (Msg a)
+view :
+    ViewConfig a divider
+    -> Ids
+    -> Listbox
+    -> List (Entry a divider)
+    -> List a
+    -> Html (Msg a)
 view (ViewConfig uniqueId views) ids listbox allEntries selection =
     let
         renderedEntries =
@@ -438,12 +490,21 @@ view (ViewConfig uniqueId views) ids listbox allEntries selection =
 
 {-| TODO
 -}
-viewLazy : (a -> Float) -> ViewConfig a -> Ids -> Listbox -> List a -> List a -> Html (Msg a)
-viewLazy entryHeight (ViewConfig uniqueId views) ids ((Listbox data) as listbox) allEntries selection =
+viewLazy :
+    (a -> Float)
+    -> (divider -> Float)
+    -> ViewConfig a divider
+    -> Ids
+    -> Listbox
+    -> List (Entry a divider)
+    -> List a
+    -> Html (Msg a)
+viewLazy entryHeight dividerHeight (ViewConfig uniqueId views) ids ((Listbox data) as listbox) allEntries selection =
     let
         renderedEntries =
             computeRenderedEntries
                 entryHeight
+                dividerHeight
                 data.ulScrollTop
                 data.ulClientHeight
                 maybeFocusIndex
@@ -458,12 +519,12 @@ viewLazy entryHeight (ViewConfig uniqueId views) ids ((Listbox data) as listbox)
 
 
 viewHelp :
-    RenderedEntries a
+    RenderedEntries a divider
     -> (a -> String)
-    -> Views a
+    -> Views a divider
     -> Ids
     -> Listbox
-    -> List a
+    -> List (Entry a divider)
     -> List a
     -> Html (Msg a)
 viewHelp renderedEntries uniqueId views ids (Listbox data) allEntries selection =
@@ -499,17 +560,14 @@ viewHelp renderedEntries uniqueId views ids (Listbox data) allEntries selection 
                 (Decode.at [ "target", "clientHeight" ] Decode.float)
          , Events.on "focus"
             (Decode.oneOf
-                [ case data.maybeKeyboardFocus of
-                    Nothing ->
-                        Decode.succeed Nothing
-
-                    Just keyboardFocus ->
-                        Decode.oneOf
-                            [ renderedEntries.visibleEntries
-                                |> scrollDataDecoder [ "target" ] 0 uniqueId keyboardFocus
-                                |> Decode.map Just
-                            , Decode.succeed Nothing
-                            ]
+                [ data.maybeKeyboardFocus
+                    |> Maybe.map
+                        (currentScrollDataDecoder [ "target" ]
+                            uniqueId
+                            renderedEntries.visibleEntries
+                            >> Decode.map Just
+                        )
+                    |> Maybe.withDefault (Decode.succeed Nothing)
                 , Decode.succeed Nothing
                 ]
                 |> Decode.map (ListFocused ids.id)
@@ -547,39 +605,35 @@ keyInfoDecoder =
         |> Decode.required "ctrlKey" Decode.bool
 
 
-listKeydown : (a -> String) -> String -> Maybe String -> List a -> KeyInfo -> Decoder (Msg a)
+listKeydown :
+    (a -> String)
+    -> String
+    -> Maybe String
+    -> List (Entry a divider)
+    -> KeyInfo
+    -> Decoder (Msg a)
 listKeydown uniqueId id maybeKeyboardFocus visibleEntries { code, shiftDown, controlDown } =
     case code of
         "ArrowUp" ->
             Decode.oneOf
-                [ case maybeKeyboardFocus of
-                    Nothing ->
-                        Decode.succeed Nothing
-
-                    Just keyboardFocus ->
-                        Decode.oneOf
-                            [ visibleEntries
-                                |> scrollDataDecoder [ "target" ] -1 uniqueId keyboardFocus
-                                |> Decode.map Just
-                            , Decode.succeed Nothing
-                            ]
+                [ maybeKeyboardFocus
+                    |> Maybe.map
+                        (previousScrollDataDecoder [ "target" ] uniqueId visibleEntries
+                            >> Decode.map Just
+                        )
+                    |> Maybe.withDefault (Decode.succeed Nothing)
                 , Decode.succeed Nothing
                 ]
                 |> Decode.map (ListArrowUpPressed id shiftDown)
 
         "ArrowDown" ->
             Decode.oneOf
-                [ case maybeKeyboardFocus of
-                    Nothing ->
-                        Decode.succeed Nothing
-
-                    Just keyboardFocus ->
-                        Decode.oneOf
-                            [ visibleEntries
-                                |> scrollDataDecoder [ "target" ] 1 uniqueId keyboardFocus
-                                |> Decode.map Just
-                            , Decode.succeed Nothing
-                            ]
+                [ maybeKeyboardFocus
+                    |> Maybe.map
+                        (nextScrollDataDecoder [ "target" ] uniqueId visibleEntries
+                            >> Decode.map Just
+                        )
+                    |> Maybe.withDefault (Decode.succeed Nothing)
                 , Decode.succeed Nothing
                 ]
                 |> Decode.map (ListArrowDownPressed id shiftDown)
@@ -625,7 +679,12 @@ listKeydown uniqueId id maybeKeyboardFocus visibleEntries { code, shiftDown, con
 
 {-| TODO
 -}
-arrowUpDecoder : ViewConfig a -> List String -> Listbox -> List a -> Decoder (Maybe ScrollData)
+arrowUpDecoder :
+    ViewConfig a divider
+    -> List String
+    -> Listbox
+    -> List (Entry a divider)
+    -> Decoder (Maybe ScrollData)
 arrowUpDecoder (ViewConfig uniqueId _) path (Listbox data) allEntries =
     Decode.oneOf
         [ case data.maybeKeyboardFocus of
@@ -633,7 +692,7 @@ arrowUpDecoder (ViewConfig uniqueId _) path (Listbox data) allEntries =
                 Decode.succeed Nothing
 
             Just keyboardFocus ->
-                scrollDataDecoder path -1 uniqueId keyboardFocus allEntries
+                previousScrollDataDecoder path uniqueId allEntries keyboardFocus
                     |> Decode.map Just
         , Decode.succeed Nothing
         ]
@@ -641,7 +700,12 @@ arrowUpDecoder (ViewConfig uniqueId _) path (Listbox data) allEntries =
 
 {-| TODO
 -}
-arrowDownDecoder : ViewConfig a -> List String -> Listbox -> List a -> Decoder (Maybe ScrollData)
+arrowDownDecoder :
+    ViewConfig a divider
+    -> List String
+    -> Listbox
+    -> List (Entry a divider)
+    -> Decoder (Maybe ScrollData)
 arrowDownDecoder (ViewConfig uniqueId _) path (Listbox data) allEntries =
     Decode.oneOf
         [ case data.maybeKeyboardFocus of
@@ -649,59 +713,265 @@ arrowDownDecoder (ViewConfig uniqueId _) path (Listbox data) allEntries =
                 Decode.succeed Nothing
 
             Just keyboardFocus ->
-                scrollDataDecoder path 1 uniqueId keyboardFocus allEntries
+                nextScrollDataDecoder path uniqueId allEntries keyboardFocus
                     |> Decode.map Just
         , Decode.succeed Nothing
         ]
 
 
-scrollDataDecoder : List String -> Int -> (a -> String) -> String -> List a -> Decoder ScrollData
-scrollDataDecoder path offset uniqueId keyboardFocus visibleEntries =
-    case indexOf uniqueId keyboardFocus visibleEntries of
+
+---- SCROLL DATA
+
+
+{-| TODO
+-}
+type alias CurrentScrollData =
+    { ulScrollTop : Float
+    , ulClientHeight : Float
+    , liOffsetTop : Float
+    , liOffsetHeight : Float
+    }
+
+
+currentScrollDataDecoder :
+    List String
+    -> (a -> String)
+    -> List (Entry a divider)
+    -> String
+    -> Decoder CurrentScrollData
+currentScrollDataDecoder path uniqueId visibleEntries currentFocus =
+    case indexOfCurrentEntry 0 uniqueId visibleEntries currentFocus of
         Nothing ->
             Decode.fail "no scroll data available"
 
         Just index ->
+            let
+                requiredAt subPath =
+                    Decode.requiredAt (path ++ subPath) Decode.float
+            in
+            Decode.succeed CurrentScrollData
+                |> requiredAt [ "scrollTop" ]
+                |> requiredAt [ "clientHeight" ]
+                |> requiredAt [ "childNodes", String.fromInt (index + 2), "offsetTop" ]
+                |> requiredAt [ "childNodes", String.fromInt (index + 2), "offsetHeight" ]
+
+
+indexOfCurrentEntry : Int -> (a -> String) -> List (Entry a divider) -> String -> Maybe Int
+indexOfCurrentEntry currentIndex uniqueId entries id =
+    case entries of
+        [] ->
+            Nothing
+
+        (Divider _) :: rest ->
+            indexOfCurrentEntry (currentIndex + 1) uniqueId rest id
+
+        (Entry a) :: rest ->
+            if uniqueId a == id then
+                Just currentIndex
+            else
+                indexOfCurrentEntry (currentIndex + 1) uniqueId rest id
+
+
+{-| TODO
+-}
+type alias ScrollData =
+    { ulScrollTop : Float
+    , ulClientHeight : Float
+    , liCurrentOffsetTop : Float
+    , liCurrentOffsetHeight : Float
+    , liNewOffsetTop : Float
+    , liNewOffsetHeight : Float
+    }
+
+
+previousScrollDataDecoder :
+    List String
+    -> (a -> String)
+    -> List (Entry a divider)
+    -> String
+    -> Decoder ScrollData
+previousScrollDataDecoder path uniqueId entries currentFocus =
+    case indexOfCurrentAndPreviousEntry 0 uniqueId entries currentFocus of
+        Nothing ->
+            Decode.fail "cannot find currentFocus"
+
+        Just { currentIndex, previousIndex } ->
+            let
+                requiredAt subPath =
+                    Decode.requiredAt (path ++ subPath) Decode.float
+            in
             Decode.succeed ScrollData
-                |> Decode.requiredAt
-                    (path ++ [ "scrollTop" ])
-                    Decode.float
-                |> Decode.requiredAt
-                    (path ++ [ "clientHeight" ])
-                    Decode.float
-                |> Decode.requiredAt
-                    (path ++ [ "childNodes", String.fromInt (index + 2 + offset), "offsetTop" ])
-                    Decode.float
-                |> Decode.requiredAt
-                    (path ++ [ "childNodes", String.fromInt (index + 2 + offset), "offsetHeight" ])
-                    Decode.float
+                |> requiredAt [ "scrollTop" ]
+                |> requiredAt [ "clientHeight" ]
+                |> requiredAt [ "childNodes", String.fromInt (currentIndex + 2), "offsetTop" ]
+                |> requiredAt [ "childNodes", String.fromInt (currentIndex + 2), "offsetHeight" ]
+                |> requiredAt [ "childNodes", String.fromInt (previousIndex + 2), "offsetTop" ]
+                |> requiredAt [ "childNodes", String.fromInt (previousIndex + 2), "offsetHeight" ]
+
+
+indexOfCurrentAndPreviousEntry :
+    Int
+    -> (a -> String)
+    -> List (Entry a divider)
+    -> String
+    -> Maybe { currentIndex : Int, previousIndex : Int }
+indexOfCurrentAndPreviousEntry currentIndex uniqueId entries id =
+    case entries of
+        [] ->
+            Nothing
+
+        (Divider _) :: rest ->
+            indexOfCurrentAndPreviousEntry (currentIndex + 1) uniqueId rest id
+
+        (Entry first) :: rest ->
+            indexOfCurrentAndPreviousEntryHelp currentIndex (currentIndex + 1) uniqueId rest id
+
+
+indexOfCurrentAndPreviousEntryHelp :
+    Int
+    -> Int
+    -> (a -> String)
+    -> List (Entry a divider)
+    -> String
+    -> Maybe { currentIndex : Int, previousIndex : Int }
+indexOfCurrentAndPreviousEntryHelp previousIndex currentIndex uniqueId entries id =
+    case entries of
+        [] ->
+            Nothing
+
+        (Divider _) :: rest ->
+            indexOfCurrentAndPreviousEntryHelp previousIndex (currentIndex + 1) uniqueId rest id
+
+        (Entry next) :: rest ->
+            if uniqueId next == id then
+                Just
+                    { currentIndex = currentIndex
+                    , previousIndex = previousIndex
+                    }
+            else
+                indexOfCurrentAndPreviousEntryHelp currentIndex (currentIndex + 1) uniqueId rest id
+
+
+nextScrollDataDecoder :
+    List String
+    -> (a -> String)
+    -> List (Entry a divider)
+    -> String
+    -> Decoder ScrollData
+nextScrollDataDecoder path uniqueId entries currentFocus =
+    case indexOfCurrentAndNextEntry 0 uniqueId entries currentFocus of
+        Nothing ->
+            Decode.fail "cannot find currentFocus"
+
+        Just { currentIndex, nextIndex } ->
+            let
+                requiredAt subPath =
+                    Decode.requiredAt (path ++ subPath) Decode.float
+            in
+            Decode.succeed ScrollData
+                |> requiredAt [ "scrollTop" ]
+                |> requiredAt [ "clientHeight" ]
+                |> requiredAt [ "childNodes", String.fromInt (currentIndex + 2), "offsetTop" ]
+                |> requiredAt [ "childNodes", String.fromInt (currentIndex + 2), "offsetHeight" ]
+                |> requiredAt [ "childNodes", String.fromInt (nextIndex + 2), "offsetTop" ]
+                |> requiredAt [ "childNodes", String.fromInt (nextIndex + 2), "offsetHeight" ]
+
+
+indexOfCurrentAndNextEntry :
+    Int
+    -> (a -> String)
+    -> List (Entry a divider)
+    -> String
+    -> Maybe { currentIndex : Int, nextIndex : Int }
+indexOfCurrentAndNextEntry currentIndex uniqueId entries id =
+    let
+        indices nextIndex =
+            { currentIndex = currentIndex
+            , nextIndex = nextIndex
+            }
+    in
+    case entries of
+        [] ->
+            Nothing
+
+        (Divider _) :: rest ->
+            indexOfCurrentAndNextEntry (currentIndex + 1) uniqueId rest id
+
+        (Entry first) :: rest ->
+            if uniqueId first == id then
+                indexOfNextEntry (currentIndex + 1) rest
+                    |> Maybe.map indices
+            else
+                indexOfCurrentAndNextEntry (currentIndex + 1) uniqueId rest id
+
+
+indexOfNextEntry : Int -> List (Entry a divider) -> Maybe Int
+indexOfNextEntry currentIndex entries =
+    case entries of
+        [] ->
+            Nothing
+
+        (Divider _) :: rest ->
+            indexOfNextEntry (currentIndex + 1) rest
+
+        (Entry _) :: _ ->
+            Just currentIndex
+
+
+
+----
 
 
 viewEntries :
     (a -> String)
-    -> Views a
+    -> Views a divider
     -> Ids
     -> Maybe String
     -> Maybe String
     -> List a
     -> Maybe String
-    -> RenderedEntries a
+    -> RenderedEntries a divider
     -> List (Html (Msg a))
 viewEntries uniqueId views ids maybeKeyboardFocus maybeMouseFocus selection maybeQuery renderedEntries =
     let
         entryConfig =
             { id = ids.id
             , li = views.li
+            , liDivider = views.liDivider
             , uniqueId = uniqueId
             }
 
-        viewEntryWrapper a =
+        maybeUniqueId e =
+            case e of
+                Internal.Divider _ ->
+                    Nothing
+
+                Internal.Entry a ->
+                    Just (uniqueId a)
+
+        selected e s =
+            case s of
+                [] ->
+                    False
+
+                first :: rest ->
+                    case e of
+                        Internal.Divider _ ->
+                            selected e rest
+
+                        Internal.Entry a ->
+                            if first == a then
+                                True
+                            else
+                                selected e rest
+
+        viewEntryWrapper e =
             viewEntry entryConfig
                 maybeQuery
-                (List.member a selection)
-                (maybeKeyboardFocus == Just (uniqueId a))
-                (maybeMouseFocus == Just (uniqueId a))
-                a
+                (selected e selection)
+                (maybeKeyboardFocus == maybeUniqueId e)
+                (maybeMouseFocus == maybeUniqueId e)
+                e
     in
     List.concat
         [ spacer renderedEntries.spaceAboveFirst
@@ -727,37 +997,51 @@ viewEntry :
         }
         -> a
         -> HtmlDetails
+    , liDivider : divider -> HtmlDetails
     , uniqueId : a -> String
     }
     -> Maybe String
     -> Bool
     -> Bool
     -> Bool
-    -> a
+    -> Entry a divider
     -> Html (Msg a)
-viewEntry config maybeQuery selected keyboardFocused mouseFocused a =
-    let
-        { attributes, children } =
-            config.li
-                { selected = selected
-                , keyboardFocused = keyboardFocused
-                , mouseFocused = mouseFocused
-                , maybeQuery = maybeQuery
-                }
-                a
-    in
-    Html.li
-        ([ Events.onMouseEnter (EntryMouseEntered (config.uniqueId a))
-         , Events.onMouseLeave EntryMouseLeft
-         , Events.onClick (EntryClicked a)
-         , Attributes.id (printEntryId config.id (config.uniqueId a))
-         , Attributes.attribute "role" "option"
-         ]
-            |> appendAttributes attributes
-        )
-        (children
-            |> List.map (Html.map (\_ -> NoOp))
-        )
+viewEntry config maybeQuery selected keyboardFocused mouseFocused e =
+    case e of
+        Internal.Entry a ->
+            let
+                { attributes, children } =
+                    config.li
+                        { selected = selected
+                        , keyboardFocused = keyboardFocused
+                        , mouseFocused = mouseFocused
+                        , maybeQuery = maybeQuery
+                        }
+                        a
+            in
+            Html.li
+                ([ Events.onMouseEnter (EntryMouseEntered (config.uniqueId a))
+                 , Events.onMouseLeave EntryMouseLeft
+                 , Events.onClick (EntryClicked a)
+                 , Attributes.id (printEntryId config.id (config.uniqueId a))
+                 , Attributes.attribute "role" "option"
+                 ]
+                    |> appendAttributes attributes
+                )
+                (children
+                    |> List.map (Html.map (\_ -> NoOp))
+                )
+
+        Internal.Divider d ->
+            let
+                { attributes, children } =
+                    config.liDivider d
+            in
+            Html.li
+                (appendAttributes attributes [])
+                (children
+                    |> List.map (Html.map (\_ -> NoOp))
+                )
 
 
 spacer : Float -> List (Html msg)
@@ -780,7 +1064,7 @@ setAriaActivedescendant :
     String
     -> (a -> String)
     -> Maybe String
-    -> List a
+    -> List (Entry a divider)
     -> List (Html.Attribute msg)
     -> List (Html.Attribute msg)
 setAriaActivedescendant id uniqueId maybeKeyboardFocus entries attrs =
@@ -814,7 +1098,7 @@ type Msg a
       -- LIST
     | ListMouseDown
     | ListMouseUp
-    | ListFocused String (Maybe ScrollData)
+    | ListFocused String (Maybe CurrentScrollData)
     | ListBlured
     | ListScrolled Float Float
     | ListArrowUpPressed String Bool (Maybe ScrollData)
@@ -836,16 +1120,6 @@ type Msg a
     | EntryMouseEntered String
     | EntryMouseLeft
     | EntryClicked a
-
-
-{-| TODO
--}
-type alias ScrollData =
-    { ulScrollTop : Float
-    , ulClientHeight : Float
-    , liOffsetTop : Float
-    , liOffsetHeight : Float
-    }
 
 
 {-| TODO
@@ -1048,7 +1322,7 @@ update :
     UpdateConfig a
     -> List (Event a outMsg)
     -> Listbox
-    -> List a
+    -> List (Entry a divider)
     -> List a
     -> Msg a
     -> ( Listbox, Cmd (Msg a), Maybe outMsg )
@@ -1078,7 +1352,7 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                     let
                         maybeNewEntry =
                             List.head selection
-                                |> or (List.head allEntries)
+                                |> or (Internal.firstEntry allEntries)
                     in
                     case maybeNewEntry of
                         Nothing ->
@@ -1143,10 +1417,10 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                         , Nothing
                         )
 
-                Just (Previous newIndex newEntry) ->
+                Just (Previous newEntry) ->
                     data
                         |> updateFocus behaviour uniqueId events selection shiftDown newEntry
-                        |> andDo (adjustScrollTop id (uniqueId newEntry) maybeScrollData)
+                        |> andDo (adjustScrollTopNew id (uniqueId newEntry) maybeScrollData)
 
                 Nothing ->
                     ( listbox, Cmd.none, Nothing )
@@ -1167,10 +1441,10 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                         , Nothing
                         )
 
-                Just (Next newIndex newEntry) ->
+                Just (Next newEntry) ->
                     data
                         |> updateFocus behaviour uniqueId events selection shiftDown newEntry
-                        |> andDo (adjustScrollTop id (uniqueId newEntry) maybeScrollData)
+                        |> andDo (adjustScrollTopNew id (uniqueId newEntry) maybeScrollData)
 
                 Nothing ->
                     ( listbox
@@ -1237,7 +1511,7 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                     ( listbox, Cmd.none, Nothing )
 
         ListHomePressed id ->
-            case List.head allEntries of
+            case Internal.firstEntry allEntries of
                 Nothing ->
                     ( listbox, Cmd.none, Nothing )
 
@@ -1247,7 +1521,7 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                         |> andDo (scrollListToTop id)
 
         ListControlShiftHomePressed id ->
-            case List.head allEntries of
+            case Internal.firstEntry allEntries of
                 Nothing ->
                     ( listbox, Cmd.none, Nothing )
 
@@ -1281,7 +1555,7 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                                     )
 
         ListEndPressed id ->
-            case List.head (List.reverse allEntries) of
+            case Internal.lastEntry allEntries of
                 Nothing ->
                     ( listbox, Cmd.none, Nothing )
 
@@ -1291,7 +1565,7 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                         |> andDo (scrollListToBottom id)
 
         ListControlShiftEndPressed id ->
-            case List.head (List.reverse allEntries) of
+            case Internal.lastEntry allEntries of
                 Nothing ->
                     ( listbox, Cmd.none, Nothing )
 
@@ -1328,7 +1602,15 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
             let
                 allEntriesSet =
                     allEntries
-                        |> List.map uniqueId
+                        |> List.filterMap
+                            (\e ->
+                                case e of
+                                    Divider _ ->
+                                        Nothing
+
+                                    Entry a ->
+                                        Just (uniqueId a)
+                            )
                         |> Set.fromList
 
                 selectionSet =
@@ -1597,7 +1879,7 @@ scrollListToBottom id =
         |> Task.attempt (\_ -> NoOp)
 
 
-adjustScrollTop : String -> String -> Maybe ScrollData -> Cmd (Msg a)
+adjustScrollTop : String -> String -> Maybe CurrentScrollData -> Cmd (Msg a)
 adjustScrollTop id entryId maybeScrollData =
     case maybeScrollData of
         Nothing ->
@@ -1622,7 +1904,44 @@ adjustScrollTop id entryId maybeScrollData =
                 Cmd.none
 
 
-centerScrollTop : String -> ScrollData -> Cmd (Msg a)
+adjustScrollTopNew : String -> String -> Maybe ScrollData -> Cmd (Msg a)
+adjustScrollTopNew id entryId maybeScrollData =
+    case maybeScrollData of
+        Nothing ->
+            Browser.scrollIntoView (printEntryId id entryId)
+                |> Task.attempt (\_ -> NoOp)
+
+        Just { ulScrollTop, ulClientHeight, liCurrentOffsetTop, liCurrentOffsetHeight, liNewOffsetTop, liNewOffsetHeight } ->
+            case
+                Interval.intersection
+                    (Interval.from liCurrentOffsetTop (liCurrentOffsetTop + ulScrollTop))
+                    (Interval.from ulScrollTop (ulScrollTop + ulClientHeight))
+            of
+                Nothing ->
+                    -- current entry is not visible
+                    centerScrollTop id
+                        { ulScrollTop = ulScrollTop
+                        , ulClientHeight = ulClientHeight
+                        , liOffsetTop = liNewOffsetTop
+                        , liOffsetHeight = liNewOffsetHeight
+                        }
+
+                Just _ ->
+                    -- current entry is visible
+                    if (liNewOffsetTop + liNewOffsetHeight) > (ulScrollTop + ulClientHeight) then
+                        -- lower parts of new entry are hidden
+                        Browser.setScrollTop (printListId id)
+                            (liNewOffsetTop + liNewOffsetHeight - ulClientHeight)
+                            |> Task.attempt (\_ -> NoOp)
+                    else if liNewOffsetTop < ulScrollTop then
+                        -- upper parts of new entry are hidden
+                        Browser.setScrollTop (printListId id) liNewOffsetTop
+                            |> Task.attempt (\_ -> NoOp)
+                    else
+                        Cmd.none
+
+
+centerScrollTop : String -> CurrentScrollData -> Cmd (Msg a)
 centerScrollTop id { ulClientHeight, liOffsetTop, liOffsetHeight } =
     Browser.setScrollTop (printListId id)
         (liOffsetTop + liOffsetHeight / 2 - ulClientHeight / 2)
@@ -1673,7 +1992,7 @@ allowDefault decoder =
 ---- COMPUTE RENDERED ENTRIES
 
 
-type alias RenderedEntries a =
+type alias RenderedEntries a divider =
     { spaceAboveFirst : Float
     , droppedAboveFirst : Int
     , spaceAboveSecond : Float
@@ -1682,121 +2001,136 @@ type alias RenderedEntries a =
     , droppedBelowFirst : Int
     , spaceBelowSecond : Float
     , droppedBelowSecond : Int
-    , entriesAbove : List a
-    , visibleEntries : List a
-    , entriesBelow : List a
+    , entriesAbove : List (Entry a divider)
+    , visibleEntries : List (Entry a divider)
+    , entriesBelow : List (Entry a divider)
     }
 
 
-computeRenderedEntries : (a -> Float) -> Float -> Float -> Maybe Int -> List a -> RenderedEntries a
-computeRenderedEntries entryHeight ulScrollTop ulClientHeight maybeFocusIndex entries =
-    let
-        initialRenderedEntries =
-            { spaceAboveFirst = 0
-            , droppedAboveFirst = 0
-            , spaceAboveSecond = 0
-            , droppedAboveSecond = 0
-            , spaceBelowFirst = 0
-            , droppedBelowFirst = 0
-            , spaceBelowSecond = 0
-            , droppedBelowSecond = 0
-            , entriesAbove = []
-            , visibleEntries = []
-            , entriesBelow = []
-            }
-
-        withoutIndex entry currentHeight data =
-            let
-                height =
-                    entryHeight entry
-            in
-            if currentHeight < ulScrollTop - 200 then
-                -- entry is above the rendered range
-                { data
-                    | spaceAboveFirst = data.spaceAboveFirst + height
-                    , droppedAboveFirst = data.droppedAboveFirst + 1
-                }
-            else if currentHeight >= (ulScrollTop + ulClientHeight + 200) then
-                { data
-                    | spaceBelowFirst = data.spaceBelowFirst + height
-                    , droppedBelowFirst = data.droppedBelowFirst + 1
-                }
-            else
-                -- entry is within the rendered range
-                { data | visibleEntries = entry :: data.visibleEntries }
-
-        withIndex index currentIndex entry currentHeight data =
-            let
-                height =
-                    entryHeight entry
-            in
-            if currentHeight < ulScrollTop - 200 then
-                -- entry is above the rendered range
-                if currentIndex < index - 1 then
-                    -- entry is before focused entry
-                    { data
-                        | spaceAboveFirst = data.spaceAboveFirst + height
-                        , droppedAboveFirst = data.droppedAboveFirst + 1
-                    }
-                else if currentIndex > index + 1 then
-                    -- entry is after focused entry
-                    { data
-                        | spaceAboveSecond = data.spaceAboveSecond + height
-                        , droppedAboveSecond = data.droppedAboveSecond + 1
-                    }
-                else
-                    -- entry is focused or next to focused entry
-                    { data | entriesAbove = entry :: data.entriesAbove }
-            else if currentHeight > (ulScrollTop + ulClientHeight + 200) then
-                -- entry is below the rendered range
-                if currentIndex < index - 1 then
-                    -- entry is before focused entry
-                    { data
-                        | spaceBelowFirst = data.spaceBelowFirst + height
-                        , droppedBelowFirst = data.droppedBelowFirst + 1
-                    }
-                else if currentIndex > index + 1 then
-                    -- entry is after focused entry
-                    { data
-                        | spaceBelowSecond = data.spaceBelowSecond + height
-                        , droppedBelowSecond = data.droppedBelowSecond + 1
-                    }
-                else
-                    -- entry is focused or next to focused entry
-                    { data | entriesBelow = entry :: data.entriesBelow }
-            else
-                -- entry is within the rendered range
-                { data | visibleEntries = entry :: data.visibleEntries }
-
-        reverseLists renderedEntries =
-            { renderedEntries
-                | entriesAbove = List.reverse renderedEntries.entriesAbove
-                , visibleEntries = List.reverse renderedEntries.visibleEntries
-                , entriesBelow = List.reverse renderedEntries.entriesBelow
-            }
-    in
-    reverseLists <|
-        case maybeFocusIndex of
-            Nothing ->
-                entries
-                    |> List.foldl
-                        (\entry ( currentHeight, data ) ->
-                            ( currentHeight + entryHeight entry
-                            , withoutIndex entry currentHeight data
-                            )
-                        )
-                        ( 0, initialRenderedEntries )
-                    |> Tuple.second
-
-            Just index ->
-                entries
-                    |> List.foldl
-                        (\entry ( ( currentIndex, currentHeight ), data ) ->
-                            ( ( currentIndex + 1
-                              , currentHeight + entryHeight entry
-                              )
-                            , withIndex index currentIndex entry currentHeight data
-                            )
-                        )
-                        ( ( 0, 0 ), initialRenderedEntries )
-                    |> Tuple.second
+computeRenderedEntries :
+    (a -> Float)
+    -> (divider -> Float)
+    -> Float
+    -> Float
+    -> Maybe Int
+    -> List (Entry a divider)
+    -> RenderedEntries a divider
+computeRenderedEntries entryHeight dividerHeight ulScrollTop ulClientHeight maybeFocusIndex entries =
+    --let
+    --    initialRenderedEntries =
+    --        { spaceAboveFirst = 0
+    --        , droppedAboveFirst = 0
+    --        , spaceAboveSecond = 0
+    --        , droppedAboveSecond = 0
+    --        , spaceBelowFirst = 0
+    --        , droppedBelowFirst = 0
+    --        , spaceBelowSecond = 0
+    --        , droppedBelowSecond = 0
+    --        , entriesAbove = []
+    --        , visibleEntries = []
+    --        , entriesBelow = []
+    --        }
+    --    withoutIndex e currentHeight data =
+    --        let
+    --            height =
+    --                entryHeight e
+    --        in
+    --        if currentHeight < ulScrollTop - 200 then
+    --            -- entry is above the rendered range
+    --            { data
+    --                | spaceAboveFirst = data.spaceAboveFirst + height
+    --                , droppedAboveFirst = data.droppedAboveFirst + 1
+    --            }
+    --        else if currentHeight >= (ulScrollTop + ulClientHeight + 200) then
+    --            { data
+    --                | spaceBelowFirst = data.spaceBelowFirst + height
+    --                , droppedBelowFirst = data.droppedBelowFirst + 1
+    --            }
+    --        else
+    --            -- entry is within the rendered range
+    --            { data | visibleEntries = e :: data.visibleEntries }
+    --    withIndex index currentIndex e currentHeight data =
+    --        let
+    --            height =
+    --                entryHeight e
+    --        in
+    --        if currentHeight < ulScrollTop - 200 then
+    --            -- entry is above the rendered range
+    --            if currentIndex < index - 1 then
+    --                -- entry is before focused entry
+    --                { data
+    --                    | spaceAboveFirst = data.spaceAboveFirst + height
+    --                    , droppedAboveFirst = data.droppedAboveFirst + 1
+    --                }
+    --            else if currentIndex > index + 1 then
+    --                -- entry is after focused entry
+    --                { data
+    --                    | spaceAboveSecond = data.spaceAboveSecond + height
+    --                    , droppedAboveSecond = data.droppedAboveSecond + 1
+    --                }
+    --            else
+    --                -- entry is focused or next to focused entry
+    --                { data | entriesAbove = e :: data.entriesAbove }
+    --        else if currentHeight > (ulScrollTop + ulClientHeight + 200) then
+    --            -- entry is below the rendered range
+    --            if currentIndex < index - 1 then
+    --                -- entry is before focused entry
+    --                { data
+    --                    | spaceBelowFirst = data.spaceBelowFirst + height
+    --                    , droppedBelowFirst = data.droppedBelowFirst + 1
+    --                }
+    --            else if currentIndex > index + 1 then
+    --                -- entry is after focused entry
+    --                { data
+    --                    | spaceBelowSecond = data.spaceBelowSecond + height
+    --                    , droppedBelowSecond = data.droppedBelowSecond + 1
+    --                }
+    --            else
+    --                -- entry is focused or next to focused entry
+    --                { data | entriesBelow = e :: data.entriesBelow }
+    --        else
+    --            -- entry is within the rendered range
+    --            { data | visibleEntries = e :: data.visibleEntries }
+    --    reverseLists renderedEntries =
+    --        { renderedEntries
+    --            | entriesAbove = List.reverse renderedEntries.entriesAbove
+    --            , visibleEntries = List.reverse renderedEntries.visibleEntries
+    --            , entriesBelow = List.reverse renderedEntries.entriesBelow
+    --        }
+    --in
+    --reverseLists <|
+    --    case maybeFocusIndex of
+    --        Nothing ->
+    --            entries
+    --                |> List.foldl
+    --                    (\e ( currentHeight, data ) ->
+    --                        ( currentHeight + entryHeight e
+    --                        , withoutIndex e currentHeight data
+    --                        )
+    --                    )
+    --                    ( 0, initialRenderedEntries )
+    --                |> Tuple.second
+    --        Just index ->
+    --            entries
+    --                |> List.foldl
+    --                    (\e ( ( currentIndex, currentHeight ), data ) ->
+    --                        ( ( currentIndex + 1
+    --                          , currentHeight + entryHeight e
+    --                          )
+    --                        , withIndex index currentIndex e currentHeight data
+    --                        )
+    --                    )
+    --                    ( ( 0, 0 ), initialRenderedEntries )
+    --                |> Tuple.second
+    { spaceAboveFirst = 0
+    , droppedAboveFirst = 0
+    , spaceAboveSecond = 0
+    , droppedAboveSecond = 0
+    , spaceBelowFirst = 0
+    , droppedBelowFirst = 0
+    , spaceBelowSecond = 0
+    , droppedBelowSecond = 0
+    , entriesAbove = []
+    , visibleEntries = entries
+    , entriesBelow = []
+    }

@@ -59,6 +59,7 @@ import Browser
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
+import Internal.Entries exposing (Entry(..))
 import Json.Decode as Decode exposing (Decoder)
 import Task
 import Widget exposing (HtmlAttributes, HtmlDetails)
@@ -110,20 +111,20 @@ type alias Shared a =
 
 {-| TODO
 -}
-type ViewConfig a
-    = ViewConfig (Shared a) (Views a)
+type ViewConfig a divider
+    = ViewConfig (Shared a) (Views a divider)
 
 
 {-| TODO
 -}
-viewConfig : Shared a -> Views a -> ViewConfig a
+viewConfig : Shared a -> Views a divider -> ViewConfig a divider
 viewConfig =
     ViewConfig
 
 
 {-| TODO
 -}
-type alias Views a =
+type alias Views a divider =
     { container : HtmlAttributes
     , placeholder : String
     , textfield :
@@ -140,6 +141,7 @@ type alias Views a =
         }
         -> a
         -> HtmlDetails
+    , liDivider : divider -> HtmlDetails
     }
 
 
@@ -215,7 +217,13 @@ type alias Ids =
 
 {-| TODO
 -}
-view : ViewConfig a -> Ids -> ComboBox -> List a -> Maybe a -> Html (Msg a)
+view :
+    ViewConfig a divider
+    -> Ids
+    -> ComboBox
+    -> List (Entry a divider)
+    -> Maybe a
+    -> Html (Msg a)
 view config ids (ComboBox data) allEntries maybeSelection =
     let
         (ViewConfig { uniqueId, matchesQuery, printEntry } views) =
@@ -241,6 +249,7 @@ view config ids (ComboBox data) allEntries maybeSelection =
                             , mouseFocused = mouseFocused
                             , maybeQuery = data.query
                             }
+                , liDivider = views.liDivider
                 , empty = Html.text ""
                 , focusable = False
                 }
@@ -254,7 +263,7 @@ view config ids (ComboBox data) allEntries maybeSelection =
                     [ actualSelection ]
 
         filteredEntries =
-            List.filter (matchesQuery query) allEntries
+            filterEntries (matchesQuery query) allEntries
 
         query =
             data.query
@@ -401,7 +410,7 @@ update :
     UpdateConfig a
     -> (a -> outMsg)
     -> ComboBox
-    -> List a
+    -> List (Entry a divider)
     -> Maybe a
     -> Msg a
     -> ( ComboBox, Cmd (Msg a), Maybe outMsg )
@@ -422,7 +431,15 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
                 MatchingQuery minimalLength ->
                     let
                         filteredEntries =
-                            List.filter (matchesQuery query) allEntries
+                            List.filter matches allEntries
+
+                        matches entry =
+                            case entry of
+                                Divider _ ->
+                                    False
+
+                                Entry a ->
+                                    matchesQuery query a
                     in
                     if
                         (String.length query >= minimalLength)
@@ -464,13 +481,9 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
         TextfieldChanged newQuery ->
             ( case behaviour.displayCondition of
                 MatchingQuery minimalLength ->
-                    let
-                        filteredEntries =
-                            List.filter (matchesQuery newQuery) allEntries
-                    in
                     if
                         (String.length newQuery >= minimalLength)
-                            && (List.length filteredEntries >= 1)
+                            && (List.length (filterEntries (matchesQuery query) allEntries) >= 1)
                     then
                         ComboBox
                             { data
@@ -497,7 +510,7 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
             if data.open then
                 let
                     filteredEntries =
-                        List.filter (matchesQuery query) allEntries
+                        filterEntries (matchesQuery query) allEntries
 
                     listboxConfig =
                         Listbox.updateConfig uniqueId
@@ -523,7 +536,7 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
             if data.open then
                 let
                     filteredEntries =
-                        List.filter (matchesQuery query) allEntries
+                        filterEntries (matchesQuery query) allEntries
 
                     listboxConfig =
                         Listbox.updateConfig uniqueId
@@ -547,6 +560,9 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
 
         TextfieldEnterPressed ->
             let
+                filteredEntries =
+                    filterEntries (matchesQuery query) allEntries
+
                 listboxConfig =
                     Listbox.updateConfig uniqueId
                         { jumpAtEnds = behaviour.jumpAtEnds
@@ -555,9 +571,6 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
                         , handleHomeAndEnd = behaviour.handleHomeAndEnd
                         , typeAhead = Listbox.noTypeAhead
                         }
-
-                filteredEntries =
-                    List.filter (matchesQuery query) allEntries
             in
             case Listbox.focusedEntry listboxConfig data.listbox filteredEntries of
                 Nothing ->
@@ -651,6 +664,20 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
 
         NoOp ->
             ( comboBox, Cmd.none, Nothing )
+
+
+filterEntries : (a -> Bool) -> List (Entry a divider) -> List (Entry a divider)
+filterEntries matchesQuery entries =
+    let
+        matches entry =
+            case entry of
+                Divider _ ->
+                    True
+
+                Entry a ->
+                    matchesQuery a
+    in
+    List.filter matches entries
 
 
 focusTextfield : String -> Cmd (Msg a)

@@ -61,7 +61,7 @@ import Internal.Entries
 import Json.Decode as Decode exposing (Decoder)
 import Task
 import Widget exposing (HtmlAttributes, HtmlDetails)
-import Widget.Listbox as Listbox exposing (Listbox, TypeAhead)
+import Widget.Listbox as Listbox exposing (Entry, Listbox, TypeAhead)
 
 
 {-| TODO
@@ -96,20 +96,20 @@ closed =
 
 {-| TODO
 -}
-type ViewConfig a
-    = ViewConfig (a -> String) (Views a)
+type ViewConfig a divider
+    = ViewConfig (a -> String) (Views a divider)
 
 
 {-| TODO
 -}
-viewConfig : (a -> String) -> Views a -> ViewConfig a
+viewConfig : (a -> String) -> Views a divider -> ViewConfig a divider
 viewConfig =
     ViewConfig
 
 
 {-| TODO
 -}
-type alias Views a =
+type alias Views a divider =
     { container : HtmlAttributes
     , button :
         { maybeSelection : Maybe a
@@ -125,6 +125,7 @@ type alias Views a =
         }
         -> a
         -> HtmlDetails
+    , liDivider : divider -> HtmlDetails
     }
 
 
@@ -171,7 +172,13 @@ type alias Ids =
 
 {-| TODO
 -}
-view : ViewConfig a -> Ids -> Dropdown -> List a -> Maybe a -> Html (Msg a)
+view :
+    ViewConfig a divider
+    -> Ids
+    -> Dropdown
+    -> List (Entry a divider)
+    -> Maybe a
+    -> Html (Msg a)
 view (ViewConfig uniqueId views) ids (Dropdown data) allEntries maybeSelection =
     let
         buttonHtmlDetails =
@@ -190,6 +197,7 @@ view (ViewConfig uniqueId views) ids (Dropdown data) allEntries maybeSelection =
                             :: Attributes.style "position" "absolute"
                             :: views.ul
                 , li = views.li
+                , liDivider = views.liDivider
                 , empty = Html.text ""
                 , focusable = True
                 }
@@ -329,7 +337,7 @@ update :
     UpdateConfig a
     -> (a -> outMsg)
     -> Dropdown
-    -> List a
+    -> List (Entry a divider)
     -> Maybe a
     -> Msg a
     -> ( Dropdown, Cmd (Msg a), Maybe outMsg )

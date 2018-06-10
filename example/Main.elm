@@ -59,6 +59,10 @@ type alias Model =
     , listboxHandleHomeAndEnd : Bool
     , listboxTypeAhead : Bool
 
+    -- MUPPETS LISTBOX
+    , selectedMuppets : Set String
+    , muppetsListbox : Listbox
+
     -- LISTBOX DROPDOWN
     , selectedLocale : Maybe String
     , dropdown : Dropdown
@@ -99,6 +103,8 @@ init _ =
       , listboxSelectionFollowsFocus = False
       , listboxHandleHomeAndEnd = True
       , listboxTypeAhead = True
+      , selectedMuppets = Set.empty
+      , muppetsListbox = Listbox.unfocused
       , selectedLocale = Nothing
       , dropdown = Dropdown.closed
       , dropdownJumpAtEnds = True
@@ -136,6 +142,8 @@ type Msg
     | ListboxSelectionFollowsFocusChecked Bool
     | ListboxHandleHomeAndEndChecked Bool
     | ListboxTypeAheadChecked Bool
+      -- MUPPETS LISTBOX
+    | MuppetsListboxMsg (Listbox.Msg String)
       -- LISTBOX DROPDOWN
     | DropdownMsg (Dropdown.Msg String)
     | DropdownJumpAtEndsChecked Bool
@@ -227,7 +235,7 @@ update msg model =
                             Set.remove locale model.selectedLocales
 
                         Just AllEntriesSelected ->
-                            Set.fromList locales
+                            Set.fromList allLocales
 
                         Just AllEntriesUnselected ->
                             Set.empty
@@ -258,6 +266,56 @@ update msg model =
         ListboxTypeAheadChecked enabled ->
             ( { model | listboxTypeAhead = enabled }
             , Cmd.none
+            )
+
+        -- MUPPETS LISTBOX
+        MuppetsListboxMsg listboxMsg ->
+            let
+                ( newListbox, listboxCmd, maybeOutMsg ) =
+                    Listbox.update
+                        (listboxUpdateConfig
+                            True
+                            True
+                            False
+                            True
+                            True
+                        )
+                        [ Listbox.onEntrySelect EntrySelected
+                        , Listbox.onEntriesSelect EntriesSelected
+                        , Listbox.onEntryUnselect EntryUnselected
+                        , Listbox.onAllEntriesSelect AllEntriesSelected
+                        , Listbox.onAllEntriesUnselect AllEntriesUnselected
+                        ]
+                        model.muppetsListbox
+                        muppets
+                        (Set.toList model.selectedMuppets)
+                        listboxMsg
+            in
+            ( { model
+                | muppetsListbox = newListbox
+                , selectedMuppets =
+                    case maybeOutMsg of
+                        Nothing ->
+                            model.selectedMuppets
+
+                        Just (EntrySelected muppet) ->
+                            Set.insert muppet model.selectedMuppets
+
+                        Just (EntriesSelected newMuppets) ->
+                            Set.union
+                                (Set.fromList newMuppets)
+                                model.selectedMuppets
+
+                        Just (EntryUnselected muppet) ->
+                            Set.remove muppet model.selectedMuppets
+
+                        Just AllEntriesSelected ->
+                            Set.fromList allMuppets
+
+                        Just AllEntriesUnselected ->
+                            Set.empty
+              }
+            , Cmd.map MuppetsListboxMsg listboxCmd
             )
 
         -- LISTBOX DROPDOWN
@@ -407,6 +465,7 @@ update msg model =
 subscriptions model =
     Sub.batch
         [ Sub.map ListboxMsg (Listbox.subscriptions model.listbox)
+        , Sub.map MuppetsListboxMsg (Listbox.subscriptions model.muppetsListbox)
         , Sub.map DropdownMsg (Dropdown.subscriptions model.dropdown)
         , Sub.map ComboBoxMsg (ComboBox.subscriptions model.comboBox)
         ]
@@ -466,7 +525,9 @@ view model =
                                     [ Attributes.class "control" ]
                                     [ model.selectedLocales
                                         |> Set.toList
-                                        |> Listbox.viewLazy (\_ -> 42)
+                                        |> Listbox.viewLazy
+                                            (\_ -> 42)
+                                            (\_ -> 31)
                                             listboxViewConfig
                                             { id = "locales"
                                             , labelledBy = "locales-label"
@@ -506,6 +567,48 @@ view model =
                             , viewCheckbox ListboxTypeAheadChecked
                                 model.listboxTypeAhead
                                 "Type ahead"
+                            ]
+                        ]
+                    }
+                , Accordion.section Collapsed
+                    { id = "muppets"
+                    , header = "Muppets"
+                    , panel =
+                        [ Html.form
+                            [ Attributes.style "width" "100%" ]
+                            [ Html.div
+                                [ Attributes.class "field" ]
+                                [ Html.label
+                                    [ Attributes.id "muppets-label" ]
+                                    [ Html.text "Muppets" ]
+                                , Html.div
+                                    [ Attributes.class "control" ]
+                                    [ model.selectedMuppets
+                                        |> Set.toList
+                                        |> Listbox.viewLazy
+                                            (\_ -> 42)
+                                            (\_ -> 42)
+                                            listboxViewConfig
+                                            { id = "muppets"
+                                            , labelledBy = "muppets-label"
+                                            }
+                                            model.muppetsListbox
+                                            muppets
+                                        |> Html.map MuppetsListboxMsg
+                                    ]
+                                , Html.p
+                                    [ Attributes.class "help" ]
+                                    [ Html.text <|
+                                        if Set.isEmpty model.selectedMuppets then
+                                            "nothing selected"
+                                        else
+                                            "currently selected: "
+                                                ++ (model.selectedMuppets
+                                                        |> Set.toList
+                                                        |> String.join ", "
+                                                   )
+                                    ]
+                                ]
                             ]
                         ]
                     }
@@ -782,7 +885,7 @@ listboxUpdateConfig jumpAtEnds separateFocus selectionFollowsFocus handleHomeAnd
         }
 
 
-listboxViewConfig : Listbox.ViewConfig String
+listboxViewConfig : Listbox.ViewConfig String String
 listboxViewConfig =
     Listbox.viewConfig identity
         { ul = [ Attributes.class "list" ]
@@ -797,6 +900,12 @@ listboxViewConfig =
                         ]
                     ]
                 , children = liChildren maybeQuery name
+                }
+        , liDivider =
+            \text ->
+                { attributes =
+                    [ Attributes.class "divider" ]
+                , children = [ Html.text text ]
                 }
         , empty = Html.div [] [ Html.text "this list is empty" ]
         , focusable = True
@@ -822,7 +931,7 @@ dropdownUpdateConfig jumpAtEnds closeAfterMouseSelection separateFocus selection
         }
 
 
-dropdownViewConfig : Dropdown.ViewConfig String
+dropdownViewConfig : Dropdown.ViewConfig String String
 dropdownViewConfig =
     Dropdown.viewConfig identity
         { container = []
@@ -852,6 +961,12 @@ dropdownViewConfig =
                         ]
                     ]
                 , children = liChildren maybeQuery name
+                }
+        , liDivider =
+            \text ->
+                { attributes =
+                    [ Attributes.class "divider" ]
+                , children = [ Html.text text ]
                 }
         }
 
@@ -885,7 +1000,7 @@ comboBoxUpdateConfig jumpAtEnds closeAfterMouseSelection separateFocus selection
         }
 
 
-comboBoxViewConfig : ComboBox.ViewConfig String
+comboBoxViewConfig : ComboBox.ViewConfig String String
 comboBoxViewConfig =
     ComboBox.viewConfig comboBoxSharedConfig
         { container = []
@@ -904,6 +1019,12 @@ comboBoxViewConfig =
                         ]
                     ]
                 , children = liChildren maybeQuery name
+                }
+        , liDivider =
+            \text ->
+                { attributes =
+                    [ Attributes.class "divider" ]
+                , children = [ Html.text text ]
                 }
         }
 
@@ -952,8 +1073,83 @@ liChildren maybeQuery name =
 ---- DATA
 
 
-locales : List String
+muppets : List (Listbox.Entry String String)
+muppets =
+    List.concat
+        [ [ Listbox.divider "Main character" ]
+        , List.map Listbox.entry mainCharacters
+        , [ Listbox.divider "Supporting characters" ]
+        , List.map Listbox.entry supportingCharacters
+        , [ Listbox.divider "Minor characters" ]
+        , List.map Listbox.entry minorCharacters
+        ]
+
+
+allMuppets : List String
+allMuppets =
+    List.concat
+        [ mainCharacters
+        , supportingCharacters
+        , minorCharacters
+        ]
+
+
+mainCharacters : List String
+mainCharacters =
+    [ "Kermit the Frog"
+    , "Miss Piggy"
+    , "Fozzie Bear"
+    , "Gonzo"
+    , "Rowlf the Dog"
+    , "Scooter"
+    , "Pepe the King Prawn"
+    , "Rizzo the Rat"
+    , "Animal"
+    , "Walter"
+    ]
+
+
+supportingCharacters : List String
+supportingCharacters =
+    [ "Bunsen Honeydew"
+    , "Beaker"
+    , "Sam Eagle"
+    , "The Swedish Chef"
+    , "Dr. Teeth and The Electric Mayhem"
+    , "Statler and Waldorf"
+    , "Camilla the Chicken"
+    , "Bobo the Bear"
+    , "Clifford"
+    ]
+
+
+minorCharacters : List String
+minorCharacters =
+    [ "'80s Robot"
+    , "Andy and Randy Pig"
+    , "Bean Bunny"
+    , "Beauregard"
+    , "Constantine"
+    , "Crazy Harry"
+    , "Johnny Fiama and Sal Minella"
+    , "Lew Zealand"
+    , "Link Hogthrob"
+    , "Marvin Suggs"
+    , "The Muppet Newsman"
+    , "Pops"
+    , "Robin the Frog"
+    , "Sweetums"
+    , "Uncle Deadly"
+    ]
+
+
+locales : List (Listbox.Entry String String)
 locales =
+    List.map Listbox.entry allLocales
+
+
+allLocales : List String
+allLocales =
     [ "Abkhazian"
     , "Achinese"
     , "Acoli"

@@ -1,65 +1,70 @@
 module Internal.Entries
     exposing
-        ( Next(..)
+        ( Entry(..)
+        , Next(..)
         , Previous(..)
         , find
         , findNext
         , findPrevious
         , findWith
-        , indexOf
+        , firstEntry
+        , lastEntry
         , range
         )
 
 
-indexOf : (a -> String) -> String -> List a -> Maybe Int
-indexOf =
-    indexOfHelp 0
+type Entry a divider
+    = Divider divider
+    | Entry a
 
 
-indexOfHelp : Int -> (a -> String) -> String -> List a -> Maybe Int
-indexOfHelp index uniqueId id entries =
-    case entries of
-        [] ->
-            Nothing
 
-        entry :: rest ->
-            if uniqueId entry == id then
-                Just index
-            else
-                indexOfHelp (index + 1) uniqueId id rest
+---- FIND
 
 
-find : (a -> String) -> List a -> String -> Maybe ( Int, a )
+find : (a -> String) -> List (Entry a divider) -> String -> Maybe ( Int, a )
 find =
     findHelp 0
 
 
-findHelp : Int -> (a -> String) -> List a -> String -> Maybe ( Int, a )
-findHelp index entryId entries selectedId =
+findHelp : Int -> (a -> String) -> List (Entry a divider) -> String -> Maybe ( Int, a )
+findHelp index uniqueId entries selectedId =
     case entries of
         [] ->
             Nothing
 
-        entry :: rest ->
-            if entryId entry == selectedId then
+        (Divider _) :: rest ->
+            findHelp (index + 1) uniqueId rest selectedId
+
+        (Entry entry) :: rest ->
+            if uniqueId entry == selectedId then
                 Just ( index, entry )
             else
-                findHelp (index + 1) entryId rest selectedId
+                findHelp (index + 1) uniqueId rest selectedId
 
 
-findWith : (String -> a -> Bool) -> (a -> String) -> String -> String -> List a -> Maybe String
+findWith :
+    (String -> a -> Bool)
+    -> (a -> String)
+    -> String
+    -> String
+    -> List (Entry a divider)
+    -> Maybe String
 findWith matchesQuery uniqueId focus query entries =
     case entries of
         [] ->
             Nothing
 
-        entry :: rest ->
-            if uniqueId entry == focus then
+        (Divider _) :: rest ->
+            findWith matchesQuery uniqueId focus query rest
+
+        (Entry a) :: rest ->
+            if uniqueId a == focus then
                 let
                     id =
-                        uniqueId entry
+                        uniqueId a
                 in
-                if matchesQuery query entry then
+                if matchesQuery query a then
                     Just id
                 else
                     proceedWith matchesQuery uniqueId id query rest
@@ -67,120 +72,166 @@ findWith matchesQuery uniqueId focus query entries =
                 findWith matchesQuery uniqueId focus query rest
 
 
-proceedWith : (String -> a -> Bool) -> (a -> String) -> String -> String -> List a -> Maybe String
+proceedWith :
+    (String -> a -> Bool)
+    -> (a -> String)
+    -> String
+    -> String
+    -> List (Entry a divider)
+    -> Maybe String
 proceedWith matchesQuery uniqueId id query entries =
     case entries of
         [] ->
             Just id
 
-        next :: rest ->
-            if matchesQuery query next then
-                Just (uniqueId next)
+        (Divider _) :: rest ->
+            proceedWith matchesQuery uniqueId id query rest
+
+        (Entry a) :: rest ->
+            if matchesQuery query a then
+                Just (uniqueId a)
             else
                 proceedWith matchesQuery uniqueId id query rest
 
 
+lastEntry : List (Entry a divider) -> Maybe a
+lastEntry entries =
+    firstEntry (List.reverse entries)
+
+
+firstEntry : List (Entry a divider) -> Maybe a
+firstEntry entries =
+    case entries of
+        [] ->
+            Nothing
+
+        (Divider _) :: rest ->
+            firstEntry rest
+
+        (Entry a) :: _ ->
+            Just a
+
+
+
+---- PREVIOUS
+
+
 type Previous a
-    = Previous Int a
+    = Previous a
     | Last a
 
 
-findPrevious : (a -> String) -> List a -> String -> Maybe (Previous a)
-findPrevious entryId entries currentId =
+findPrevious : (a -> String) -> List (Entry a divider) -> String -> Maybe (Previous a)
+findPrevious uniqueId entries currentId =
     case entries of
         [] ->
             Nothing
 
-        first :: rest ->
-            if entryId first == currentId then
+        (Divider _) :: rest ->
+            findPrevious uniqueId rest currentId
+
+        (Entry first) :: rest ->
+            if uniqueId first == currentId then
                 entries
-                    |> List.reverse
-                    |> List.head
+                    |> lastEntry
                     |> Maybe.map Last
             else
-                findPreviousHelp first 0 entryId currentId rest
+                findPreviousHelp first uniqueId rest currentId
 
 
-findPreviousHelp : a -> Int -> (a -> String) -> String -> List a -> Maybe (Previous a)
-findPreviousHelp previous index entryId currentId entries =
+findPreviousHelp : a -> (a -> String) -> List (Entry a divider) -> String -> Maybe (Previous a)
+findPreviousHelp previous uniqueId entries currentId =
     case entries of
         [] ->
             Nothing
 
-        next :: rest ->
-            if entryId next == currentId then
-                Just (Previous index previous)
+        (Divider _) :: rest ->
+            findPreviousHelp previous uniqueId rest currentId
+
+        (Entry first) :: rest ->
+            if uniqueId first == currentId then
+                Just (Previous previous)
             else
-                findPreviousHelp next (index + 1) entryId currentId rest
+                findPreviousHelp first uniqueId rest currentId
+
+
+
+---- NEXT
 
 
 type Next a
-    = Next Int a
+    = Next a
     | First a
 
 
-findNext : (a -> String) -> List a -> String -> Maybe (Next a)
-findNext entryId entries currentId =
+findNext : (a -> String) -> List (Entry a divider) -> String -> Maybe (Next a)
+findNext uniqueId entries currentId =
     case entries of
         [] ->
             Nothing
 
-        first :: rest ->
-            case rest of
-                [] ->
-                    if entryId first == currentId then
-                        Just (First first)
-                    else
-                        Nothing
+        (Divider _) :: rest ->
+            findNext uniqueId rest currentId
 
-                next :: _ ->
-                    if entryId first == currentId then
-                        Just (Next 1 next)
-                    else
-                        findNextHelp first 1 entryId currentId rest
+        (Entry first) :: rest ->
+            if uniqueId first == currentId then
+                firstEntry rest
+                    |> Maybe.map Next
+            else
+                Just (findNextHelp first uniqueId rest currentId)
 
 
-findNextHelp : a -> Int -> (a -> String) -> String -> List a -> Maybe (Next a)
-findNextHelp first index entryId currentId entries =
+findNextHelp : a -> (a -> String) -> List (Entry a divider) -> String -> Next a
+findNextHelp first uniqueId entries currentId =
     case entries of
         [] ->
-            Nothing
+            First first
 
-        entry :: rest ->
-            case rest of
-                [] ->
-                    Just (First first)
+        (Divider _) :: rest ->
+            findNextHelp first uniqueId rest currentId
 
-                next :: _ ->
-                    if entryId entry == currentId then
-                        Just (Next (index + 1) next)
-                    else
-                        findNextHelp first (index + 1) entryId currentId rest
+        (Entry a) :: rest ->
+            if uniqueId a == currentId then
+                firstEntry rest
+                    |> Maybe.map Next
+                    |> Maybe.withDefault (First first)
+            else
+                findNextHelp first uniqueId rest currentId
 
 
-range : (a -> String) -> String -> String -> List a -> List a
+
+---- RANGE
+
+
+range : (a -> String) -> String -> String -> List (Entry a divider) -> List a
 range uniqueId start end entries =
     case entries of
         [] ->
             []
 
-        entry :: rest ->
-            if uniqueId entry == start then
-                rangeHelp uniqueId [ entry ] end rest
-            else if uniqueId entry == end then
-                rangeHelp uniqueId [ entry ] start rest
+        (Divider _) :: rest ->
+            range uniqueId start end rest
+
+        (Entry a) :: rest ->
+            if uniqueId a == start then
+                rangeHelp uniqueId [ a ] end rest
+            else if uniqueId a == end then
+                rangeHelp uniqueId [ a ] start rest
             else
                 range uniqueId start end rest
 
 
-rangeHelp : (a -> String) -> List a -> String -> List a -> List a
+rangeHelp : (a -> String) -> List a -> String -> List (Entry a divider) -> List a
 rangeHelp uniqueId collected end entries =
     case entries of
         [] ->
             []
 
-        entry :: rest ->
-            if uniqueId entry == end then
-                entry :: collected
+        (Divider _) :: rest ->
+            rangeHelp uniqueId collected end rest
+
+        (Entry a) :: rest ->
+            if uniqueId a == end then
+                a :: collected
             else
-                rangeHelp uniqueId (entry :: collected) end rest
+                rangeHelp uniqueId (a :: collected) end rest
