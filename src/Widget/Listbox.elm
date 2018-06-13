@@ -628,9 +628,7 @@ listKeydown uniqueId id maybeKeyboardFocus visibleEntries { code, shiftDown, con
             Decode.oneOf
                 [ maybeKeyboardFocus
                     |> Maybe.map
-                        (previousScrollDataDecoder [ "target" ] uniqueId visibleEntries
-                            >> Decode.map Just
-                        )
+                        (previousScrollDataDecoder [ "target" ] uniqueId visibleEntries)
                     |> Maybe.withDefault (Decode.succeed Nothing)
                 , Decode.succeed Nothing
                 ]
@@ -640,9 +638,7 @@ listKeydown uniqueId id maybeKeyboardFocus visibleEntries { code, shiftDown, con
             Decode.oneOf
                 [ maybeKeyboardFocus
                     |> Maybe.map
-                        (nextScrollDataDecoder [ "target" ] uniqueId visibleEntries
-                            >> Decode.map Just
-                        )
+                        (nextScrollDataDecoder [ "target" ] uniqueId visibleEntries)
                     |> Maybe.withDefault (Decode.succeed Nothing)
                 , Decode.succeed Nothing
                 ]
@@ -701,11 +697,7 @@ arrowUpDecoder (ViewConfig uniqueId _) path (Listbox data) allEntries =
             Decode.succeed Nothing
 
         Just keyboardFocus ->
-            Decode.oneOf
-                [ previousScrollDataDecoder path uniqueId allEntries keyboardFocus
-                    |> Decode.map Just
-                , Decode.succeed Nothing
-                ]
+            previousScrollDataDecoder path uniqueId allEntries keyboardFocus
 
 
 {-| TODO
@@ -722,11 +714,7 @@ arrowDownDecoder (ViewConfig uniqueId _) path (Listbox data) allEntries =
             Decode.succeed Nothing
 
         Just keyboardFocus ->
-            Decode.oneOf
-                [ nextScrollDataDecoder path uniqueId allEntries keyboardFocus
-                    |> Decode.map Just
-                , Decode.succeed Nothing
-                ]
+            nextScrollDataDecoder path uniqueId allEntries keyboardFocus
 
 
 
@@ -802,25 +790,27 @@ previousScrollDataDecoder :
     -> (a -> String)
     -> List (Entry a divider)
     -> String
-    -> Decoder ScrollData
+    -> Decoder (Maybe ScrollData)
 previousScrollDataDecoder path uniqueId entries currentFocus =
     case indexOfCurrentAndPreviousEntry 0 uniqueId entries currentFocus of
         Nothing ->
-            Decode.fail "cannot find currentFocus"
+            Decode.succeed Nothing
 
         Just { currentIndex, previousIndex } ->
             let
                 requiredAt subPath =
                     Decode.requiredAt (path ++ subPath) Decode.float
             in
-            Decode.succeed ScrollData
-                |> requiredAt [ "scrollTop" ]
-                |> requiredAt [ "clientHeight" ]
-                |> requiredAt [ "clientTop" ]
-                |> requiredAt [ "childNodes", String.fromInt (currentIndex + 2), "offsetTop" ]
-                |> requiredAt [ "childNodes", String.fromInt (currentIndex + 2), "offsetHeight" ]
-                |> requiredAt [ "childNodes", String.fromInt (previousIndex + 2), "offsetTop" ]
-                |> requiredAt [ "childNodes", String.fromInt (previousIndex + 2), "offsetHeight" ]
+            Decode.map Just
+                (Decode.succeed ScrollData
+                    |> requiredAt [ "scrollTop" ]
+                    |> requiredAt [ "clientHeight" ]
+                    |> requiredAt [ "clientTop" ]
+                    |> requiredAt [ "childNodes", String.fromInt (currentIndex + 2), "offsetTop" ]
+                    |> requiredAt [ "childNodes", String.fromInt (currentIndex + 2), "offsetHeight" ]
+                    |> requiredAt [ "childNodes", String.fromInt (previousIndex + 2), "offsetTop" ]
+                    |> requiredAt [ "childNodes", String.fromInt (previousIndex + 2), "offsetHeight" ]
+                )
 
 
 indexOfCurrentAndPreviousEntry :
@@ -871,25 +861,27 @@ nextScrollDataDecoder :
     -> (a -> String)
     -> List (Entry a divider)
     -> String
-    -> Decoder ScrollData
+    -> Decoder (Maybe ScrollData)
 nextScrollDataDecoder path uniqueId entries currentFocus =
     case indexOfCurrentAndNextEntry 0 uniqueId entries currentFocus of
         Nothing ->
-            Decode.fail "cannot find currentFocus"
+            Decode.succeed Nothing
 
         Just { currentIndex, nextIndex } ->
             let
                 requiredAt subPath =
                     Decode.requiredAt (path ++ subPath) Decode.float
             in
-            Decode.succeed ScrollData
-                |> requiredAt [ "scrollTop" ]
-                |> requiredAt [ "clientHeight" ]
-                |> requiredAt [ "clientTop" ]
-                |> requiredAt [ "childNodes", String.fromInt (currentIndex + 2), "offsetTop" ]
-                |> requiredAt [ "childNodes", String.fromInt (currentIndex + 2), "offsetHeight" ]
-                |> requiredAt [ "childNodes", String.fromInt (nextIndex + 2), "offsetTop" ]
-                |> requiredAt [ "childNodes", String.fromInt (nextIndex + 2), "offsetHeight" ]
+            Decode.map Just
+                (Decode.succeed ScrollData
+                    |> requiredAt [ "scrollTop" ]
+                    |> requiredAt [ "clientHeight" ]
+                    |> requiredAt [ "clientTop" ]
+                    |> requiredAt [ "childNodes", String.fromInt (currentIndex + 2), "offsetTop" ]
+                    |> requiredAt [ "childNodes", String.fromInt (currentIndex + 2), "offsetHeight" ]
+                    |> requiredAt [ "childNodes", String.fromInt (nextIndex + 2), "offsetTop" ]
+                    |> requiredAt [ "childNodes", String.fromInt (nextIndex + 2), "offsetHeight" ]
+                )
 
 
 indexOfCurrentAndNextEntry :
