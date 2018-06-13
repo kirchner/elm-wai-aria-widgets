@@ -1025,6 +1025,12 @@ viewEntry config maybeQuery selected keyboardFocused mouseFocused e =
                         , maybeQuery = maybeQuery
                         }
                         a
+
+                setAriaSelected attrs =
+                    if selected then
+                        Attributes.attribute "aria-selected" "true" :: attrs
+                    else
+                        attrs
             in
             Html.li
                 ([ Events.onMouseEnter (EntryMouseEntered (config.uniqueId a))
@@ -1033,6 +1039,7 @@ viewEntry config maybeQuery selected keyboardFocused mouseFocused e =
                  , Attributes.id (printEntryId config.id (config.uniqueId a))
                  , Attributes.attribute "role" "option"
                  ]
+                    |> setAriaSelected
                     |> appendAttributes attributes
                 )
                 (children
