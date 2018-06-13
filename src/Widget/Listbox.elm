@@ -1350,43 +1350,26 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
 
         ListFocused id maybeScrollData ->
             let
-                maybeNewFocus =
+                maybeNewEntry =
                     data.maybeKeyboardFocus
                         |> or data.maybeLastSelectedEntry
+                        |> Maybe.andThen (find uniqueId allEntries)
+                        |> Maybe.map Tuple.second
+                        |> or (List.head selection)
+                        |> or (Internal.firstEntry allEntries)
             in
-            case maybeNewFocus of
+            case maybeNewEntry of
                 Nothing ->
-                    let
-                        maybeNewEntry =
-                            List.head selection
-                                |> or (Internal.firstEntry allEntries)
-                    in
-                    case maybeNewEntry of
-                        Nothing ->
-                            ( listbox, Cmd.none, Nothing )
+                    ( listbox, Cmd.none, Nothing )
 
-                        Just newEntry ->
-                            updateFocus behaviour uniqueId events selection False newEntry data
-                                |> andDo
-                                    (if data.preventScroll then
-                                        Cmd.none
-                                     else
-                                        adjustScrollTop id (uniqueId newEntry) maybeScrollData
-                                    )
-
-                Just newFocus ->
-                    case find uniqueId allEntries newFocus of
-                        Nothing ->
-                            ( listbox, Cmd.none, Nothing )
-
-                        Just ( _, newEntry ) ->
-                            updateFocus behaviour uniqueId events selection False newEntry data
-                                |> andDo
-                                    (if data.preventScroll then
-                                        Cmd.none
-                                     else
-                                        adjustScrollTop id newFocus maybeScrollData
-                                    )
+                Just newEntry ->
+                    updateFocus behaviour uniqueId events selection False newEntry data
+                        |> andDo
+                            (if data.preventScroll then
+                                Cmd.none
+                             else
+                                adjustScrollTop id (uniqueId newEntry) maybeScrollData
+                            )
 
         ListBlured ->
             ( Listbox
