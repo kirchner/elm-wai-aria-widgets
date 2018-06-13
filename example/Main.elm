@@ -1140,11 +1140,11 @@ muppets : List (Listbox.Entry String String)
 muppets =
     List.concat
         [ [ Listbox.divider "Main character" ]
-        , List.map Listbox.entry mainCharacters
+        , List.map Listbox.option mainCharacters
         , [ Listbox.divider "Supporting characters" ]
-        , List.map Listbox.entry supportingCharacters
+        , List.map Listbox.option supportingCharacters
         , [ Listbox.divider "Minor characters" ]
-        , List.map Listbox.entry minorCharacters
+        , List.map Listbox.option minorCharacters
         ]
 
 
@@ -1208,7 +1208,7 @@ minorCharacters =
 
 locales : List (Listbox.Entry String String)
 locales =
-    List.map Listbox.entry allLocales
+    List.map Listbox.option allLocales
 
 
 allLocales : List String

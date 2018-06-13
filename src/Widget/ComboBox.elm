@@ -438,7 +438,7 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
                                 Divider _ ->
                                     False
 
-                                Entry a ->
+                                Option a ->
                                     matchesQuery query a
                     in
                     if
@@ -674,7 +674,7 @@ filterEntries matchesQuery entries =
                 Divider _ ->
                     True
 
-                Entry a ->
+                Option a ->
                     matchesQuery a
     in
     List.filter matches entries

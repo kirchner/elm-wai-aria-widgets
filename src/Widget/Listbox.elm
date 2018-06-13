@@ -14,7 +14,7 @@ module Widget.Listbox
         , arrowDownDecoder
         , arrowUpDecoder
         , divider
-        , entry
+        , option
         , focus
         , focusNextOrFirstEntry
         , focusPreviousOrFirstEntry
@@ -46,7 +46,7 @@ module Widget.Listbox
 
 @docs Listbox, unfocused, view, Ids
 
-@docs Entry, entry, divider
+@docs Entry, option, divider
 
 @docs update, Msg, subscriptions
 
@@ -205,16 +205,16 @@ type alias Entry a divider =
 
 {-| TODO
 -}
-entry : a -> Entry a divider
-entry =
-    Internal.Entry
+option : a -> Entry a divider
+option =
+    Option
 
 
 {-| TODO
 -}
 divider : divider -> Entry a divider
 divider =
-    Internal.Divider
+    Divider
 
 
 
@@ -316,10 +316,10 @@ focusPreviousOrFirstEntry config allEntries listbox =
                 [] ->
                     Nothing
 
-                (Internal.Divider _) :: rest ->
+                (Divider _) :: rest ->
                     firstEntry rest
 
-                (Internal.Entry a) :: _ ->
+                (Option a) :: _ ->
                     Just a
     in
     case
@@ -765,7 +765,7 @@ indexOfCurrentEntry currentIndex uniqueId entries id =
         (Divider _) :: rest ->
             indexOfCurrentEntry (currentIndex + 1) uniqueId rest id
 
-        (Entry a) :: rest ->
+        (Option a) :: rest ->
             if uniqueId a == id then
                 Just currentIndex
             else
@@ -823,7 +823,7 @@ indexOfCurrentAndPreviousEntry currentIndex uniqueId entries id =
         (Divider _) :: rest ->
             indexOfCurrentAndPreviousEntry (currentIndex + 1) uniqueId rest id
 
-        (Entry first) :: rest ->
+        (Option first) :: rest ->
             indexOfCurrentAndPreviousEntryHelp currentIndex (currentIndex + 1) uniqueId rest id
 
 
@@ -842,7 +842,7 @@ indexOfCurrentAndPreviousEntryHelp previousIndex currentIndex uniqueId entries i
         (Divider _) :: rest ->
             indexOfCurrentAndPreviousEntryHelp previousIndex (currentIndex + 1) uniqueId rest id
 
-        (Entry next) :: rest ->
+        (Option next) :: rest ->
             if uniqueId next == id then
                 Just
                     { currentIndex = currentIndex
@@ -897,7 +897,7 @@ indexOfCurrentAndNextEntry currentIndex uniqueId entries id =
         (Divider _) :: rest ->
             indexOfCurrentAndNextEntry (currentIndex + 1) uniqueId rest id
 
-        (Entry first) :: rest ->
+        (Option first) :: rest ->
             if uniqueId first == id then
                 indexOfNextEntry (currentIndex + 1) rest
                     |> Maybe.map indices
@@ -914,7 +914,7 @@ indexOfNextEntry currentIndex entries =
         (Divider _) :: rest ->
             indexOfNextEntry (currentIndex + 1) rest
 
-        (Entry _) :: _ ->
+        (Option _) :: _ ->
             Just currentIndex
 
 
@@ -943,10 +943,10 @@ viewEntries uniqueId views ids maybeKeyboardFocus maybeMouseFocus selection mayb
 
         maybeUniqueId e =
             case e of
-                Internal.Divider _ ->
+                Divider _ ->
                     Nothing
 
-                Internal.Entry a ->
+                Option a ->
                     Just (uniqueId a)
 
         selected e s =
@@ -956,10 +956,10 @@ viewEntries uniqueId views ids maybeKeyboardFocus maybeMouseFocus selection mayb
 
                 first :: rest ->
                     case e of
-                        Internal.Divider _ ->
+                        Divider _ ->
                             selected e rest
 
-                        Internal.Entry a ->
+                        Option a ->
                             if first == a then
                                 True
                             else
@@ -1008,7 +1008,7 @@ viewEntry :
     -> Html (Msg a)
 viewEntry config maybeQuery selected keyboardFocused mouseFocused e =
     case e of
-        Internal.Entry a ->
+        Option a ->
             let
                 { attributes, children } =
                     config.li
@@ -1032,7 +1032,7 @@ viewEntry config maybeQuery selected keyboardFocused mouseFocused e =
                     |> List.map (Html.map (\_ -> NoOp))
                 )
 
-        Internal.Divider d ->
+        Divider d ->
             let
                 { attributes, children } =
                     config.liDivider d
@@ -1608,7 +1608,7 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                                     Divider _ ->
                                         Nothing
 
-                                    Entry a ->
+                                    Option a ->
                                         Just (uniqueId a)
                             )
                         |> Set.fromList

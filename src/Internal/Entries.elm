@@ -14,8 +14,8 @@ module Internal.Entries
 
 
 type Entry a divider
-    = Divider divider
-    | Entry a
+    = Option a
+    | Divider divider
 
 
 
@@ -36,7 +36,7 @@ findHelp index uniqueId entries selectedId =
         (Divider _) :: rest ->
             findHelp (index + 1) uniqueId rest selectedId
 
-        (Entry entry) :: rest ->
+        (Option entry) :: rest ->
             if uniqueId entry == selectedId then
                 Just ( index, entry )
             else
@@ -58,7 +58,7 @@ findWith matchesQuery uniqueId focus query entries =
         (Divider _) :: rest ->
             findWith matchesQuery uniqueId focus query rest
 
-        (Entry a) :: rest ->
+        (Option a) :: rest ->
             if uniqueId a == focus then
                 let
                     id =
@@ -87,7 +87,7 @@ proceedWith matchesQuery uniqueId id query entries =
         (Divider _) :: rest ->
             proceedWith matchesQuery uniqueId id query rest
 
-        (Entry a) :: rest ->
+        (Option a) :: rest ->
             if matchesQuery query a then
                 Just (uniqueId a)
             else
@@ -108,7 +108,7 @@ firstEntry entries =
         (Divider _) :: rest ->
             firstEntry rest
 
-        (Entry a) :: _ ->
+        (Option a) :: _ ->
             Just a
 
 
@@ -130,7 +130,7 @@ findPrevious uniqueId entries currentId =
         (Divider _) :: rest ->
             findPrevious uniqueId rest currentId
 
-        (Entry first) :: rest ->
+        (Option first) :: rest ->
             if uniqueId first == currentId then
                 entries
                     |> lastEntry
@@ -148,7 +148,7 @@ findPreviousHelp previous uniqueId entries currentId =
         (Divider _) :: rest ->
             findPreviousHelp previous uniqueId rest currentId
 
-        (Entry first) :: rest ->
+        (Option first) :: rest ->
             if uniqueId first == currentId then
                 Just (Previous previous)
             else
@@ -173,7 +173,7 @@ findNext uniqueId entries currentId =
         (Divider _) :: rest ->
             findNext uniqueId rest currentId
 
-        (Entry first) :: rest ->
+        (Option first) :: rest ->
             if uniqueId first == currentId then
                 firstEntry rest
                     |> Maybe.map Next
@@ -190,7 +190,7 @@ findNextHelp first uniqueId entries currentId =
         (Divider _) :: rest ->
             findNextHelp first uniqueId rest currentId
 
-        (Entry a) :: rest ->
+        (Option a) :: rest ->
             if uniqueId a == currentId then
                 firstEntry rest
                     |> Maybe.map Next
@@ -212,7 +212,7 @@ range uniqueId start end entries =
         (Divider _) :: rest ->
             range uniqueId start end rest
 
-        (Entry a) :: rest ->
+        (Option a) :: rest ->
             if uniqueId a == start then
                 rangeHelp uniqueId [ a ] end rest
             else if uniqueId a == end then
@@ -230,7 +230,7 @@ rangeHelp uniqueId collected end entries =
         (Divider _) :: rest ->
             rangeHelp uniqueId collected end rest
 
-        (Entry a) :: rest ->
+        (Option a) :: rest ->
             if uniqueId a == end then
                 a :: collected
             else
