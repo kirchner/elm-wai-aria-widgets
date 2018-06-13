@@ -1,24 +1,25 @@
 module Widget.Listbox
     exposing
         ( Behaviour
+        , DomInfo
         , Entry
         , Event
         , Ids
         , Listbox
         , Msg
-        , ScrollData
+        , Position
         , TypeAhead
         , UpdateConfig
         , ViewConfig
         , Views
-        , arrowDownDecoder
-        , arrowUpDecoder
         , divider
+        , domInfoOf
         , focus
         , focusNextOrFirstEntry
         , focusPreviousOrFirstEntry
-        , focused
         , focusedEntry
+        , fromFocused
+        , init
         , noDivider
         , noTypeAhead
         , onAllEntriesSelect
@@ -31,11 +32,10 @@ module Widget.Listbox
         , onMouseDown
         , onMouseUp
         , option
-        , scrollToFocus
+        , scrollIntoViewVia
         , simpleTypeAhead
         , subscriptions
         , typeAhead
-        , unfocused
         , update
         , updateConfig
         , view
@@ -45,7 +45,7 @@ module Widget.Listbox
 
 {-|
 
-@docs Listbox, unfocused, view, Ids
+@docs Listbox, init, view, Ids
 
 @docs Entry, option, divider
 
@@ -54,9 +54,15 @@ module Widget.Listbox
 
 # Configuration
 
+
+## Update
+
 @docs UpdateConfig, updateConfig, Behaviour
 
-@docs ViewConfig, viewConfig, Views
+
+## View
+
+@docs ViewConfig, viewConfig, Views, noDivider
 
 
 ## Type ahead
@@ -67,8 +73,6 @@ module Widget.Listbox
 # Advanced usage
 
 @docs viewLazy
-
-@docs focused
 
 
 ## Events
@@ -84,13 +88,27 @@ module Widget.Listbox
 @docs onMouseDown, onMouseUp
 
 
-## Manage keyboard focus
+## State manipulation
 
-@docs focusedEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
 
-@docs focus, scrollToFocus
+### Keyboard focus
 
-@docs ScrollData, arrowDownDecoder, arrowUpDecoder
+@docs focusedEntry
+
+@docs focusNextOrFirstEntry, focusPreviousOrFirstEntry
+
+
+## DOM Stuff
+
+
+### Focus
+
+@docs focus
+
+
+### Scroll
+
+@docs scrollIntoViewVia, DomInfo, domInfoOf, Position, fromFocused
 
 -}
 
@@ -112,7 +130,7 @@ module Widget.Listbox
 
 -}
 
-import Browser
+import Browser exposing (DomError)
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
@@ -130,7 +148,7 @@ import Internal.Entries as Internal
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline as Decode
 import Set
-import Task
+import Task exposing (Task)
 import Time
 import Widget exposing (HtmlAttributes, HtmlDetails)
 
@@ -163,8 +181,8 @@ type Query
 
 {-| TODO
 -}
-unfocused : Listbox
-unfocused =
+init : Listbox
+init =
     Listbox
         { preventScroll = False
         , query = NoQuery
@@ -174,27 +192,6 @@ unfocused =
         , ulScrollTop = 0
         , ulClientHeight = 1000
         }
-
-
-{-| TODO
--}
-focused : UpdateConfig a -> String -> a -> ( Listbox, Cmd (Msg a) )
-focused (UpdateConfig uniqueId _) id a =
-    ( Listbox
-        { preventScroll = False
-        , query = NoQuery
-        , maybeKeyboardFocus = Just (uniqueId a)
-        , maybeMouseFocus = Nothing
-        , maybeLastSelectedEntry = Nothing
-        , ulScrollTop = 0
-        , ulClientHeight = 1000
-        }
-    , Cmd.batch
-        [ Browser.scrollIntoView (printEntryId id (uniqueId a))
-            |> Task.attempt (\_ -> NoOp)
-        , focusList id
-        ]
-    )
 
 
 {-| TODO
@@ -223,9 +220,9 @@ divider =
 
 {-| TODO
 -}
-focus : String -> Cmd (Msg a)
+focus : String -> Task DomError ()
 focus id =
-    focusList id
+    Browser.focus (printListId id)
 
 
 {-| TODO
@@ -235,18 +232,6 @@ focusedEntry (UpdateConfig uniqueId _) (Listbox { maybeKeyboardFocus }) allEntri
     maybeKeyboardFocus
         |> Maybe.andThen (find uniqueId allEntries)
         |> Maybe.map Tuple.second
-
-
-{-| TODO
--}
-scrollToFocus : String -> Listbox -> Maybe ScrollData -> Cmd (Msg a)
-scrollToFocus id (Listbox data) maybeScrollData =
-    case data.maybeKeyboardFocus of
-        Nothing ->
-            Cmd.none
-
-        Just keyboardFocus ->
-            adjustScrollTopNew id keyboardFocus maybeScrollData
 
 
 {-| TODO
@@ -683,38 +668,85 @@ listKeydown uniqueId id maybeKeyboardFocus visibleEntries { code, shiftDown, con
                 Decode.fail "not handling that key here"
 
 
-{-| TODO
--}
-arrowUpDecoder :
-    ViewConfig a divider
-    -> List String
-    -> Listbox
-    -> List (Entry a divider)
-    -> Decoder (Maybe ScrollData)
-arrowUpDecoder (ViewConfig uniqueId _) path (Listbox data) allEntries =
-    case data.maybeKeyboardFocus of
-        Nothing ->
-            Decode.succeed Nothing
 
-        Just keyboardFocus ->
-            previousScrollDataDecoder path uniqueId allEntries keyboardFocus
+---- DOM INFO
 
 
 {-| TODO
 -}
-arrowDownDecoder :
-    ViewConfig a divider
-    -> List String
-    -> Listbox
-    -> List (Entry a divider)
-    -> Decoder (Maybe ScrollData)
-arrowDownDecoder (ViewConfig uniqueId _) path (Listbox data) allEntries =
-    case data.maybeKeyboardFocus of
-        Nothing ->
-            Decode.succeed Nothing
+type DomInfo
+    = NoDomInfo
+    | DomInfo DomInfoData
 
-        Just keyboardFocus ->
-            nextScrollDataDecoder path uniqueId allEntries keyboardFocus
+
+type alias DomInfoData =
+    { ulScrollTop : Float
+    , ulClientHeight : Float
+    , ulClientTop : Float
+    , liOffsetTop : Float
+    , liOffsetHeight : Float
+    }
+
+
+{-| TODO
+-}
+type Position a divider
+    = FromFocused Int (a -> String) (Maybe String) (List (Entry a divider))
+
+
+{-| TODO
+-}
+fromFocused : Int -> ViewConfig a divider -> Listbox -> List (Entry a divider) -> Position a divider
+fromFocused distance (ViewConfig uniqueId _) (Listbox { maybeKeyboardFocus }) entries =
+    FromFocused distance uniqueId maybeKeyboardFocus entries
+
+
+{-| TODO
+-}
+domInfoOf : Position a divider -> List String -> Decoder DomInfo
+domInfoOf position path =
+    case position of
+        FromFocused distance uniqueId maybeKeyboardFocus entries ->
+            case Maybe.andThen (indexOfCurrentEntry 0 uniqueId entries) maybeKeyboardFocus of
+                Nothing ->
+                    Decode.succeed NoDomInfo
+
+                Just index ->
+                    let
+                        requiredAt subPath =
+                            Decode.requiredAt (path ++ subPath) Decode.float
+
+                        actualIndex =
+                            String.fromInt (index + distance + 2)
+                    in
+                    Decode.map DomInfo
+                        (Decode.succeed DomInfoData
+                            |> requiredAt [ "scrollTop" ]
+                            |> requiredAt [ "clientHeight" ]
+                            |> requiredAt [ "clientTop" ]
+                            |> requiredAt [ "childNodes", actualIndex, "offsetTop" ]
+                            |> requiredAt [ "childNodes", actualIndex, "offsetHeight" ]
+                        )
+
+
+{-| TODO
+-}
+scrollIntoViewVia : DomInfo -> String -> Listbox -> Task DomError ()
+scrollIntoViewVia domInfo id (Listbox data) =
+    case domInfo of
+        NoDomInfo ->
+            Task.succeed ()
+
+        DomInfo { ulScrollTop, ulClientHeight, ulClientTop, liOffsetTop, liOffsetHeight } ->
+            if (liOffsetTop - ulClientTop + liOffsetHeight) > (ulScrollTop + ulClientHeight) then
+                -- lower parts of new entry are hidden
+                Browser.setScrollTop (printListId id)
+                    (liOffsetTop - ulClientTop + liOffsetHeight - ulClientHeight)
+            else if liOffsetTop - ulClientTop < ulScrollTop then
+                -- upper parts of new entry are hidden
+                Browser.setScrollTop (printListId id) (liOffsetTop - ulClientTop)
+            else
+                Task.succeed ()
 
 
 

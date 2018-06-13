@@ -85,7 +85,7 @@ closed =
     Dropdown
         { open = False
         , preventBlur = False
-        , listbox = Listbox.unfocused
+        , listbox = Listbox.init
         , pendingFocusListbox = Nothing
         }
 
@@ -363,7 +363,7 @@ update (UpdateConfig uniqueId behaviour) entrySelected (Dropdown data) allEntrie
 
                 Just id ->
                     ( Dropdown { data | pendingFocusListbox = Nothing }
-                    , Cmd.map (ListboxMsg (Just id)) <|
+                    , Task.attempt (\_ -> NoOp) <|
                         Listbox.focus (printListboxId id)
                     , Nothing
                     )
@@ -381,7 +381,7 @@ update (UpdateConfig uniqueId behaviour) entrySelected (Dropdown data) allEntrie
         -- BUTTON
         ButtonClicked id ->
             ( Dropdown { data | open = True }
-            , Cmd.map (ListboxMsg (Just id)) <|
+            , Task.attempt (\_ -> NoOp) <|
                 Listbox.focus (printListboxId id)
             , Nothing
             )

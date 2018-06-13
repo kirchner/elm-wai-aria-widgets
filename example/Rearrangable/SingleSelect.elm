@@ -12,6 +12,7 @@ import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
 import Json.Decode as Decode
+import Task
 import Widget.Listbox as Listbox exposing (Listbox)
 
 
@@ -27,7 +28,7 @@ type alias Model =
 
 init : Model
 init =
-    { importantFeaturesListbox = Listbox.unfocused
+    { importantFeaturesListbox = Listbox.init
     , importantFeatures =
         [ "Proximity of public K-12 schools"
         , "Proximity of child-friendly parks"
@@ -41,7 +42,7 @@ init =
         , "Access to major highways"
         ]
     , selectedImportantFeature = Nothing
-    , unimportantFeaturesListbox = Listbox.unfocused
+    , unimportantFeaturesListbox = Listbox.init
     , unimportantFeatures = []
     , selectedUnimportantFeature = Nothing
     }
@@ -52,9 +53,10 @@ init =
 
 
 type Msg
-    = ImportantFeaturesListboxMsg (Listbox.Msg String)
-    | ImportantFeaturesUpPressed (Maybe Listbox.ScrollData)
-    | ImportantFeaturesDownPressed (Maybe Listbox.ScrollData)
+    = NoOp
+    | ImportantFeaturesListboxMsg (Listbox.Msg String)
+    | ImportantFeaturesUpPressed Listbox.DomInfo
+    | ImportantFeaturesDownPressed Listbox.DomInfo
     | ImportantFeaturesNotImportantClicked
     | UnimportantFeaturesListboxMsg (Listbox.Msg String)
     | UnimportantFeaturesImportantClicked
@@ -63,6 +65,9 @@ type Msg
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        NoOp ->
+            ( model, Cmd.none )
+
         ImportantFeaturesListboxMsg listboxMsg ->
             let
                 ( newListbox, listboxCmd, maybeOutMsg ) =
@@ -86,7 +91,7 @@ update msg model =
             , Cmd.map ImportantFeaturesListboxMsg listboxCmd
             )
 
-        ImportantFeaturesUpPressed maybeScrollData ->
+        ImportantFeaturesUpPressed domInfo ->
             case model.selectedImportantFeature of
                 Nothing ->
                     ( model, Cmd.none )
@@ -105,13 +110,13 @@ update msg model =
                                     features
                     in
                     ( { model | importantFeatures = moveUp model.importantFeatures }
-                    , Listbox.scrollToFocus "important-features-listbox"
-                        model.importantFeaturesListbox
-                        maybeScrollData
-                        |> Cmd.map ImportantFeaturesListboxMsg
+                    , Task.attempt (\_ -> NoOp) <|
+                        Listbox.scrollIntoViewVia domInfo
+                            "important-features-listbox"
+                            model.importantFeaturesListbox
                     )
 
-        ImportantFeaturesDownPressed maybeScrollData ->
+        ImportantFeaturesDownPressed domInfo ->
             case model.selectedImportantFeature of
                 Nothing ->
                     ( model, Cmd.none )
@@ -130,10 +135,10 @@ update msg model =
                                     features
                     in
                     ( { model | importantFeatures = moveDown model.importantFeatures }
-                    , Listbox.scrollToFocus "important-features-listbox"
-                        model.importantFeaturesListbox
-                        maybeScrollData
-                        |> Cmd.map ImportantFeaturesListboxMsg
+                    , Task.attempt (\_ -> NoOp) <|
+                        Listbox.scrollIntoViewVia domInfo
+                            "important-features-listbox"
+                            model.importantFeaturesListbox
                     )
 
         ImportantFeaturesNotImportantClicked ->
@@ -213,6 +218,31 @@ view model =
         lastSelected =
             List.head (List.reverse model.importantFeatures)
                 == model.selectedImportantFeature
+
+        aboveFocused =
+            Listbox.fromFocused -1
+                listboxViewConfig
+                model.importantFeaturesListbox
+                entries
+
+        belowFocused =
+            Listbox.fromFocused 1
+                listboxViewConfig
+                model.importantFeaturesListbox
+                entries
+
+        entries =
+            List.map Listbox.option model.importantFeatures
+
+        pathToListbox =
+            [ "target"
+            , "parentElement"
+            , "parentElement"
+            , "previousSibling"
+            , "childNodes"
+            , "1"
+            , "firstChild"
+            ]
     in
     Html.div
         [ Attributes.class "columns" ]
@@ -233,7 +263,7 @@ view model =
                         , labelledBy = "important-features-listbox-label"
                         }
                         model.importantFeaturesListbox
-                        (List.map Listbox.option model.importantFeatures)
+                        entries
                         (maybeToList model.selectedImportantFeature)
                         |> Html.map ImportantFeaturesListboxMsg
                     ]
@@ -248,20 +278,9 @@ view model =
                         [ Attributes.class "button"
                         , Attributes.disabled
                             (model.selectedImportantFeature == Nothing || firstSelected)
-                        , Events.on "click"
-                            (Listbox.arrowUpDecoder listboxViewConfig
-                                [ "target"
-                                , "parentElement"
-                                , "parentElement"
-                                , "previousSibling"
-                                , "childNodes"
-                                , "1"
-                                , "firstChild"
-                                ]
-                                model.importantFeaturesListbox
-                                (List.map Listbox.option model.importantFeatures)
-                                |> Decode.map ImportantFeaturesUpPressed
-                            )
+                        , Events.on "click" <|
+                            Decode.map ImportantFeaturesUpPressed <|
+                                Listbox.domInfoOf aboveFocused pathToListbox
                         ]
                         [ Html.text "Up" ]
                     ]
@@ -271,20 +290,9 @@ view model =
                         [ Attributes.class "button"
                         , Attributes.disabled
                             (model.selectedImportantFeature == Nothing || lastSelected)
-                        , Events.on "click"
-                            (Listbox.arrowDownDecoder listboxViewConfig
-                                [ "target"
-                                , "parentElement"
-                                , "parentElement"
-                                , "previousSibling"
-                                , "childNodes"
-                                , "1"
-                                , "firstChild"
-                                ]
-                                model.importantFeaturesListbox
-                                (List.map Listbox.option model.importantFeatures)
-                                |> Decode.map ImportantFeaturesDownPressed
-                            )
+                        , Events.on "click" <|
+                            Decode.map ImportantFeaturesDownPressed <|
+                                Listbox.domInfoOf belowFocused pathToListbox
                         ]
                         [ Html.text "Down" ]
                     ]

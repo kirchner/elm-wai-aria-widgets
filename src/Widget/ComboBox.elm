@@ -88,7 +88,7 @@ closed =
         { preventBlur = False
         , open = False
         , query = Nothing
-        , listbox = Listbox.unfocused
+        , listbox = Listbox.init
         }
 
 
@@ -292,18 +292,24 @@ view config ids (ComboBox data) allEntries maybeSelection =
                         (\code ->
                             case code of
                                 "ArrowUp" ->
-                                    filteredEntries
-                                        |> Listbox.arrowUpDecoder listboxConfig
+                                    Decode.map (TextfieldArrowUpPressed ids.id) <|
+                                        Listbox.domInfoOf
+                                            (Listbox.fromFocused -1
+                                                listboxConfig
+                                                data.listbox
+                                                filteredEntries
+                                            )
                                             [ "target", "nextSibling" ]
-                                            data.listbox
-                                        |> Decode.map (TextfieldArrowUpPressed ids.id)
 
                                 "ArrowDown" ->
-                                    filteredEntries
-                                        |> Listbox.arrowDownDecoder listboxConfig
+                                    Decode.map (TextfieldArrowDownPressed ids.id) <|
+                                        Listbox.domInfoOf
+                                            (Listbox.fromFocused 1
+                                                listboxConfig
+                                                data.listbox
+                                                filteredEntries
+                                            )
                                             [ "target", "nextSibling" ]
-                                            data.listbox
-                                        |> Decode.map (TextfieldArrowDownPressed ids.id)
 
                                 "Enter" ->
                                     Decode.succeed TextfieldEnterPressed
@@ -391,8 +397,8 @@ type Msg a
     | TextfieldFocused String
     | TextfieldBlured String
     | TextfieldChanged String
-    | TextfieldArrowUpPressed String (Maybe Listbox.ScrollData)
-    | TextfieldArrowDownPressed String (Maybe Listbox.ScrollData)
+    | TextfieldArrowUpPressed String Listbox.DomInfo
+    | TextfieldArrowDownPressed String Listbox.DomInfo
     | TextfieldEnterPressed
       -- LISTBOX
     | ListboxMsg (Maybe String) (Listbox.Msg a)
@@ -506,7 +512,7 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
             , Nothing
             )
 
-        TextfieldArrowUpPressed id maybeScrollData ->
+        TextfieldArrowUpPressed id domInfo ->
             if data.open then
                 let
                     filteredEntries =
@@ -525,14 +531,16 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
                         Listbox.focusPreviousOrFirstEntry listboxConfig filteredEntries data.listbox
                 in
                 ( ComboBox { data | listbox = newListbox }
-                , Cmd.map (ListboxMsg (Just id)) <|
-                    Listbox.scrollToFocus (printListboxId id) newListbox maybeScrollData
+                , Task.attempt (\_ -> NoOp) <|
+                    Listbox.scrollIntoViewVia domInfo
+                        (printListboxId id)
+                        newListbox
                 , Nothing
                 )
             else
                 ( comboBox, Cmd.none, Nothing )
 
-        TextfieldArrowDownPressed id maybeScrollData ->
+        TextfieldArrowDownPressed id domInfo ->
             if data.open then
                 let
                     filteredEntries =
@@ -551,8 +559,10 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
                         Listbox.focusNextOrFirstEntry listboxConfig filteredEntries data.listbox
                 in
                 ( ComboBox { data | listbox = newListbox }
-                , Cmd.map (ListboxMsg (Just id)) <|
-                    Listbox.scrollToFocus (printListboxId id) newListbox maybeScrollData
+                , Task.attempt (\_ -> NoOp) <|
+                    Listbox.scrollIntoViewVia domInfo
+                        (printListboxId id)
+                        newListbox
                 , Nothing
                 )
             else
