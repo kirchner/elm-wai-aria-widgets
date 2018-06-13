@@ -117,7 +117,7 @@ type alias Views a divider =
         }
         -> HtmlDetails
     , ul : HtmlAttributes
-    , li :
+    , liOption :
         { selected : Bool
         , keyboardFocused : Bool
         , mouseFocused : Bool
@@ -196,7 +196,7 @@ view (ViewConfig uniqueId views) ids (Dropdown data) allEntries maybeSelection =
                         Attributes.style "display" "none"
                             :: Attributes.style "position" "absolute"
                             :: views.ul
-                , li = views.li
+                , liOption = views.liOption
                 , liDivider = views.liDivider
                 , empty = Html.text ""
                 , focusable = True

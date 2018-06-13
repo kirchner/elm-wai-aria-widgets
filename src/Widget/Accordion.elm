@@ -441,9 +441,11 @@ appendAttributes :
     -> List (Html.Attribute msg)
     -> List (Html.Attribute msg)
 appendAttributes noOp neverAttrs attrs =
-    neverAttrs
-        |> List.map (Attributes.map (\_ -> noOp))
-        |> List.append attrs
+    attrs
+        |> List.append
+            (neverAttrs
+                |> List.map (Attributes.map (\_ -> noOp))
+            )
 
 
 

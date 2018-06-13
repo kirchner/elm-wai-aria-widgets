@@ -14,12 +14,12 @@ module Widget.Listbox
         , arrowDownDecoder
         , arrowUpDecoder
         , divider
-        , option
         , focus
         , focusNextOrFirstEntry
         , focusPreviousOrFirstEntry
         , focused
         , focusedEntry
+        , noDivider
         , noTypeAhead
         , onAllEntriesSelect
         , onAllEntriesUnselect
@@ -30,6 +30,7 @@ module Widget.Listbox
         , onListboxBlur
         , onMouseDown
         , onMouseUp
+        , option
         , scrollToFocus
         , simpleTypeAhead
         , subscriptions
@@ -126,7 +127,6 @@ import Internal.Entries as Internal
         , findWith
         , range
         )
-import Interval
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline as Decode
 import Set
@@ -375,7 +375,7 @@ viewConfig =
 -}
 type alias Views a divider =
     { ul : HtmlAttributes
-    , li :
+    , liOption :
         { selected : Bool
         , keyboardFocused : Bool
         , mouseFocused : Bool
@@ -386,6 +386,15 @@ type alias Views a divider =
     , liDivider : divider -> HtmlDetails
     , empty : Html Never
     , focusable : Bool
+    }
+
+
+{-| TODO
+-}
+noDivider : Never -> HtmlDetails
+noDivider _ =
+    { attributes = []
+    , children = []
     }
 
 
@@ -539,6 +548,7 @@ viewHelp renderedEntries uniqueId views ids (Listbox data) allEntries selection 
     in
     Html.ul
         ([ Attributes.id (printListId ids.id)
+         , Attributes.style "position" "relative"
          , Attributes.attribute "role" "listbox"
          , Attributes.attribute "aria-labelledby" ids.labelledBy
          , Events.preventDefaultOn "keydown"
@@ -686,16 +696,16 @@ arrowUpDecoder :
     -> List (Entry a divider)
     -> Decoder (Maybe ScrollData)
 arrowUpDecoder (ViewConfig uniqueId _) path (Listbox data) allEntries =
-    Decode.oneOf
-        [ case data.maybeKeyboardFocus of
-            Nothing ->
-                Decode.succeed Nothing
+    case data.maybeKeyboardFocus of
+        Nothing ->
+            Decode.succeed Nothing
 
-            Just keyboardFocus ->
-                previousScrollDataDecoder path uniqueId allEntries keyboardFocus
+        Just keyboardFocus ->
+            Decode.oneOf
+                [ previousScrollDataDecoder path uniqueId allEntries keyboardFocus
                     |> Decode.map Just
-        , Decode.succeed Nothing
-        ]
+                , Decode.succeed Nothing
+                ]
 
 
 {-| TODO
@@ -707,16 +717,16 @@ arrowDownDecoder :
     -> List (Entry a divider)
     -> Decoder (Maybe ScrollData)
 arrowDownDecoder (ViewConfig uniqueId _) path (Listbox data) allEntries =
-    Decode.oneOf
-        [ case data.maybeKeyboardFocus of
-            Nothing ->
-                Decode.succeed Nothing
+    case data.maybeKeyboardFocus of
+        Nothing ->
+            Decode.succeed Nothing
 
-            Just keyboardFocus ->
-                nextScrollDataDecoder path uniqueId allEntries keyboardFocus
+        Just keyboardFocus ->
+            Decode.oneOf
+                [ nextScrollDataDecoder path uniqueId allEntries keyboardFocus
                     |> Decode.map Just
-        , Decode.succeed Nothing
-        ]
+                , Decode.succeed Nothing
+                ]
 
 
 
@@ -728,6 +738,7 @@ arrowDownDecoder (ViewConfig uniqueId _) path (Listbox data) allEntries =
 type alias CurrentScrollData =
     { ulScrollTop : Float
     , ulClientHeight : Float
+    , ulClientTop : Float
     , liOffsetTop : Float
     , liOffsetHeight : Float
     }
@@ -752,6 +763,7 @@ currentScrollDataDecoder path uniqueId visibleEntries currentFocus =
             Decode.succeed CurrentScrollData
                 |> requiredAt [ "scrollTop" ]
                 |> requiredAt [ "clientHeight" ]
+                |> requiredAt [ "clientTop" ]
                 |> requiredAt [ "childNodes", String.fromInt (index + 2), "offsetTop" ]
                 |> requiredAt [ "childNodes", String.fromInt (index + 2), "offsetHeight" ]
 
@@ -777,6 +789,7 @@ indexOfCurrentEntry currentIndex uniqueId entries id =
 type alias ScrollData =
     { ulScrollTop : Float
     , ulClientHeight : Float
+    , ulClientTop : Float
     , liCurrentOffsetTop : Float
     , liCurrentOffsetHeight : Float
     , liNewOffsetTop : Float
@@ -803,6 +816,7 @@ previousScrollDataDecoder path uniqueId entries currentFocus =
             Decode.succeed ScrollData
                 |> requiredAt [ "scrollTop" ]
                 |> requiredAt [ "clientHeight" ]
+                |> requiredAt [ "clientTop" ]
                 |> requiredAt [ "childNodes", String.fromInt (currentIndex + 2), "offsetTop" ]
                 |> requiredAt [ "childNodes", String.fromInt (currentIndex + 2), "offsetHeight" ]
                 |> requiredAt [ "childNodes", String.fromInt (previousIndex + 2), "offsetTop" ]
@@ -871,6 +885,7 @@ nextScrollDataDecoder path uniqueId entries currentFocus =
             Decode.succeed ScrollData
                 |> requiredAt [ "scrollTop" ]
                 |> requiredAt [ "clientHeight" ]
+                |> requiredAt [ "clientTop" ]
                 |> requiredAt [ "childNodes", String.fromInt (currentIndex + 2), "offsetTop" ]
                 |> requiredAt [ "childNodes", String.fromInt (currentIndex + 2), "offsetHeight" ]
                 |> requiredAt [ "childNodes", String.fromInt (nextIndex + 2), "offsetTop" ]
@@ -936,7 +951,7 @@ viewEntries uniqueId views ids maybeKeyboardFocus maybeMouseFocus selection mayb
     let
         entryConfig =
             { id = ids.id
-            , li = views.li
+            , liOption = views.liOption
             , liDivider = views.liDivider
             , uniqueId = uniqueId
             }
@@ -989,7 +1004,7 @@ viewEntries uniqueId views ids maybeKeyboardFocus maybeMouseFocus selection mayb
 
 viewEntry :
     { id : String
-    , li :
+    , liOption :
         { selected : Bool
         , keyboardFocused : Bool
         , mouseFocused : Bool
@@ -1011,7 +1026,7 @@ viewEntry config maybeQuery selected keyboardFocused mouseFocused e =
         Option a ->
             let
                 { attributes, children } =
-                    config.li
+                    config.liOption
                         { selected = selected
                         , keyboardFocused = keyboardFocused
                         , mouseFocused = mouseFocused
@@ -1911,34 +1926,34 @@ adjustScrollTopNew id entryId maybeScrollData =
             Browser.scrollIntoView (printEntryId id entryId)
                 |> Task.attempt (\_ -> NoOp)
 
-        Just { ulScrollTop, ulClientHeight, liCurrentOffsetTop, liCurrentOffsetHeight, liNewOffsetTop, liNewOffsetHeight } ->
-            case
-                Interval.intersection
-                    (Interval.from liCurrentOffsetTop (liCurrentOffsetTop + ulScrollTop))
-                    (Interval.from ulScrollTop (ulScrollTop + ulClientHeight))
-            of
-                Nothing ->
-                    -- current entry is not visible
-                    centerScrollTop id
-                        { ulScrollTop = ulScrollTop
-                        , ulClientHeight = ulClientHeight
-                        , liOffsetTop = liNewOffsetTop
-                        , liOffsetHeight = liNewOffsetHeight
-                        }
-
-                Just _ ->
-                    -- current entry is visible
-                    if (liNewOffsetTop + liNewOffsetHeight) > (ulScrollTop + ulClientHeight) then
-                        -- lower parts of new entry are hidden
-                        Browser.setScrollTop (printListId id)
-                            (liNewOffsetTop + liNewOffsetHeight - ulClientHeight)
-                            |> Task.attempt (\_ -> NoOp)
-                    else if liNewOffsetTop < ulScrollTop then
-                        -- upper parts of new entry are hidden
-                        Browser.setScrollTop (printListId id) liNewOffsetTop
-                            |> Task.attempt (\_ -> NoOp)
-                    else
-                        Cmd.none
+        Just { ulScrollTop, ulClientHeight, ulClientTop, liCurrentOffsetTop, liCurrentOffsetHeight, liNewOffsetTop, liNewOffsetHeight } ->
+            if
+                (liCurrentOffsetTop - ulClientTop + liCurrentOffsetHeight < ulScrollTop)
+                    || (liCurrentOffsetTop > ulScrollTop + ulClientHeight)
+            then
+                -- current entry is not visible
+                centerScrollTop id
+                    { ulScrollTop = ulScrollTop
+                    , ulClientHeight = ulClientHeight
+                    , ulClientTop = ulClientTop
+                    , liOffsetTop = liNewOffsetTop
+                    , liOffsetHeight = liNewOffsetHeight
+                    }
+            else
+            -- current entry is visible
+            if
+                (liNewOffsetTop - ulClientTop + liNewOffsetHeight) > (ulScrollTop + ulClientHeight)
+            then
+                -- lower parts of new entry are hidden
+                Browser.setScrollTop (printListId id)
+                    (liNewOffsetTop - ulClientTop + liNewOffsetHeight - ulClientHeight)
+                    |> Task.attempt (\_ -> NoOp)
+            else if liNewOffsetTop - ulClientTop < ulScrollTop then
+                -- upper parts of new entry are hidden
+                Browser.setScrollTop (printListId id) (liNewOffsetTop - ulClientTop)
+                    |> Task.attempt (\_ -> NoOp)
+            else
+                Cmd.none
 
 
 centerScrollTop : String -> CurrentScrollData -> Cmd (Msg a)

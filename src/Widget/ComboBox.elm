@@ -133,7 +133,7 @@ type alias Views a divider =
         }
         -> HtmlAttributes
     , ul : HtmlAttributes
-    , li :
+    , liOption :
         { selected : Bool
         , keyboardFocused : Bool
         , mouseFocused : Bool
@@ -241,9 +241,9 @@ view config ids (ComboBox data) allEntries maybeSelection =
         listboxConfig =
             Listbox.viewConfig uniqueId
                 { ul = Attributes.style "position" "absolute" :: views.ul
-                , li =
+                , liOption =
                     \{ selected, keyboardFocused, mouseFocused } ->
-                        views.li
+                        views.liOption
                             { selected = selected
                             , keyboardFocused = keyboardFocused
                             , mouseFocused = mouseFocused

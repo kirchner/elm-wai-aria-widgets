@@ -23,11 +23,13 @@ import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
 import Html.Lazy as Html
+import Json.Decode as Decode
+import Rearrangable.SingleSelect
 import Set exposing (Set)
 import Widget exposing (HtmlDetails)
 import Widget.Accordion as Accordion exposing (Accordion, PanelState(..))
 import Widget.ComboBox as ComboBox exposing (ComboBox)
-import Widget.Listbox as Listbox exposing (Listbox)
+import Widget.Listbox as Listbox exposing (Entry, Listbox)
 import Widget.Listbox.Dropdown as Dropdown exposing (Dropdown)
 
 
@@ -83,6 +85,9 @@ type alias Model =
     , comboBoxSelectionFollowsFocus : Bool
     , comboBoxHandleHomeAndEnd : Bool
     , comboBoxDisplayCondition : SelectedDisplayCondition
+
+    -- LISTBOX EXAMPLES
+    , rearrangableSingleSelect : Rearrangable.SingleSelect.Model
     }
 
 
@@ -122,6 +127,7 @@ init _ =
       , comboBoxSelectionFollowsFocus = False
       , comboBoxHandleHomeAndEnd = True
       , comboBoxDisplayCondition = MatchingQuery 3
+      , rearrangableSingleSelect = Rearrangable.SingleSelect.init
       }
     , Cmd.none
     )
@@ -162,6 +168,8 @@ type Msg
     | ComboBoxHandleHomeAndEndChecked Bool
     | ComboBoxDisplayConditionSelected SelectedDisplayCondition
     | ComboBoxMatchingQueryCountChanged String
+      -- SINGLE-SELECT LISTBOX
+    | RearrangableSingleSelectMsg Rearrangable.SingleSelect.Msg
 
 
 type OutMsg
@@ -274,13 +282,7 @@ update msg model =
             let
                 ( newListbox, listboxCmd, maybeOutMsg ) =
                     Listbox.update
-                        (listboxUpdateConfig
-                            True
-                            True
-                            False
-                            True
-                            True
-                        )
+                        (listboxUpdateConfig True True False True True)
                         [ Listbox.onEntrySelect EntrySelected
                         , Listbox.onEntriesSelect EntriesSelected
                         , Listbox.onEntryUnselect EntryUnselected
@@ -458,6 +460,16 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        -- SINGLE-SELECT LISTBOX
+        RearrangableSingleSelectMsg subMsg ->
+            let
+                ( newState, subCmd ) =
+                    Rearrangable.SingleSelect.update subMsg model.rearrangableSingleSelect
+            in
+            ( { model | rearrangableSingleSelect = newState }
+            , Cmd.map RearrangableSingleSelectMsg subCmd
+            )
+
 
 
 ---- SUBSCRIPTIONS
@@ -469,6 +481,8 @@ subscriptions model =
         , Sub.map MuppetsListboxMsg (Listbox.subscriptions model.muppetsListbox)
         , Sub.map DropdownMsg (Dropdown.subscriptions model.dropdown)
         , Sub.map ComboBoxMsg (ComboBox.subscriptions model.comboBox)
+        , Sub.map RearrangableSingleSelectMsg
+            (Rearrangable.SingleSelect.subscriptions model.rearrangableSingleSelect)
         ]
 
 
@@ -561,6 +575,17 @@ view model =
                                         model.comboBoxDisplayCondition
                                     ]
                                 ]
+                            ]
+                        ]
+                    }
+                , Accordion.section Expanded
+                    { id = "single-select-listbox"
+                    , header = "Single-Select Listbox"
+                    , panel =
+                        [ Html.div
+                            [ Attributes.class "container" ]
+                            [ Rearrangable.SingleSelect.view model.rearrangableSingleSelect
+                                |> Html.map RearrangableSingleSelectMsg
                             ]
                         ]
                     }
@@ -926,7 +951,10 @@ accordionViewConfig jumpAtEnds handleHomeAndEnd handlePageDownPageUp =
                         ]
                     ]
                 }
-        , dd = [ Attributes.class "panel-block" ]
+        , dd =
+            [ Attributes.class "panel-block"
+            , Attributes.style "display" "block"
+            ]
         }
 
 
@@ -952,7 +980,7 @@ listboxViewConfig : Listbox.ViewConfig String String
 listboxViewConfig =
     Listbox.viewConfig identity
         { ul = [ Attributes.class "list" ]
-        , li =
+        , liOption =
             \{ selected, keyboardFocused, mouseFocused, maybeQuery } name ->
                 { attributes =
                     [ Attributes.class "entry"
@@ -1013,7 +1041,7 @@ dropdownViewConfig =
                     ]
                 }
         , ul = [ Attributes.class "dropdown-list" ]
-        , li =
+        , liOption =
             \{ selected, keyboardFocused, mouseFocused, maybeQuery } name ->
                 { attributes =
                     [ Attributes.class "entry"
@@ -1071,7 +1099,7 @@ comboBoxViewConfig =
         , textfield =
             \{ maybeSelection, open } -> [ Attributes.class "textfield" ]
         , ul = [ Attributes.class "dropdown-list" ]
-        , li =
+        , liOption =
             \{ selected, keyboardFocused, mouseFocused, maybeQuery } name ->
                 { attributes =
                     [ Attributes.class "entry"
