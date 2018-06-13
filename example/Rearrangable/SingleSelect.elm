@@ -220,14 +220,23 @@ view model =
             [ Attributes.class "column" ]
             [ Html.div
                 [ Attributes.class "field" ]
-                [ Listbox.view listboxViewConfig
-                    { id = "important-features-listbox"
-                    , labelledBy = "important-features-listbox-label"
-                    }
-                    model.importantFeaturesListbox
-                    (List.map Listbox.option model.importantFeatures)
-                    (maybeToList model.selectedImportantFeature)
-                    |> Html.map ImportantFeaturesListboxMsg
+                [ Html.label
+                    [ Attributes.class "label"
+                    , Attributes.id "important-features-listbox-label"
+                    ]
+                    [ Html.text "Important features:" ]
+                , Html.div
+                    [ Attributes.class "control" ]
+                    [ Listbox.view
+                        listboxViewConfig
+                        { id = "important-features-listbox"
+                        , labelledBy = "important-features-listbox-label"
+                        }
+                        model.importantFeaturesListbox
+                        (List.map Listbox.option model.importantFeatures)
+                        (maybeToList model.selectedImportantFeature)
+                        |> Html.map ImportantFeaturesListboxMsg
+                    ]
                 ]
             , Html.div
                 [ Attributes.class "field"
@@ -302,14 +311,22 @@ view model =
             [ Attributes.class "column" ]
             [ Html.div
                 [ Attributes.class "field" ]
-                [ Listbox.view listboxViewConfig
-                    { id = "unimportant-features-listbox"
-                    , labelledBy = "unimportant-features-listbox-label"
-                    }
-                    model.unimportantFeaturesListbox
-                    (List.map Listbox.option model.unimportantFeatures)
-                    (maybeToList model.selectedUnimportantFeature)
-                    |> Html.map UnimportantFeaturesListboxMsg
+                [ Html.label
+                    [ Attributes.class "label"
+                    , Attributes.id "unimportant-features-listbox-label"
+                    ]
+                    [ Html.text "Unimportant features:" ]
+                , Html.div
+                    [ Attributes.class "control" ]
+                    [ Listbox.view listboxViewConfig
+                        { id = "unimportant-features-listbox"
+                        , labelledBy = "unimportant-features-listbox-label"
+                        }
+                        model.unimportantFeaturesListbox
+                        (List.map Listbox.option model.unimportantFeatures)
+                        (maybeToList model.selectedUnimportantFeature)
+                        |> Html.map UnimportantFeaturesListboxMsg
+                    ]
                 ]
             , Html.div
                 [ Attributes.class "field"
