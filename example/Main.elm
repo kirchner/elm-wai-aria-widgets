@@ -582,11 +582,8 @@ view model =
                     { id = "single-select-listbox"
                     , header = "Single-Select Listbox"
                     , panel =
-                        [ Html.div
-                            [ Attributes.class "container" ]
-                            [ Rearrangable.SingleSelect.view model.rearrangableSingleSelect
-                                |> Html.map RearrangableSingleSelectMsg
-                            ]
+                        [ Rearrangable.SingleSelect.view model.rearrangableSingleSelect
+                            |> Html.map RearrangableSingleSelectMsg
                         ]
                     }
                 ]
