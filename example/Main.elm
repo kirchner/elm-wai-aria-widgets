@@ -582,7 +582,15 @@ view model =
                     { id = "single-select-listbox"
                     , header = "Single-Select Listbox"
                     , panel =
-                        [ Rearrangable.SingleSelect.view model.rearrangableSingleSelect
+                        [ Html.p
+                            [ Attributes.style "margin-bottom" "20px" ]
+                            [ Html.text "This is a reimplementation of "
+                            , Html.a
+                                [ Attributes.href "https://www.w3.org/TR/2017/NOTE-wai-aria-practices-1.1-20171214/examples/listbox/listbox-rearrangeable.html" ]
+                                [ Html.text "Example 1" ]
+                            , Html.text " of the Example Listboxes with Rearrangeable Options of the WAI-ARIA Authoring Practices 1.1."
+                            ]
+                        , Rearrangable.SingleSelect.view model.rearrangableSingleSelect
                             |> Html.map RearrangableSingleSelectMsg
                         ]
                     }

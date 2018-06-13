@@ -254,6 +254,8 @@ view model =
                                 , "parentElement"
                                 , "parentElement"
                                 , "previousSibling"
+                                , "childNodes"
+                                , "1"
                                 , "firstChild"
                                 ]
                                 model.importantFeaturesListbox
@@ -275,6 +277,8 @@ view model =
                                 , "parentElement"
                                 , "parentElement"
                                 , "previousSibling"
+                                , "childNodes"
+                                , "1"
                                 , "firstChild"
                                 ]
                                 model.importantFeaturesListbox
