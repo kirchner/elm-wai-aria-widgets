@@ -34,6 +34,7 @@ import Set exposing (Set)
 import Views exposing (liChildren, viewCheckbox)
 import Widget exposing (HtmlDetails)
 import Widget.Accordion as Accordion exposing (Accordion, PanelState(..))
+import Widget.Dialog as Dialog exposing (Dialog)
 import Widget.Listbox as Listbox exposing (Entry, Listbox)
 import Widget.Tabs as Tabs exposing (Tabs)
 
@@ -84,11 +85,14 @@ type alias Model =
     -- LISTBOXES
     , rearrangableSingleSelect : SingleSelect.Model
     , multiSelect : MultiSelect.Model
+
+    -- DIALOG
+    , dialog : Dialog
     }
 
 
 init _ =
-    ( { tabs = Tabs.init "listboxes"
+    ( { tabs = Tabs.init "dialog"
       , tabsJumpAtEnds = True
       , tabsHandleHomeAndEnd = True
       , tabsActivateOnFocus = True
@@ -109,6 +113,7 @@ init _ =
       , dropdownComboBox = DropdownMenus.ComboBox.init
       , rearrangableSingleSelect = SingleSelect.init
       , multiSelect = MultiSelect.init
+      , dialog = Dialog.init
       }
     , Cmd.none
     )
@@ -143,6 +148,11 @@ type Msg
       -- LISTBOXES
     | RearrangableSingleSelectMsg SingleSelect.Msg
     | MultiSelectMsg MultiSelect.Msg
+      -- DIALOG
+    | OpenDialogClicked
+    | DialogClosed
+    | DialogCancelClicked
+    | DialogSubmitClicked
 
 
 type OutMsg
@@ -353,6 +363,27 @@ update msg model =
             , Cmd.map MultiSelectMsg subCmd
             )
 
+        -- DIALOG
+        OpenDialogClicked ->
+            ( { model | dialog = Dialog.open model.dialog }
+            , Cmd.none
+            )
+
+        DialogClosed ->
+            ( { model | dialog = Dialog.close model.dialog }
+            , Cmd.none
+            )
+
+        DialogCancelClicked ->
+            ( { model | dialog = Dialog.close model.dialog }
+            , Cmd.none
+            )
+
+        DialogSubmitClicked ->
+            ( { model | dialog = Dialog.close model.dialog }
+            , Cmd.none
+            )
+
 
 
 ---- SUBSCRIPTIONS
@@ -412,11 +443,115 @@ view model =
                     , focusable = False
                     }
                 , Tabs.tab
+                    { id = "dialog"
+                    , tab = "Dialog"
+                    , tabpanel = [ viewDialog model ]
+                    , focusable = False
+                    }
+                , Tabs.tab
                     { id = "configuration"
                     , tab = "Configuration"
                     , tabpanel = [ viewConfiguration model ]
                     , focusable = False
                     }
+                ]
+            ]
+        , Html.div []
+            [ Dialog.view
+                (Dialog.viewConfig
+                    { container =
+                        \open ->
+                            [ Attributes.class "modal"
+                            , Attributes.classList
+                                [ ( "is-active", open ) ]
+                            ]
+                    , backdrop = [ Attributes.class "modal-background" ]
+                    }
+                )
+                model.dialog
+                DialogClosed
+                [ Html.div
+                    [ Attributes.class "modal-card" ]
+                    [ Html.header
+                        [ Attributes.class "modal-card-head" ]
+                        [ Html.p
+                            [ Attributes.class "modal-card-title" ]
+                            [ Html.text "Enter your address" ]
+                        , Html.button
+                            [ Attributes.class "delete"
+                            , Events.onClick DialogClosed
+                            ]
+                            []
+                        ]
+                    , Html.section
+                        [ Attributes.class "modal-card-body" ]
+                        [ Html.div
+                            [ Attributes.class "container" ]
+                            [ Html.form
+                                []
+                                [ Html.div
+                                    [ Attributes.class "field" ]
+                                    [ Html.label
+                                        [ Attributes.class "label" ]
+                                        [ Html.text "Street" ]
+                                    , Html.div
+                                        [ Attributes.class "control" ]
+                                        [ Html.input
+                                            [ Attributes.class "input"
+                                            , Attributes.type_ "text"
+                                            , Attributes.placeholder "Your street.."
+                                            ]
+                                            []
+                                        ]
+                                    ]
+                                , Html.div
+                                    [ Attributes.class "field" ]
+                                    [ Html.label
+                                        [ Attributes.class "label" ]
+                                        [ Html.text "City" ]
+                                    , Html.div
+                                        [ Attributes.class "control" ]
+                                        [ Html.input
+                                            [ Attributes.class "input"
+                                            , Attributes.type_ "text"
+                                            , Attributes.placeholder "Your city.."
+                                            ]
+                                            []
+                                        ]
+                                    ]
+                                , Html.div
+                                    [ Attributes.class "field" ]
+                                    [ Html.label
+                                        [ Attributes.class "label" ]
+                                        [ Html.text "State" ]
+                                    , Html.div
+                                        [ Attributes.class "control" ]
+                                        [ Html.input
+                                            [ Attributes.class "input"
+                                            , Attributes.type_ "text"
+                                            , Attributes.placeholder "Your state.."
+                                            ]
+                                            []
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    , Html.footer
+                        [ Attributes.class "modal-card-foot" ]
+                        [ Html.button
+                            [ Attributes.class "button"
+                            , Attributes.class "is-success"
+                            , Events.onClick DialogSubmitClicked
+                            ]
+                            [ Html.text "Submit address" ]
+                        , Html.button
+                            [ Attributes.class "button"
+                            , Events.onClick DialogCancelClicked
+                            ]
+                            [ Html.text "Cancel" ]
+                        ]
+                    ]
                 ]
             ]
         ]
@@ -548,6 +683,21 @@ viewListboxes model =
             ]
         , MultiSelect.view model.multiSelect
             |> Html.map MultiSelectMsg
+        ]
+
+
+viewDialog : Model -> Html Msg
+viewDialog model =
+    Html.div
+        [ Attributes.class "container"
+        , Attributes.style "padding" "15px"
+        ]
+        [ Html.button
+            [ Attributes.class "button"
+            , Attributes.style "width" "auto"
+            , Events.onClick OpenDialogClicked
+            ]
+            [ Html.text "Open Dialog" ]
         ]
 
 
