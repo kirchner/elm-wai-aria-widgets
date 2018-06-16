@@ -24,7 +24,8 @@ import Html.Attributes as Attributes
 import Html.Events as Events
 import Html.Lazy as Html
 import Json.Decode as Decode
-import Rearrangable.SingleSelect
+import Listboxes.MultiSelect as MultiSelect
+import Listboxes.SingleSelect as SingleSelect
 import Set exposing (Set)
 import Widget exposing (HtmlDetails)
 import Widget.Accordion as Accordion exposing (Accordion, PanelState(..))
@@ -94,7 +95,8 @@ type alias Model =
     , comboBoxDisplayCondition : SelectedDisplayCondition
 
     -- LISTBOX EXAMPLES
-    , rearrangableSingleSelect : Rearrangable.SingleSelect.Model
+    , rearrangableSingleSelect : SingleSelect.Model
+    , multiSelect : MultiSelect.Model
     }
 
 
@@ -138,7 +140,8 @@ init _ =
       , comboBoxSelectionFollowsFocus = False
       , comboBoxHandleHomeAndEnd = True
       , comboBoxDisplayCondition = MatchingQuery 3
-      , rearrangableSingleSelect = Rearrangable.SingleSelect.init
+      , rearrangableSingleSelect = SingleSelect.init
+      , multiSelect = MultiSelect.init
       }
     , Cmd.none
     )
@@ -185,7 +188,8 @@ type Msg
     | ComboBoxDisplayConditionSelected SelectedDisplayCondition
     | ComboBoxMatchingQueryCountChanged String
       -- SINGLE-SELECT LISTBOX
-    | RearrangableSingleSelectMsg Rearrangable.SingleSelect.Msg
+    | RearrangableSingleSelectMsg SingleSelect.Msg
+    | MultiSelectMsg MultiSelect.Msg
 
 
 type OutMsg
@@ -501,10 +505,19 @@ update msg model =
         RearrangableSingleSelectMsg subMsg ->
             let
                 ( newState, subCmd ) =
-                    Rearrangable.SingleSelect.update subMsg model.rearrangableSingleSelect
+                    SingleSelect.update subMsg model.rearrangableSingleSelect
             in
             ( { model | rearrangableSingleSelect = newState }
             , Cmd.map RearrangableSingleSelectMsg subCmd
+            )
+
+        MultiSelectMsg subMsg ->
+            let
+                ( newState, subCmd ) =
+                    MultiSelect.update subMsg model.multiSelect
+            in
+            ( { model | multiSelect = newState }
+            , Cmd.map MultiSelectMsg subCmd
             )
 
 
@@ -519,7 +532,9 @@ subscriptions model =
         , Sub.map DropdownMsg (Dropdown.subscriptions model.dropdown)
         , Sub.map ComboBoxMsg (ComboBox.subscriptions model.comboBox)
         , Sub.map RearrangableSingleSelectMsg
-            (Rearrangable.SingleSelect.subscriptions model.rearrangableSingleSelect)
+            (SingleSelect.subscriptions model.rearrangableSingleSelect)
+        , Sub.map MultiSelectMsg
+            (MultiSelect.subscriptions model.multiSelect)
         ]
 
 
@@ -549,8 +564,8 @@ view model =
                     , focusable = False
                     }
                 , Tabs.tab
-                    { id = "advanced"
-                    , tab = "Advanced"
+                    { id = "listboxes"
+                    , tab = "Listboxes"
                     , tabpanel = [ viewAdvanced model ]
                     , focusable = False
                     }
@@ -664,14 +679,41 @@ viewAdvanced model =
         ]
         [ Html.p
             [ Attributes.style "margin-bottom" "20px" ]
-            [ Html.text "This is a reimplementation of "
+            [ Html.text "These are reimplementations of the "
             , Html.a
                 [ Attributes.href "https://www.w3.org/TR/2017/NOTE-wai-aria-practices-1.1-20171214/examples/listbox/listbox-rearrangeable.html" ]
-                [ Html.text "Example 1" ]
-            , Html.text " of the Example Listboxes with Rearrangeable Options of the WAI-ARIA Authoring Practices 1.1."
+                [ Html.text "Example Listboxes with Rearrangable Optios" ]
+            , Html.text " of the WAI-ARIA Authoring Practices 1.1."
             ]
-        , Rearrangable.SingleSelect.view model.rearrangableSingleSelect
+        , Html.div
+            [ Attributes.class "content"
+            , Attributes.style "margin-top" "35px"
+            ]
+            [ Html.h4
+                [ Attributes.class "title"
+                , Attributes.class "is-4"
+                ]
+                [ Html.text "Example 1: Single-Select Listbox" ]
+            , Html.p []
+                [ Html.text "Rank features important to you when choosing where to live. If a feature is unimportant, move it to the unimportant features list."
+                ]
+            ]
+        , SingleSelect.view model.rearrangableSingleSelect
             |> Html.map RearrangableSingleSelectMsg
+        , Html.div
+            [ Attributes.class "content"
+            , Attributes.style "margin-top" "35px"
+            ]
+            [ Html.h4
+                [ Attributes.class "title"
+                , Attributes.class "is-4"
+                ]
+                [ Html.text "Example 2: Multi-Select Listbox" ]
+            , Html.p []
+                [ Html.text "Choose upgrades for your transport capsule." ]
+            ]
+        , MultiSelect.view model.multiSelect
+            |> Html.map MultiSelectMsg
         ]
 
 

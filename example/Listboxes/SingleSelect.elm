@@ -1,4 +1,4 @@
-module Rearrangable.SingleSelect
+module Listboxes.SingleSelect
     exposing
         ( Model
         , Msg
