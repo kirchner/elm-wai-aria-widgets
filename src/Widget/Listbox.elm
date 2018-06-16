@@ -1429,27 +1429,30 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
             )
 
         ListFocused id maybeScrollData ->
-            let
-                maybeNewEntry =
-                    data.maybeKeyboardFocus
-                        |> or data.maybeLastSelectedEntry
-                        |> Maybe.andThen (find uniqueId allEntries)
-                        |> Maybe.map Tuple.second
-                        |> or (List.head selection)
-                        |> or (Internal.firstEntry allEntries)
-            in
-            case maybeNewEntry of
-                Nothing ->
-                    ( listbox, Cmd.none, Nothing )
+            if data.preventScroll then
+                ( listbox, Cmd.none, Nothing )
+            else
+                let
+                    maybeNewEntry =
+                        data.maybeKeyboardFocus
+                            |> or data.maybeLastSelectedEntry
+                            |> Maybe.andThen (find uniqueId allEntries)
+                            |> Maybe.map Tuple.second
+                            |> or (List.head selection)
+                            |> or (Internal.firstEntry allEntries)
+                in
+                case maybeNewEntry of
+                    Nothing ->
+                        ( listbox, Cmd.none, Nothing )
 
-                Just newEntry ->
-                    updateFocus behaviour uniqueId events selection False newEntry data
-                        |> andDo
-                            (if data.preventScroll then
-                                Cmd.none
-                             else
-                                adjustScrollTop id (uniqueId newEntry) maybeScrollData
-                            )
+                    Just newEntry ->
+                        updateFocus behaviour uniqueId events selection False newEntry data
+                            |> andDo
+                                (if data.preventScroll then
+                                    Cmd.none
+                                 else
+                                    adjustScrollTop id (uniqueId newEntry) maybeScrollData
+                                )
 
         ListBlured ->
             ( Listbox
