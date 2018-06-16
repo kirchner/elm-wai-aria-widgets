@@ -61,7 +61,7 @@ type Msg
     | ImportantFeaturesDownPressed Listbox.DomInfo
     | ImportantFeaturesAltArrowDownPressed Listbox.DomInfo
     | ImportantFeaturesNotImportantClicked
-    | ImportantFeaturesBackspacePressed
+    | ImportantFeaturesDeletePressed
     | UnimportantFeaturesListboxMsg (Listbox.Msg String)
     | UnimportantFeaturesImportantClicked
     | UnimportantFeaturesEnterPressed
@@ -123,7 +123,7 @@ update msg model =
                     , Cmd.none
                     )
 
-        ImportantFeaturesBackspacePressed ->
+        ImportantFeaturesDeletePressed ->
             case model.selectedImportantFeature of
                 Nothing ->
                     ( model, Cmd.none )
@@ -384,8 +384,8 @@ view model =
                                                     Listbox.domInfoOf belowFocused [ "target" ]
                                                         |> Decode.map ImportantFeaturesAltArrowDownPressed
 
-                                            ( "Backspace", False ) ->
-                                                Decode.succeed ImportantFeaturesBackspacePressed
+                                            ( "Delete", False ) ->
+                                                Decode.succeed ImportantFeaturesDeletePressed
 
                                             _ ->
                                                 Decode.fail "not handling that key here"
