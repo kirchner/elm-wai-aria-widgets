@@ -15,6 +15,7 @@ module Widget.Listbox
         , divider
         , domInfoOf
         , focus
+        , focusEntry
         , focusNextOrFirstEntry
         , focusPreviousOrFirstEntry
         , focusedEntry
@@ -95,7 +96,7 @@ module Widget.Listbox
 
 @docs focusedEntry
 
-@docs focusNextOrFirstEntry, focusPreviousOrFirstEntry
+@docs focusEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
 
 
 ## DOM Stuff
@@ -232,6 +233,18 @@ focusedEntry (UpdateConfig uniqueId _) (Listbox { maybeKeyboardFocus }) allEntri
     maybeKeyboardFocus
         |> Maybe.andThen (find uniqueId allEntries)
         |> Maybe.map Tuple.second
+
+
+{-| TODO
+-}
+focusEntry : UpdateConfig a -> List (Event a outMsg) -> a -> Listbox -> ( Listbox, Maybe outMsg )
+focusEntry config events newEntry (Listbox data) =
+    let
+        (UpdateConfig uniqueId behaviour) =
+            config
+    in
+    data
+        |> updateFocus behaviour uniqueId events [] False newEntry
 
 
 {-| TODO
@@ -458,12 +471,17 @@ type alias Ids =
 -}
 view :
     ViewConfig a divider
-    -> Ids
+    ->
+        { id : String
+        , labelledBy : String
+        , lift : Msg a -> msg
+        , onKeyDown : Decoder msg
+        }
     -> Listbox
     -> List (Entry a divider)
     -> List a
-    -> Html (Msg a)
-view (ViewConfig uniqueId views) ids listbox allEntries selection =
+    -> Html msg
+view (ViewConfig uniqueId views) cfg listbox allEntries selection =
     let
         renderedEntries =
             { spaceAboveFirst = 0
@@ -479,7 +497,7 @@ view (ViewConfig uniqueId views) ids listbox allEntries selection =
             , entriesBelow = []
             }
     in
-    viewHelp renderedEntries uniqueId views ids listbox allEntries selection
+    viewHelp renderedEntries uniqueId views cfg listbox allEntries selection
 
 
 {-| TODO
@@ -488,12 +506,17 @@ viewLazy :
     (a -> Float)
     -> (divider -> Float)
     -> ViewConfig a divider
-    -> Ids
+    ->
+        { id : String
+        , labelledBy : String
+        , lift : Msg a -> msg
+        , onKeyDown : Decoder msg
+        }
     -> Listbox
     -> List (Entry a divider)
     -> List a
-    -> Html (Msg a)
-viewLazy entryHeight dividerHeight (ViewConfig uniqueId views) ids ((Listbox data) as listbox) allEntries selection =
+    -> Html msg
+viewLazy entryHeight dividerHeight (ViewConfig uniqueId views) cfg ((Listbox data) as listbox) allEntries selection =
     let
         renderedEntries =
             computeRenderedEntries
@@ -509,19 +532,24 @@ viewLazy entryHeight dividerHeight (ViewConfig uniqueId views) ids ((Listbox dat
                 |> Maybe.andThen (find uniqueId allEntries)
                 |> Maybe.map Tuple.first
     in
-    viewHelp renderedEntries uniqueId views ids listbox allEntries selection
+    viewHelp renderedEntries uniqueId views cfg listbox allEntries selection
 
 
 viewHelp :
     RenderedEntries a divider
     -> (a -> String)
     -> Views a divider
-    -> Ids
+    ->
+        { id : String
+        , labelledBy : String
+        , lift : Msg a -> msg
+        , onKeyDown : Decoder msg
+        }
     -> Listbox
     -> List (Entry a divider)
     -> List a
-    -> Html (Msg a)
-viewHelp renderedEntries uniqueId views ids (Listbox data) allEntries selection =
+    -> Html msg
+viewHelp renderedEntries uniqueId views cfg (Listbox data) allEntries selection =
     let
         maybeQuery =
             case data.query of
@@ -532,27 +560,32 @@ viewHelp renderedEntries uniqueId views ids (Listbox data) allEntries selection 
                     Just query
     in
     Html.ul
-        ([ Attributes.id (printListId ids.id)
+        ([ Attributes.id (printListId cfg.id)
          , Attributes.style "position" "relative"
          , Attributes.attribute "role" "listbox"
-         , Attributes.attribute "aria-labelledby" ids.labelledBy
+         , Attributes.attribute "aria-labelledby" cfg.labelledBy
          , Events.preventDefaultOn "keydown"
-            (keyInfoDecoder
-                |> Decode.andThen
-                    (listKeydown
-                        uniqueId
-                        ids.id
-                        data.maybeKeyboardFocus
-                        renderedEntries.visibleEntries
-                    )
+            (Decode.oneOf
+                [ cfg.onKeyDown
+                , keyInfoDecoder
+                    |> Decode.andThen
+                        (listKeydown
+                            uniqueId
+                            cfg.id
+                            data.maybeKeyboardFocus
+                            renderedEntries.visibleEntries
+                        )
+                    |> Decode.map cfg.lift
+                ]
                 |> preventDefault
             )
-         , Events.onMouseDown ListMouseDown
-         , Events.onMouseUp ListMouseUp
+         , Events.onMouseDown (cfg.lift ListMouseDown)
+         , Events.onMouseUp (cfg.lift ListMouseUp)
          , Events.on "scroll" <|
-            Decode.map2 ListScrolled
-                (Decode.at [ "target", "scrollTop" ] Decode.float)
-                (Decode.at [ "target", "clientHeight" ] Decode.float)
+            Decode.map cfg.lift <|
+                Decode.map2 ListScrolled
+                    (Decode.at [ "target", "scrollTop" ] Decode.float)
+                    (Decode.at [ "target", "clientHeight" ] Decode.float)
          , Events.on "focus"
             (Decode.oneOf
                 [ data.maybeKeyboardFocus
@@ -565,18 +598,19 @@ viewHelp renderedEntries uniqueId views ids (Listbox data) allEntries selection 
                     |> Maybe.withDefault (Decode.succeed Nothing)
                 , Decode.succeed Nothing
                 ]
-                |> Decode.map (ListFocused ids.id)
+                |> Decode.map (ListFocused cfg.id)
+                |> Decode.map cfg.lift
             )
-         , Events.on "blur" (Decode.succeed ListBlured)
+         , Events.on "blur" (Decode.succeed (cfg.lift ListBlured))
          ]
-            |> setAriaActivedescendant ids.id uniqueId data.maybeKeyboardFocus allEntries
+            |> setAriaActivedescendant cfg.id uniqueId data.maybeKeyboardFocus allEntries
             |> setTabindex views.focusable
-            |> appendAttributes views.ul
+            |> appendAttributes cfg.lift views.ul
         )
         (viewEntries
             uniqueId
             views
-            ids
+            cfg
             data.maybeKeyboardFocus
             data.maybeMouseFocus
             selection
@@ -964,17 +998,22 @@ indexOfNextEntry currentIndex entries =
 viewEntries :
     (a -> String)
     -> Views a divider
-    -> Ids
+    ->
+        { id : String
+        , labelledBy : String
+        , lift : Msg a -> msg
+        , onKeyDown : Decoder msg
+        }
     -> Maybe String
     -> Maybe String
     -> List a
     -> Maybe String
     -> RenderedEntries a divider
-    -> List (Html (Msg a))
-viewEntries uniqueId views ids maybeKeyboardFocus maybeMouseFocus selection maybeQuery renderedEntries =
+    -> List (Html msg)
+viewEntries uniqueId views cfg maybeKeyboardFocus maybeMouseFocus selection maybeQuery renderedEntries =
     let
         entryConfig =
-            { id = ids.id
+            { id = cfg.id
             , liOption = views.liOption
             , liDivider = views.liDivider
             , uniqueId = uniqueId
@@ -1006,6 +1045,7 @@ viewEntries uniqueId views ids maybeKeyboardFocus maybeMouseFocus selection mayb
 
         viewEntryWrapper e =
             viewEntry entryConfig
+                cfg.lift
                 maybeQuery
                 (selected e selection)
                 (maybeKeyboardFocus == maybeUniqueId e)
@@ -1039,13 +1079,14 @@ viewEntry :
     , liDivider : divider -> HtmlDetails
     , uniqueId : a -> String
     }
+    -> (Msg a -> msg)
     -> Maybe String
     -> Bool
     -> Bool
     -> Bool
     -> Entry a divider
-    -> Html (Msg a)
-viewEntry config maybeQuery selected keyboardFocused mouseFocused e =
+    -> Html msg
+viewEntry config lift maybeQuery selected keyboardFocused mouseFocused e =
     case e of
         Option a ->
             let
@@ -1065,17 +1106,17 @@ viewEntry config maybeQuery selected keyboardFocused mouseFocused e =
                         attrs
             in
             Html.li
-                ([ Events.onMouseEnter (EntryMouseEntered (config.uniqueId a))
-                 , Events.onMouseLeave EntryMouseLeft
-                 , Events.onClick (EntryClicked a)
+                ([ Events.onMouseEnter (lift (EntryMouseEntered (config.uniqueId a)))
+                 , Events.onMouseLeave (lift EntryMouseLeft)
+                 , Events.onClick (lift (EntryClicked a))
                  , Attributes.id (printEntryId config.id (config.uniqueId a))
                  , Attributes.attribute "role" "option"
                  ]
                     |> setAriaSelected
-                    |> appendAttributes attributes
+                    |> appendAttributes lift attributes
                 )
                 (children
-                    |> List.map (Html.map (\_ -> NoOp))
+                    |> List.map (Html.map (\_ -> lift NoOp))
                 )
 
         Divider d ->
@@ -1084,9 +1125,9 @@ viewEntry config maybeQuery selected keyboardFocused mouseFocused e =
                     config.liDivider d
             in
             Html.li
-                (appendAttributes attributes [])
+                (appendAttributes lift attributes [])
                 (children
-                    |> List.map (Html.map (\_ -> NoOp))
+                    |> List.map (Html.map (\_ -> lift NoOp))
                 )
 
 
@@ -1996,12 +2037,13 @@ printEntryId id entryId =
 
 
 appendAttributes :
-    List (Html.Attribute Never)
-    -> List (Html.Attribute (Msg a))
-    -> List (Html.Attribute (Msg a))
-appendAttributes neverAttrs attrs =
+    (Msg a -> msg)
+    -> List (Html.Attribute Never)
+    -> List (Html.Attribute msg)
+    -> List (Html.Attribute msg)
+appendAttributes lift neverAttrs attrs =
     neverAttrs
-        |> List.map (Attributes.map (\_ -> NoOp))
+        |> List.map (Attributes.map (\_ -> lift NoOp))
         |> List.append attrs
 
 

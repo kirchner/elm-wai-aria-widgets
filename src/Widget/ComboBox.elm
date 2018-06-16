@@ -333,11 +333,12 @@ view config ids (ComboBox data) allEntries maybeSelection =
                     Listbox.view listboxConfig
                         { id = printListboxId ids.id
                         , labelledBy = ids.labelledBy
+                        , lift = ListboxMsg (Just ids.id)
+                        , onKeyDown = Decode.fail "not handling keys here"
                         }
                         data.listbox
                         filteredEntries
                         selection
-                        |> Html.map (ListboxMsg (Just ids.id))
           else
             Html.text ""
         ]

@@ -230,11 +230,12 @@ view (ViewConfig uniqueId views) ids (Dropdown data) allEntries maybeSelection =
         , Listbox.view listboxConfig
             { id = printListboxId ids.id
             , labelledBy = ids.labelledBy
+            , lift = ListboxMsg (Just ids.id)
+            , onKeyDown = Decode.fail "not handling keys here"
             }
             data.listbox
             allEntries
             selection
-            |> Html.map (ListboxMsg (Just ids.id))
         ]
 
 

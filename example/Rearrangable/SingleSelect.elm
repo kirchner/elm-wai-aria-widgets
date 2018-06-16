@@ -12,6 +12,7 @@ import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
 import Json.Decode as Decode
+import List.Extra as List
 import Task
 import Widget.Listbox as Listbox exposing (Listbox)
 
@@ -56,10 +57,14 @@ type Msg
     = NoOp
     | ImportantFeaturesListboxMsg (Listbox.Msg String)
     | ImportantFeaturesUpPressed Listbox.DomInfo
+    | ImportantFeaturesAltArrowUpPressed Listbox.DomInfo
     | ImportantFeaturesDownPressed Listbox.DomInfo
+    | ImportantFeaturesAltArrowDownPressed Listbox.DomInfo
     | ImportantFeaturesNotImportantClicked
+    | ImportantFeaturesBackspacePressed
     | UnimportantFeaturesListboxMsg (Listbox.Msg String)
     | UnimportantFeaturesImportantClicked
+    | UnimportantFeaturesEnterPressed
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -92,54 +97,16 @@ update msg model =
             )
 
         ImportantFeaturesUpPressed domInfo ->
-            case model.selectedImportantFeature of
-                Nothing ->
-                    ( model, Cmd.none )
+            moveImportantFeatureUp domInfo model
 
-                Just feature ->
-                    let
-                        moveUp features =
-                            case features of
-                                current :: next :: rest ->
-                                    if next == feature then
-                                        next :: current :: moveUp rest
-                                    else
-                                        current :: moveUp (next :: rest)
-
-                                _ ->
-                                    features
-                    in
-                    ( { model | importantFeatures = moveUp model.importantFeatures }
-                    , Task.attempt (\_ -> NoOp) <|
-                        Listbox.scrollIntoViewVia domInfo
-                            "important-features-listbox"
-                            model.importantFeaturesListbox
-                    )
+        ImportantFeaturesAltArrowUpPressed domInfo ->
+            moveImportantFeatureUp domInfo model
 
         ImportantFeaturesDownPressed domInfo ->
-            case model.selectedImportantFeature of
-                Nothing ->
-                    ( model, Cmd.none )
+            moveImportantFeatureDown domInfo model
 
-                Just feature ->
-                    let
-                        moveDown features =
-                            case features of
-                                current :: next :: rest ->
-                                    if current == feature then
-                                        next :: current :: moveDown rest
-                                    else
-                                        current :: moveDown (next :: rest)
-
-                                _ ->
-                                    features
-                    in
-                    ( { model | importantFeatures = moveDown model.importantFeatures }
-                    , Task.attempt (\_ -> NoOp) <|
-                        Listbox.scrollIntoViewVia domInfo
-                            "important-features-listbox"
-                            model.importantFeaturesListbox
-                    )
+        ImportantFeaturesAltArrowDownPressed domInfo ->
+            moveImportantFeatureDown domInfo model
 
         ImportantFeaturesNotImportantClicked ->
             case model.selectedImportantFeature of
@@ -151,6 +118,46 @@ update msg model =
                         | selectedImportantFeature = Nothing
                         , importantFeatures =
                             List.filter (\f -> f /= feature) model.importantFeatures
+                        , unimportantFeatures = feature :: model.unimportantFeatures
+                      }
+                    , Cmd.none
+                    )
+
+        ImportantFeaturesBackspacePressed ->
+            case model.selectedImportantFeature of
+                Nothing ->
+                    ( model, Cmd.none )
+
+                Just feature ->
+                    let
+                        ( start, end ) =
+                            model.importantFeatures
+                                |> List.break (\f -> f == feature)
+
+                        ( newListbox, maybeOutMsg ) =
+                            case
+                                List.head (List.drop 1 end)
+                                    |> or (List.head (List.reverse start))
+                            of
+                                Nothing ->
+                                    ( model.importantFeaturesListbox, Nothing )
+
+                                Just newFeature ->
+                                    Listbox.focusEntry listboxUpdateConfig
+                                        [ Listbox.onEntrySelect identity ]
+                                        newFeature
+                                        model.importantFeaturesListbox
+                    in
+                    ( { model
+                        | importantFeaturesListbox = newListbox
+                        , selectedImportantFeature =
+                            case maybeOutMsg of
+                                Just newFeature ->
+                                    Just newFeature
+
+                                _ ->
+                                    Nothing
+                        , importantFeatures = start ++ List.drop 1 end
                         , unimportantFeatures = feature :: model.unimportantFeatures
                       }
                     , Cmd.none
@@ -193,6 +200,100 @@ update msg model =
                       }
                     , Cmd.none
                     )
+
+        UnimportantFeaturesEnterPressed ->
+            case model.selectedUnimportantFeature of
+                Nothing ->
+                    ( model, Cmd.none )
+
+                Just feature ->
+                    let
+                        ( start, end ) =
+                            model.unimportantFeatures
+                                |> List.break (\f -> f == feature)
+
+                        ( newListbox, maybeOutMsg ) =
+                            case
+                                List.head (List.drop 1 end)
+                                    |> or (List.head (List.reverse start))
+                            of
+                                Nothing ->
+                                    ( model.unimportantFeaturesListbox, Nothing )
+
+                                Just newFeature ->
+                                    Listbox.focusEntry listboxUpdateConfig
+                                        [ Listbox.onEntrySelect identity ]
+                                        newFeature
+                                        model.unimportantFeaturesListbox
+                    in
+                    ( { model
+                        | unimportantFeaturesListbox = newListbox
+                        , selectedUnimportantFeature =
+                            case maybeOutMsg of
+                                Just newFeature ->
+                                    Just newFeature
+
+                                _ ->
+                                    Nothing
+                        , unimportantFeatures = start ++ List.drop 1 end
+                        , importantFeatures = feature :: model.importantFeatures
+                      }
+                    , Cmd.none
+                    )
+
+
+moveImportantFeatureUp : Listbox.DomInfo -> Model -> ( Model, Cmd Msg )
+moveImportantFeatureUp domInfo model =
+    case model.selectedImportantFeature of
+        Nothing ->
+            ( model, Cmd.none )
+
+        Just feature ->
+            let
+                moveUp features =
+                    case features of
+                        current :: next :: rest ->
+                            if next == feature then
+                                next :: current :: moveUp rest
+                            else
+                                current :: moveUp (next :: rest)
+
+                        _ ->
+                            features
+            in
+            ( { model | importantFeatures = moveUp model.importantFeatures }
+            , Task.attempt (\_ -> NoOp) <|
+                Listbox.scrollIntoViewVia domInfo
+                    "important-features-listbox"
+                    model.importantFeaturesListbox
+            )
+
+
+moveImportantFeatureDown : Listbox.DomInfo -> Model -> ( Model, Cmd Msg )
+moveImportantFeatureDown domInfo model =
+    case model.selectedImportantFeature of
+        Nothing ->
+            ( model, Cmd.none )
+
+        Just feature ->
+            let
+                moveDown features =
+                    case features of
+                        current :: next :: rest ->
+                            if current == feature then
+                                next :: current :: moveDown rest
+                            else
+                                current :: moveDown (next :: rest)
+
+                        _ ->
+                            features
+            in
+            ( { model | importantFeatures = moveDown model.importantFeatures }
+            , Task.attempt (\_ -> NoOp) <|
+                Listbox.scrollIntoViewVia domInfo
+                    "important-features-listbox"
+                    model.importantFeaturesListbox
+            )
 
 
 subscriptions : Model -> Sub Msg
@@ -261,16 +362,39 @@ view model =
                         listboxViewConfig
                         { id = "important-features-listbox"
                         , labelledBy = "important-features-listbox-label"
+                        , lift = ImportantFeaturesListboxMsg
+                        , onKeyDown =
+                            Decode.map2 Tuple.pair
+                                (Decode.field "key" Decode.string)
+                                (Decode.field "altKey" Decode.bool)
+                                |> Decode.andThen
+                                    (\( rawCode, altDown ) ->
+                                        case ( rawCode, altDown ) of
+                                            ( "ArrowUp", True ) ->
+                                                Listbox.domInfoOf aboveFocused [ "target" ]
+                                                    |> Decode.map ImportantFeaturesAltArrowUpPressed
+
+                                            ( "ArrowDown", True ) ->
+                                                Listbox.domInfoOf belowFocused [ "target" ]
+                                                    |> Decode.map ImportantFeaturesAltArrowDownPressed
+
+                                            ( "Backspace", False ) ->
+                                                Decode.succeed ImportantFeaturesBackspacePressed
+
+                                            _ ->
+                                                Decode.fail "not handling that key here"
+                                    )
                         }
                         model.importantFeaturesListbox
                         entries
                         (maybeToList model.selectedImportantFeature)
-                        |> Html.map ImportantFeaturesListboxMsg
                     ]
                 ]
             , Html.div
                 [ Attributes.class "field"
                 , Attributes.class "is-grouped"
+                , Attributes.attribute "role" "toolbar"
+                , Attributes.attribute "aria-label" "Actions"
                 ]
                 [ Html.div
                     [ Attributes.class "control" ]
@@ -281,6 +405,9 @@ view model =
                         , Events.on "click" <|
                             Decode.map ImportantFeaturesUpPressed <|
                                 Listbox.domInfoOf aboveFocused pathToListbox
+                        , Attributes.attribute "aria-keyshortcuts" "Alt+ArrowUp"
+                        , Attributes.attribute "aria-disabled" <|
+                            boolToString (model.selectedImportantFeature == Nothing || firstSelected)
                         ]
                         [ Html.text "Up" ]
                     ]
@@ -293,6 +420,9 @@ view model =
                         , Events.on "click" <|
                             Decode.map ImportantFeaturesDownPressed <|
                                 Listbox.domInfoOf belowFocused pathToListbox
+                        , Attributes.attribute "aria-keyshortcuts" "Alt+ArrowDown"
+                        , Attributes.attribute "aria-disabled" <|
+                            boolToString (model.selectedImportantFeature == Nothing || lastSelected)
                         ]
                         [ Html.text "Down" ]
                     ]
@@ -302,6 +432,9 @@ view model =
                         [ Attributes.class "button"
                         , Attributes.disabled (model.selectedImportantFeature == Nothing)
                         , Events.onClick ImportantFeaturesNotImportantClicked
+                        , Attributes.attribute "aria-keyshortcuts" "Delete"
+                        , Attributes.attribute "aria-disabled" <|
+                            boolToString (model.selectedImportantFeature == Nothing)
                         ]
                         [ Html.span []
                             [ Html.text "Not Important" ]
@@ -333,11 +466,22 @@ view model =
                     [ Listbox.view listboxViewConfig
                         { id = "unimportant-features-listbox"
                         , labelledBy = "unimportant-features-listbox-label"
+                        , lift = UnimportantFeaturesListboxMsg
+                        , onKeyDown =
+                            Decode.field "key" Decode.string
+                                |> Decode.andThen
+                                    (\rawCode ->
+                                        case rawCode of
+                                            "Enter" ->
+                                                Decode.succeed UnimportantFeaturesEnterPressed
+
+                                            _ ->
+                                                Decode.fail "not handling that key here"
+                                    )
                         }
                         model.unimportantFeaturesListbox
                         (List.map Listbox.option model.unimportantFeatures)
                         (maybeToList model.selectedUnimportantFeature)
-                        |> Html.map UnimportantFeaturesListboxMsg
                     ]
                 ]
             , Html.div
@@ -350,6 +494,9 @@ view model =
                         [ Attributes.class "button"
                         , Attributes.disabled (model.selectedUnimportantFeature == Nothing)
                         , Events.onClick UnimportantFeaturesImportantClicked
+                        , Attributes.attribute "aria-keyshortcuts" "Enter"
+                        , Attributes.attribute "aria-disabled" <|
+                            boolToString (model.selectedUnimportantFeature == Nothing)
                         ]
                         [ Html.span
                             [ Attributes.class "icon"
@@ -418,3 +565,21 @@ maybeToList maybeA =
 
         Just a ->
             [ a ]
+
+
+or : Maybe a -> Maybe a -> Maybe a
+or fallback default =
+    case default of
+        Nothing ->
+            fallback
+
+        Just _ ->
+            default
+
+
+boolToString : Bool -> String
+boolToString b =
+    if b then
+        "true"
+    else
+        "false"

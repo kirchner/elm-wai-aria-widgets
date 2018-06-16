@@ -633,10 +633,11 @@ viewListbox listbox selection =
                     listboxViewConfig
                     { id = "locales"
                     , labelledBy = "locales-label"
+                    , lift = ListboxMsg
+                    , onKeyDown = Decode.fail "not handling keys here"
                     }
                     listbox
                     locales
-                |> Html.map ListboxMsg
             ]
         , Html.p
             [ Attributes.class "help" ]
@@ -692,10 +693,11 @@ viewMuppetsListbox listbox selection =
                     listboxViewConfig
                     { id = "muppets"
                     , labelledBy = "muppets-label"
+                    , lift = MuppetsListboxMsg
+                    , onKeyDown = Decode.fail "not handling keys here"
                     }
                     listbox
                     muppets
-                |> Html.map MuppetsListboxMsg
             ]
         , Html.p
             [ Attributes.class "help" ]
