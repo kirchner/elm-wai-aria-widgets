@@ -6,7 +6,58 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.1/css/bulma.min.css"  >
     <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.0.13/css/all.css" integrity="sha384-DNOHZ68U8hZfKXOrtjWvjxusGo9WQnrNx2sqG0tfsghAvtVlRW3tvkXWZh58N9jp" crossorigin="anonymous">
     <style>
+      .tabs-container {
+          flex-flow: column;
+          -webkit-overflow-scrolling: touch;
+          align-items: stretch;
+          display: flex;
+          font-size: 1rem;
+          justify-content: space-between;
+          overflow: hidden;
+          overflow-x: hidden;
+          overflow-x: auto;
+      }
+
+      .tablist {
+          align-items: center;
+          border-bottom-color: #dbdbdb;
+          border-bottom-style: solid;
+          border-bottom-width: 1px;
+          display: flex;
+          flex-grow: 1;
+          flex-shrink: 0;
+          justify-content: flex-start;
+      }
+
+      .tab-button {
+          align-items: center;
+          border-bottom-color: #dbdbdb;
+          border-bottom-style: solid;
+          border-bottom-width: 1px;
+          border-top-width: 0px;
+          border-left-width: 0px;
+          border-right-width: 0px;
+          color: #4a4a4a;
+          display: flex;
+          justify-content: center;
+          margin-bottom: -1px;
+          padding: .5em 1em;
+          vertical-align: top;
+          background-color: #ffffff;
+          cursor: pointer;
+      }
+
+      .tab-button--is-active {
+          border-bottom-color: #3273dc;
+          color: #3273dc;
+      }
+
+      .tabpanel {
+          padding-top: 15px;
+      }
+
       .accordion-button {
+          display: flex !important;
           background: none;
           border: 0;
           color: hsl(0, 0%, 13%);
@@ -52,6 +103,10 @@
       .button:focus {
           outline: none !important;
           border-color: #66afe9;
+      }
+
+      .accordion-title {
+          flex-grow: 1;
       }
 
       .textfield {

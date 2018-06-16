@@ -31,6 +31,7 @@ import Widget.Accordion as Accordion exposing (Accordion, PanelState(..))
 import Widget.ComboBox as ComboBox exposing (ComboBox)
 import Widget.Listbox as Listbox exposing (Entry, Listbox)
 import Widget.Listbox.Dropdown as Dropdown exposing (Dropdown)
+import Widget.Tabs as Tabs exposing (Tabs)
 
 
 main : Program {} Model Msg
@@ -48,7 +49,10 @@ main =
 
 
 type alias Model =
-    { accordion : Accordion
+    { tabs : Tabs
+
+    -- ACCORDION
+    , accordion : Accordion
     , accordionJumpAtEnds : Bool
     , accordionHandleHomeAndEnd : Bool
     , accordionHandlePageDownPageUp : Bool
@@ -98,7 +102,8 @@ type SelectedDisplayCondition
 
 
 init _ =
-    ( { accordion = Accordion.init
+    ( { tabs = Tabs.init "basic"
+      , accordion = Accordion.init
       , accordionJumpAtEnds = True
       , accordionHandleHomeAndEnd = True
       , accordionHandlePageDownPageUp = True
@@ -138,7 +143,9 @@ init _ =
 
 
 type Msg
-    = AccordionMsg (Cmd Msg) Accordion
+    = TabsMsg (Cmd Msg) Tabs
+      -- ACCORDION
+    | AccordionMsg (Cmd Msg) Accordion
     | AccordionJumpAtEndsChecked Bool
     | AccordionHandleHomeAndEndChecked Bool
     | AccordionHandlePageDownPageUpChecked Bool
@@ -182,6 +189,12 @@ type OutMsg
 
 update msg model =
     case msg of
+        TabsMsg cmd newTabs ->
+            ( { model | tabs = newTabs }
+            , cmd
+            )
+
+        -- ACCORDION
         AccordionMsg cmd newAccordion ->
             ( { model | accordion = newAccordion }
             , cmd
@@ -491,111 +504,139 @@ subscriptions model =
 
 
 view model =
-    Html.section
+    Html.div
         [ Attributes.class "section" ]
-        [ Html.div
-            [ Attributes.class "container" ]
-            [ Accordion.view
-                (accordionViewConfig
-                    model.accordionJumpAtEnds
-                    model.accordionHandleHomeAndEnd
-                    model.accordionHandlePageDownPageUp
-                )
-                AccordionMsg
-                "examples"
-                model.accordion
-                [ Accordion.section Expanded
-                    { id = "accordion"
-                    , header = "Accordion"
-                    , panel =
-                        [ Html.lazy3 viewAccordionConfiguration
-                            model.accordionJumpAtEnds
-                            model.accordionHandleHomeAndEnd
-                            model.accordionHandlePageDownPageUp
-                        ]
+        [ Html.div [ Attributes.class "container" ]
+            [ Tabs.view tabConfig
+                { id = "tabs"
+                , label = "Widgets"
+                , lift = TabsMsg
+                }
+                model.tabs
+                [ Tabs.tab
+                    { id = "basic"
+                    , tab = "Basic"
+                    , tabpanel = [ viewBasic model ]
+                    , focusable = False
                     }
-                , Accordion.section Collapsed
-                    { id = "listboxes"
-                    , header = "Listboxes"
-                    , panel =
-                        [ Html.form
-                            [ Attributes.style "width" "100%" ]
-                            [ Html.lazy2 viewListbox
-                                model.listbox
-                                model.selectedLocales
-                            , Html.lazy5 viewListboxConfiguration
-                                model.listboxJumpAtEnds
-                                model.listboxSeparateFocus
-                                model.listboxSelectionFollowsFocus
-                                model.listboxHandleHomeAndEnd
-                                model.listboxTypeAhead
-                            ]
-                        ]
-                    }
-                , Accordion.section Collapsed
-                    { id = "muppets"
-                    , header = "Muppets"
-                    , panel =
-                        [ Html.form
-                            [ Attributes.style "width" "100%" ]
-                            [ Html.lazy2 viewMuppetsListbox
-                                model.muppetsListbox
-                                model.selectedMuppets
-                            ]
-                        ]
-                    }
-                , Accordion.section Collapsed
-                    { id = "dropdown-menus"
-                    , header = "Dropdown Menus"
-                    , panel =
-                        [ Html.form
-                            [ Attributes.style "width" "100%" ]
-                            [ Html.div
-                                [ Attributes.class "columns" ]
-                                [ Html.div
-                                    [ Attributes.class "column" ]
-                                    [ Html.lazy2 viewDropdown model.dropdown model.selectedLocale
-                                    , Html.lazy6 viewDropdownConfiguration
-                                        model.dropdownJumpAtEnds
-                                        model.dropdownCloseAfterMouseSelection
-                                        model.dropdownSeparateFocus
-                                        model.dropdownSelectionFollowsFocus
-                                        model.dropdownHandleHomeAndEnd
-                                        model.dropdownTypeAhead
-                                    ]
-                                , Html.div
-                                    [ Attributes.class "column" ]
-                                    [ Html.lazy2 viewComboBox model.comboBox model.selectedLocale2
-                                    , Html.lazy6 viewComboBoxConfiguration
-                                        model.comboBoxJumpAtEnds
-                                        model.comboBoxCloseAfterMouseSelection
-                                        model.comboBoxSeparateFocus
-                                        model.comboBoxSelectionFollowsFocus
-                                        model.comboBoxHandleHomeAndEnd
-                                        model.comboBoxDisplayCondition
-                                    ]
-                                ]
-                            ]
-                        ]
-                    }
-                , Accordion.section Expanded
-                    { id = "single-select-listbox"
-                    , header = "Single-Select Listbox"
-                    , panel =
-                        [ Html.p
-                            [ Attributes.style "margin-bottom" "20px" ]
-                            [ Html.text "This is a reimplementation of "
-                            , Html.a
-                                [ Attributes.href "https://www.w3.org/TR/2017/NOTE-wai-aria-practices-1.1-20171214/examples/listbox/listbox-rearrangeable.html" ]
-                                [ Html.text "Example 1" ]
-                            , Html.text " of the Example Listboxes with Rearrangeable Options of the WAI-ARIA Authoring Practices 1.1."
-                            ]
-                        , Rearrangable.SingleSelect.view model.rearrangableSingleSelect
-                            |> Html.map RearrangableSingleSelectMsg
-                        ]
+                , Tabs.tab
+                    { id = "advanced"
+                    , tab = "Advanced"
+                    , tabpanel = [ viewAdvanced model ]
+                    , focusable = False
                     }
                 ]
             ]
+        ]
+
+
+viewBasic model =
+    Html.div
+        [ Attributes.class "container"
+        , Attributes.style "padding" "15px"
+        ]
+        [ Accordion.view
+            (accordionViewConfig
+                model.accordionJumpAtEnds
+                model.accordionHandleHomeAndEnd
+                model.accordionHandlePageDownPageUp
+            )
+            AccordionMsg
+            "examples"
+            model.accordion
+            [ Accordion.section Expanded
+                { id = "accordion"
+                , header = "Accordion"
+                , panel =
+                    [ Html.lazy3 viewAccordionConfiguration
+                        model.accordionJumpAtEnds
+                        model.accordionHandleHomeAndEnd
+                        model.accordionHandlePageDownPageUp
+                    ]
+                }
+            , Accordion.section Collapsed
+                { id = "listboxes"
+                , header = "Listboxes"
+                , panel =
+                    [ Html.form
+                        [ Attributes.style "width" "100%" ]
+                        [ Html.lazy2 viewListbox
+                            model.listbox
+                            model.selectedLocales
+                        , Html.lazy5 viewListboxConfiguration
+                            model.listboxJumpAtEnds
+                            model.listboxSeparateFocus
+                            model.listboxSelectionFollowsFocus
+                            model.listboxHandleHomeAndEnd
+                            model.listboxTypeAhead
+                        ]
+                    ]
+                }
+            , Accordion.section Collapsed
+                { id = "muppets"
+                , header = "Muppets"
+                , panel =
+                    [ Html.form
+                        [ Attributes.style "width" "100%" ]
+                        [ Html.lazy2 viewMuppetsListbox
+                            model.muppetsListbox
+                            model.selectedMuppets
+                        ]
+                    ]
+                }
+            , Accordion.section Collapsed
+                { id = "dropdown-menus"
+                , header = "Dropdown Menus"
+                , panel =
+                    [ Html.form
+                        [ Attributes.style "width" "100%" ]
+                        [ Html.div
+                            [ Attributes.class "columns" ]
+                            [ Html.div
+                                [ Attributes.class "column" ]
+                                [ Html.lazy2 viewDropdown model.dropdown model.selectedLocale
+                                , Html.lazy6 viewDropdownConfiguration
+                                    model.dropdownJumpAtEnds
+                                    model.dropdownCloseAfterMouseSelection
+                                    model.dropdownSeparateFocus
+                                    model.dropdownSelectionFollowsFocus
+                                    model.dropdownHandleHomeAndEnd
+                                    model.dropdownTypeAhead
+                                ]
+                            , Html.div
+                                [ Attributes.class "column" ]
+                                [ Html.lazy2 viewComboBox model.comboBox model.selectedLocale2
+                                , Html.lazy6 viewComboBoxConfiguration
+                                    model.comboBoxJumpAtEnds
+                                    model.comboBoxCloseAfterMouseSelection
+                                    model.comboBoxSeparateFocus
+                                    model.comboBoxSelectionFollowsFocus
+                                    model.comboBoxHandleHomeAndEnd
+                                    model.comboBoxDisplayCondition
+                                ]
+                            ]
+                        ]
+                    ]
+                }
+            ]
+        ]
+
+
+viewAdvanced model =
+    Html.div
+        [ Attributes.class "container"
+        , Attributes.style "padding" "15px"
+        ]
+        [ Html.p
+            [ Attributes.style "margin-bottom" "20px" ]
+            [ Html.text "This is a reimplementation of "
+            , Html.a
+                [ Attributes.href "https://www.w3.org/TR/2017/NOTE-wai-aria-practices-1.1-20171214/examples/listbox/listbox-rearrangeable.html" ]
+                [ Html.text "Example 1" ]
+            , Html.text " of the Example Listboxes with Rearrangeable Options of the WAI-ARIA Authoring Practices 1.1."
+            ]
+        , Rearrangable.SingleSelect.view model.rearrangableSingleSelect
+            |> Html.map RearrangableSingleSelectMsg
         ]
 
 
@@ -924,6 +965,24 @@ viewCheckbox checked enabled description =
 ---- CONFIG
 
 
+tabConfig : Tabs.ViewConfig String
+tabConfig =
+    Tabs.viewConfig
+        { tabs = [ Attributes.class "tabs-container" ]
+        , tablist = [ Attributes.class "tablist" ]
+        , button =
+            \open title ->
+                { attributes =
+                    [ Attributes.class "tab-button"
+                    , Attributes.classList
+                        [ ( "tab-button--is-active", open ) ]
+                    ]
+                , children = [ Html.text title ]
+                }
+        , tabpanel = [ Attributes.class "tabpanel" ]
+        }
+
+
 accordionViewConfig : Bool -> Bool -> Bool -> Accordion.ViewConfig String
 accordionViewConfig jumpAtEnds handleHomeAndEnd handlePageDownPageUp =
     Accordion.viewConfig
@@ -939,7 +998,9 @@ accordionViewConfig jumpAtEnds handleHomeAndEnd handlePageDownPageUp =
             \panelState label ->
                 { attributes = [ Attributes.class "accordion-button" ]
                 , children =
-                    [ Html.span [] [ Html.text label ]
+                    [ Html.span
+                        [ Attributes.class "accordion-title" ]
+                        [ Html.text label ]
                     , Html.span
                         [ Attributes.class "icon"
                         , Attributes.style "float" "right"
