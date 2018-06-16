@@ -1,6 +1,7 @@
 module Widget.Tabs
     exposing
-        ( Tab
+        ( Behaviour
+        , Tab
         , Tabs
         , ViewConfig
         , Views
@@ -17,7 +18,7 @@ module Widget.Tabs
 
 # Configuration
 
-@docs ViewConfig, viewConfig, Views
+@docs ViewConfig, viewConfig, Behaviour, Views
 
 -}
 
@@ -96,12 +97,12 @@ tab =
 {-| TODO
 -}
 type ViewConfig tab
-    = ViewConfig (Views tab)
+    = ViewConfig Behaviour (Views tab)
 
 
 {-| TODO
 -}
-viewConfig : Views tab -> ViewConfig tab
+viewConfig : Behaviour -> Views tab -> ViewConfig tab
 viewConfig =
     ViewConfig
 
@@ -113,6 +114,15 @@ type alias Views tab =
     , tablist : HtmlAttributes
     , button : Bool -> tab -> HtmlDetails
     , tabpanel : HtmlAttributes
+    }
+
+
+{-| TODO
+-}
+type alias Behaviour =
+    { jumpAtEnds : Bool
+    , handleHomeAndEnd : Bool
+    , activateOnFocus : Bool
     }
 
 
@@ -132,7 +142,7 @@ view :
     -> Tabs
     -> List (Tab tab msg)
     -> Html msg
-view (ViewConfig views) { id, label, lift } (Tabs openTabId) tabs =
+view (ViewConfig behaviour views) { id, label, lift } (Tabs openTabId) tabs =
     let
         noOp =
             lift Cmd.none (Tabs openTabId)
@@ -167,54 +177,72 @@ view (ViewConfig views) { id, label, lift } (Tabs openTabId) tabs =
     in
     Html.div
         (appendAttributes noOp views.tabs [])
-        (viewTablist views id label lift openTabId tabs
+        (viewTablist behaviour views id label lift openTabId tabs
             :: List.map viewTabpanel tabs
         )
 
 
 viewTablist :
-    Views tab
+    Behaviour
+    -> Views tab
     -> String
     -> String
     -> (Cmd msg -> Tabs -> msg)
     -> String
     -> List (Tab tab msg)
     -> Html msg
-viewTablist views id label lift openTabId tabs =
+viewTablist { jumpAtEnds, handleHomeAndEnd, activateOnFocus } views id label lift openTabId tabs =
     let
         noOp =
             lift Cmd.none (Tabs openTabId)
 
         openTab tabId =
+            let
+                newTabId =
+                    if activateOnFocus then
+                        tabId
+                    else
+                        openTabId
+            in
             lift
                 (Browser.focus (id ++ "-" ++ tabId ++ "-tab")
-                    |> Task.attempt (\_ -> lift Cmd.none (Tabs tabId))
+                    |> Task.attempt (\_ -> lift Cmd.none (Tabs newTabId))
                 )
-                (Tabs tabId)
+                (Tabs newTabId)
 
-        openPreviousTab =
+        openPreviousTab currentTabId =
             tabIds
-                |> List.splitWhen (\thisId -> thisId == openTabId)
+                |> List.splitWhen (\thisId -> thisId == currentTabId)
                 |> Maybe.andThen (\( start, end ) -> List.head (List.reverse start))
-                |> or (List.head (List.reverse tabIds))
+                |> or
+                    (if jumpAtEnds then
+                        List.head (List.reverse tabIds)
+                     else
+                        Nothing
+                    )
                 |> Maybe.map openTab
                 |> Maybe.withDefault noOp
 
-        openNextTab =
+        openNextTab currentTabId =
             tabIds
-                |> List.splitWhen (\thisId -> thisId == openTabId)
+                |> List.splitWhen (\thisId -> thisId == currentTabId)
                 |> Maybe.andThen (\( start, end ) -> List.head (List.drop 1 end))
-                |> or (List.head tabIds)
+                |> or
+                    (if jumpAtEnds then
+                        List.head tabIds
+                     else
+                        Nothing
+                    )
                 |> Maybe.map openTab
                 |> Maybe.withDefault noOp
 
-        openFirstTab =
+        openFirstTab currentTabId =
             tabIds
                 |> List.head
                 |> Maybe.map openTab
                 |> Maybe.withDefault noOp
 
-        openLastTab =
+        openLastTab currentTabId =
             tabIds
                 |> List.reverse
                 |> List.head
@@ -254,16 +282,22 @@ viewTablist views id label lift openTabId tabs =
                             (\code ->
                                 case code of
                                     "ArrowLeft" ->
-                                        Decode.succeed ( openPreviousTab, True )
+                                        Decode.succeed ( openPreviousTab data.id, True )
 
                                     "ArrowRight" ->
-                                        Decode.succeed ( openNextTab, True )
+                                        Decode.succeed ( openNextTab data.id, True )
 
                                     "Home" ->
-                                        Decode.succeed ( openFirstTab, True )
+                                        if handleHomeAndEnd then
+                                            Decode.succeed ( openFirstTab data.id, True )
+                                        else
+                                            Decode.fail "not handling that key here"
 
                                     "End" ->
-                                        Decode.succeed ( openLastTab, True )
+                                        if handleHomeAndEnd then
+                                            Decode.succeed ( openLastTab data.id, True )
+                                        else
+                                            Decode.fail "not handling that key here"
 
                                     _ ->
                                         Decode.fail "not handling that key here"

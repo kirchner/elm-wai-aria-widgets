@@ -50,6 +50,9 @@ main =
 
 type alias Model =
     { tabs : Tabs
+    , tabsJumpAtEnds : Bool
+    , tabsHandleHomeAndEnd : Bool
+    , tabsActivateOnFocus : Bool
 
     -- ACCORDION
     , accordion : Accordion
@@ -103,6 +106,9 @@ type SelectedDisplayCondition
 
 init _ =
     ( { tabs = Tabs.init "basic"
+      , tabsJumpAtEnds = True
+      , tabsHandleHomeAndEnd = True
+      , tabsActivateOnFocus = True
       , accordion = Accordion.init
       , accordionJumpAtEnds = True
       , accordionHandleHomeAndEnd = True
@@ -144,6 +150,9 @@ init _ =
 
 type Msg
     = TabsMsg (Cmd Msg) Tabs
+    | TabsJumpAtEndsChecked Bool
+    | TabsHandleHomeAndEndChecked Bool
+    | TabsActivateOnFocusChecked Bool
       -- ACCORDION
     | AccordionMsg (Cmd Msg) Accordion
     | AccordionJumpAtEndsChecked Bool
@@ -192,6 +201,21 @@ update msg model =
         TabsMsg cmd newTabs ->
             ( { model | tabs = newTabs }
             , cmd
+            )
+
+        TabsJumpAtEndsChecked enabled ->
+            ( { model | tabsJumpAtEnds = enabled }
+            , Cmd.none
+            )
+
+        TabsHandleHomeAndEndChecked enabled ->
+            ( { model | tabsHandleHomeAndEnd = enabled }
+            , Cmd.none
+            )
+
+        TabsActivateOnFocusChecked enabled ->
+            ( { model | tabsActivateOnFocus = enabled }
+            , Cmd.none
             )
 
         -- ACCORDION
@@ -507,7 +531,12 @@ view model =
     Html.div
         [ Attributes.class "section" ]
         [ Html.div [ Attributes.class "container" ]
-            [ Tabs.view tabConfig
+            [ Tabs.view
+                (tabConfig
+                    model.tabsJumpAtEnds
+                    model.tabsHandleHomeAndEnd
+                    model.tabsActivateOnFocus
+                )
                 { id = "tabs"
                 , label = "Widgets"
                 , lift = TabsMsg
@@ -523,6 +552,12 @@ view model =
                     { id = "advanced"
                     , tab = "Advanced"
                     , tabpanel = [ viewAdvanced model ]
+                    , focusable = False
+                    }
+                , Tabs.tab
+                    { id = "configuration"
+                    , tab = "Configuration"
+                    , tabpanel = [ viewConfiguration model ]
                     , focusable = False
                     }
                 ]
@@ -637,6 +672,23 @@ viewAdvanced model =
             ]
         , Rearrangable.SingleSelect.view model.rearrangableSingleSelect
             |> Html.map RearrangableSingleSelectMsg
+        ]
+
+
+viewConfiguration model =
+    Html.form []
+        [ Html.label
+            [ Attributes.class "label" ]
+            [ Html.text "Tabs" ]
+        , viewCheckbox TabsJumpAtEndsChecked
+            model.tabsJumpAtEnds
+            "Jump at ends"
+        , viewCheckbox TabsHandleHomeAndEndChecked
+            model.tabsHandleHomeAndEnd
+            "Handle Home and End keys"
+        , viewCheckbox TabsActivateOnFocusChecked
+            model.tabsActivateOnFocus
+            "Activate tab when focused"
         ]
 
 
@@ -965,9 +1017,13 @@ viewCheckbox checked enabled description =
 ---- CONFIG
 
 
-tabConfig : Tabs.ViewConfig String
-tabConfig =
+tabConfig : Bool -> Bool -> Bool -> Tabs.ViewConfig String
+tabConfig jumpAtEnds handleHomeAndEnd activateOnFocus =
     Tabs.viewConfig
+        { jumpAtEnds = jumpAtEnds
+        , handleHomeAndEnd = handleHomeAndEnd
+        , activateOnFocus = activateOnFocus
+        }
         { tabs = [ Attributes.class "tabs-container" ]
         , tablist = [ Attributes.class "tablist" ]
         , button =
