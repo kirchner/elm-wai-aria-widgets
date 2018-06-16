@@ -196,6 +196,7 @@ viewTablist views id label lift openTabId tabs =
             tabIds
                 |> List.splitWhen (\thisId -> thisId == openTabId)
                 |> Maybe.andThen (\( start, end ) -> List.head (List.reverse start))
+                |> or (List.head (List.reverse tabIds))
                 |> Maybe.map openTab
                 |> Maybe.withDefault noOp
 
@@ -203,6 +204,7 @@ viewTablist views id label lift openTabId tabs =
             tabIds
                 |> List.splitWhen (\thisId -> thisId == openTabId)
                 |> Maybe.andThen (\( start, end ) -> List.head (List.drop 1 end))
+                |> or (List.head tabIds)
                 |> Maybe.map openTab
                 |> Maybe.withDefault noOp
 
@@ -305,3 +307,13 @@ boolToString b =
         "true"
     else
         "false"
+
+
+or : Maybe a -> Maybe a -> Maybe a
+or fallback default =
+    case default of
+        Nothing ->
+            fallback
+
+        Just _ ->
+            default
