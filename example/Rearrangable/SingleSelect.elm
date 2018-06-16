@@ -371,12 +371,18 @@ view model =
                                     (\( rawCode, altDown ) ->
                                         case ( rawCode, altDown ) of
                                             ( "ArrowUp", True ) ->
-                                                Listbox.domInfoOf aboveFocused [ "target" ]
-                                                    |> Decode.map ImportantFeaturesAltArrowUpPressed
+                                                if firstSelected then
+                                                    Decode.fail "not handling that key here"
+                                                else
+                                                    Listbox.domInfoOf aboveFocused [ "target" ]
+                                                        |> Decode.map ImportantFeaturesAltArrowUpPressed
 
                                             ( "ArrowDown", True ) ->
-                                                Listbox.domInfoOf belowFocused [ "target" ]
-                                                    |> Decode.map ImportantFeaturesAltArrowDownPressed
+                                                if lastSelected then
+                                                    Decode.fail "not handling that key here"
+                                                else
+                                                    Listbox.domInfoOf belowFocused [ "target" ]
+                                                        |> Decode.map ImportantFeaturesAltArrowDownPressed
 
                                             ( "Backspace", False ) ->
                                                 Decode.succeed ImportantFeaturesBackspacePressed
