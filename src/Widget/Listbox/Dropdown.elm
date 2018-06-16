@@ -231,7 +231,17 @@ view (ViewConfig uniqueId views) ids (Dropdown data) allEntries maybeSelection =
             { id = printListboxId ids.id
             , labelledBy = ids.labelledBy
             , lift = ListboxMsg (Just ids.id)
-            , onKeyDown = Decode.fail "not handling keys here"
+            , onKeyDown =
+                Decode.field "key" Decode.string
+                    |> Decode.andThen
+                        (\rawCode ->
+                            case rawCode of
+                                "Escape" ->
+                                    Decode.succeed (ListboxEscapePressed ids.id)
+
+                                _ ->
+                                    Decode.fail "not handling keys here"
+                        )
             }
             data.listbox
             allEntries
@@ -324,12 +334,12 @@ type Msg a
     | ButtonArrowDownPressed String
       -- LISTBOX
     | ListboxMsg (Maybe String) (Listbox.Msg a)
+    | ListboxEscapePressed String
 
 
 type OutMsg a
     = EntrySelected a
     | ListboxBlured
-    | ListboxEscapePressed
 
 
 {-| TODO
@@ -441,7 +451,6 @@ update (UpdateConfig uniqueId behaviour) entrySelected (Dropdown data) allEntrie
                     Listbox.update listboxConfig
                         [ Listbox.onEntrySelect EntrySelected
                         , Listbox.onListboxBlur ListboxBlured
-                        , Listbox.onEscapeDown ListboxEscapePressed
                         ]
                         data.listbox
                         allEntries
@@ -454,6 +463,12 @@ update (UpdateConfig uniqueId behaviour) entrySelected (Dropdown data) allEntrie
                 { data | listbox = newListbox }
                 (Cmd.map (ListboxMsg maybeId) listboxCmd)
                 maybeOutMsg
+
+        ListboxEscapePressed id ->
+            ( Dropdown { data | open = False }
+            , focusButton id
+            , Nothing
+            )
 
 
 handleOutMsg :
@@ -478,17 +493,6 @@ handleOutMsg entrySelected maybeId data cmd maybeOutMsg =
             ( Dropdown data
             , cmd
             , Just (entrySelected a)
-            )
-
-        Just ListboxEscapePressed ->
-            ( Dropdown { data | open = False }
-            , Cmd.batch
-                [ cmd
-                , maybeId
-                    |> Maybe.map focusButton
-                    |> Maybe.withDefault Cmd.none
-                ]
-            , Nothing
             )
 
 

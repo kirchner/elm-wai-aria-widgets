@@ -28,7 +28,6 @@ module Widget.Listbox
         , onEntriesSelect
         , onEntrySelect
         , onEntryUnselect
-        , onEscapeDown
         , onListboxBlur
         , onMouseDown
         , onMouseUp
@@ -84,7 +83,7 @@ module Widget.Listbox
 
 @docs onEntryUnselect, onAllEntriesUnselect
 
-@docs onListboxBlur, onEscapeDown
+@docs onListboxBlur
 
 @docs onMouseDown, onMouseUp
 
@@ -666,9 +665,6 @@ listKeydown uniqueId id maybeKeyboardFocus visibleEntries { code, shiftDown, con
         "Enter" ->
             Decode.succeed (ListEnterPressed id)
 
-        "Escape" ->
-            Decode.succeed ListEscapePressed
-
         " " ->
             if shiftDown then
                 Decode.succeed (ListShiftSpacePressed id)
@@ -1191,7 +1187,6 @@ type Msg a
     | ListArrowUpPressed String Bool (Maybe ScrollData)
     | ListArrowDownPressed String Bool (Maybe ScrollData)
     | ListEnterPressed String
-    | ListEscapePressed
     | ListSpacePressed String
     | ListShiftSpacePressed String
     | ListHomePressed String
@@ -1218,7 +1213,6 @@ type Event a outMsg
     | OnAllEntriesSelect outMsg
     | OnAllEntriesUnselect outMsg
     | OnListboxBlur outMsg
-    | OnEscapeDown outMsg
     | OnMouseDown outMsg
     | OnMouseUp outMsg
 
@@ -1263,13 +1257,6 @@ onAllEntriesUnselect =
 onListboxBlur : outMsg -> Event a outMsg
 onListboxBlur =
     OnListboxBlur
-
-
-{-| TODO
--}
-onEscapeDown : outMsg -> Event a outMsg
-onEscapeDown =
-    OnEscapeDown
 
 
 {-| TODO
@@ -1364,19 +1351,6 @@ sendListboxBlured events =
             sendListboxBlured rest
 
 
-sendEscapeDown : List (Event a outMsg) -> Maybe outMsg
-sendEscapeDown events =
-    case events of
-        [] ->
-            Nothing
-
-        (OnEscapeDown escapeDowned) :: _ ->
-            Just escapeDowned
-
-        _ :: rest ->
-            sendEscapeDown rest
-
-
 sendMouseDown : List (Event a outMsg) -> Maybe outMsg
 sendMouseDown events =
     case events of
@@ -1423,7 +1397,7 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
             )
 
         ListMouseUp ->
-            ( listbox
+            ( Listbox { data | preventScroll = False }
             , Cmd.none
             , sendMouseUp events
             )
@@ -1542,12 +1516,6 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                             )
                     )
                 |> Maybe.withDefault ( listbox, Cmd.none, Nothing )
-
-        ListEscapePressed ->
-            ( listbox
-            , Cmd.none
-            , sendEscapeDown events
-            )
 
         ListSpacePressed id ->
             data.maybeKeyboardFocus
