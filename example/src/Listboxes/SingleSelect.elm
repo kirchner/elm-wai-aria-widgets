@@ -443,9 +443,10 @@ view model =
                             boolToString (model.selectedImportantFeature == Nothing)
                         ]
                         [ Html.span []
-                            [ Html.text "Not Important" ]
+                            [ Html.text "Not Important " ]
                         , Html.span
                             [ Attributes.class "icon"
+                            , Attributes.style "font-size" "12px"
                             , Attributes.class "is-small"
                             ]
                             [ Html.i
@@ -506,6 +507,7 @@ view model =
                         ]
                         [ Html.span
                             [ Attributes.class "icon"
+                            , Attributes.style "font-size" "12px"
                             , Attributes.class "is-small"
                             ]
                             [ Html.i
@@ -515,7 +517,7 @@ view model =
                                 []
                             ]
                         , Html.span []
-                            [ Html.text "Important" ]
+                            [ Html.text " Important" ]
                         ]
                     ]
                 ]

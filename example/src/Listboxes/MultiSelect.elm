@@ -253,10 +253,11 @@ view model =
                             boolToString (Set.isEmpty model.selectedAvailable)
                         ]
                         [ Html.span []
-                            [ Html.text "Add" ]
+                            [ Html.text "Add " ]
                         , Html.span
                             [ Attributes.class "icon"
                             , Attributes.class "is-small"
+                            , Attributes.style "font-size" "12px"
                             ]
                             [ Html.i
                                 [ Attributes.class "fas"
@@ -318,6 +319,7 @@ view model =
                         [ Html.span
                             [ Attributes.class "icon"
                             , Attributes.class "is-small"
+                            , Attributes.style "font-size" "12px"
                             ]
                             [ Html.i
                                 [ Attributes.class "fas"
@@ -326,7 +328,7 @@ view model =
                                 []
                             ]
                         , Html.span []
-                            [ Html.text "Remove" ]
+                            [ Html.text " Remove" ]
                         ]
                     ]
                 ]
