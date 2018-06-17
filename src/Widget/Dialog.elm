@@ -8,11 +8,23 @@ module Widget.Dialog
         , open
         , view
         , viewConfig
+        , wrapToEnd
+        , wrapToStart
         )
 
 {-|
 
-@docs Dialog
+@docs Dialog, init, open, close, view
+
+
+# Configuration
+
+@docs ViewConfig, viewConfig, Views
+
+
+# Focus trap
+
+@docs wrapToStart, wrapToEnd
 
 -}
 
@@ -34,12 +46,17 @@ module Widget.Dialog
 
 -}
 
+import Browser exposing (DomError)
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
+import Json.Decode as Decode
+import Task exposing (Task)
 import Widget exposing (HtmlAttributes)
 
 
+{-| TODO
+-}
 type Dialog
     = Dialog DialogData
 
@@ -48,46 +65,127 @@ type alias DialogData =
     { open : Bool }
 
 
+{-| TODO
+-}
 init : Dialog
 init =
     Dialog { open = False }
 
 
-open : Dialog -> Dialog
-open (Dialog data) =
-    Dialog { data | open = True }
+{-| TODO
+-}
+open : (Cmd msg -> msg) -> String -> ( Dialog, Cmd msg )
+open lift firstFocusId =
+    ( Dialog { open = True }
+    , Task.attempt (\_ -> lift Cmd.none) <|
+        Browser.focus firstFocusId
+    )
 
 
-close : Dialog -> Dialog
-close (Dialog data) =
-    Dialog { data | open = False }
+{-| TODO
+-}
+close : (Cmd msg -> msg) -> String -> ( Dialog, Cmd msg )
+close lift firstFocusId =
+    ( Dialog { open = False }
+    , Task.attempt (\_ -> lift Cmd.none) <|
+        Browser.focus firstFocusId
+    )
+
+
+
+---- UPDATE
+
+
+{-| TODO
+-}
+wrapToStart : (Cmd msg -> msg) -> String -> Html.Attribute msg
+wrapToStart lift lastFocusId =
+    Events.preventDefaultOn "keydown"
+        (Decode.map2 Tuple.pair
+            (Decode.field "key" Decode.string)
+            (Decode.field "shiftKey" Decode.bool)
+            |> Decode.andThen
+                (\keyInfo ->
+                    case keyInfo of
+                        ( "Tab", False ) ->
+                            Decode.succeed
+                                ( lift <|
+                                    Task.attempt (\_ -> lift Cmd.none) <|
+                                        Browser.focus lastFocusId
+                                , True
+                                )
+
+                        _ ->
+                            Decode.fail "not handling that key here"
+                )
+        )
+
+
+{-| TODO
+-}
+wrapToEnd : (Cmd msg -> msg) -> String -> Html.Attribute msg
+wrapToEnd lift firstFocusId =
+    Events.preventDefaultOn "keydown"
+        (Decode.map2 Tuple.pair
+            (Decode.field "key" Decode.string)
+            (Decode.field "shiftKey" Decode.bool)
+            |> Decode.andThen
+                (\keyInfo ->
+                    case keyInfo of
+                        ( "Tab", True ) ->
+                            Decode.succeed
+                                ( lift <|
+                                    Task.attempt (\_ -> lift Cmd.none) <|
+                                        Browser.focus firstFocusId
+                                , True
+                                )
+
+                        _ ->
+                            Decode.fail "not handling that key here"
+                )
+        )
 
 
 
 ---- CONFIG
 
 
+{-| TODO
+-}
 type ViewConfig msg
     = ViewConfig (Views msg)
 
 
+{-| TODO
+-}
 viewConfig : Views msg -> ViewConfig msg
 viewConfig =
     ViewConfig
 
 
+{-| TODO
+-}
 type alias Views msg =
     { container : Bool -> List (Html.Attribute msg)
     , backdrop : List (Html.Attribute msg)
     }
 
 
-view : ViewConfig msg -> Dialog -> msg -> List (Html msg) -> Html msg
-view (ViewConfig views) (Dialog data) closed content =
+
+---- VIEW
+
+
+{-| TODO
+-}
+view :
+    ViewConfig msg
+    -> msg
+    -> Dialog
+    -> List (Html msg)
+    -> Html msg
+view (ViewConfig views) backdropClicked (Dialog data) content =
     Html.div
         (views.container data.open)
-        (Html.div
-            (Events.onClick closed :: views.backdrop)
-            []
+        (Html.div (Events.onClick backdropClicked :: views.backdrop) []
             :: content
         )
