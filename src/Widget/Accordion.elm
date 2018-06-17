@@ -214,7 +214,7 @@ viewSection behaviour views lift id panelStates sectionIds (Section initialState
 
         onPageDownPageUp attrs =
             if behaviour.handlePageDownPageUp then
-                Events.preventDefaultOn "keypress"
+                Events.preventDefaultOn "keydown"
                     (Decode.field "key" Decode.string
                         |> Decode.andThen
                             (\code ->
@@ -291,7 +291,7 @@ viewSection behaviour views lift id panelStates sectionIds (Section initialState
                     |> Accordion
                     |> lift Cmd.none
                 )
-             , Events.preventDefaultOn "keypress"
+             , Events.preventDefaultOn "keydown"
                 (Decode.field "key" Decode.string
                     |> Decode.andThen
                         (\code ->

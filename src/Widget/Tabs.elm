@@ -276,7 +276,7 @@ viewTablist { jumpAtEnds, handleHomeAndEnd, activateOnFocus } views id label lif
                         ++ data.id
                         ++ "-tabpanel"
                  , Events.onClick (lift Cmd.none (Tabs data.id))
-                 , Events.preventDefaultOn "keypress"
+                 , Events.preventDefaultOn "keydown"
                     (Decode.field "key" Decode.string
                         |> Decode.andThen
                             (\code ->
