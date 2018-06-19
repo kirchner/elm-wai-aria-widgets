@@ -3,8 +3,6 @@ module Widget.Listbox
         ( Behaviour
         , DomInfo
         , Entry
-        , Event
-        , Ids
         , Listbox
         , Msg
         , Position
@@ -12,6 +10,7 @@ module Widget.Listbox
         , UpdateConfig
         , ViewConfig
         , Views
+        , customView
         , divider
         , domInfoOf
         , focus
@@ -20,17 +19,10 @@ module Widget.Listbox
         , focusPreviousOrFirstEntry
         , focusedEntry
         , fromFocused
+        , hoveredEntry
         , init
         , noDivider
         , noTypeAhead
-        , onAllEntriesSelect
-        , onAllEntriesUnselect
-        , onEntriesSelect
-        , onEntrySelect
-        , onEntryUnselect
-        , onListboxBlur
-        , onMouseDown
-        , onMouseUp
         , option
         , scrollIntoViewVia
         , simpleTypeAhead
@@ -45,7 +37,7 @@ module Widget.Listbox
 
 {-|
 
-@docs Listbox, init, view, Ids
+@docs Listbox, init, view
 
 @docs Entry, option, divider
 
@@ -72,20 +64,7 @@ module Widget.Listbox
 
 # Advanced usage
 
-@docs viewLazy
-
-
-## Events
-
-@docs Event
-
-@docs onEntrySelect, onEntriesSelect, onAllEntriesSelect
-
-@docs onEntryUnselect, onAllEntriesUnselect
-
-@docs onListboxBlur
-
-@docs onMouseDown, onMouseUp
+@docs customView, viewLazy
 
 
 ## State manipulation
@@ -93,7 +72,7 @@ module Widget.Listbox
 
 ### Keyboard focus
 
-@docs focusedEntry
+@docs focusedEntry, hoveredEntry
 
 @docs focusEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
 
@@ -147,6 +126,7 @@ import Internal.Entries as Internal
         )
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline as Decode
+import List.Extra as List
 import Set
 import Task exposing (Task)
 import Time
@@ -236,14 +216,23 @@ focusedEntry (UpdateConfig uniqueId _) (Listbox { maybeKeyboardFocus }) allEntri
 
 {-| TODO
 -}
-focusEntry : UpdateConfig a -> List (Event a outMsg) -> a -> Listbox -> ( Listbox, Maybe outMsg )
-focusEntry config events newEntry (Listbox data) =
+hoveredEntry : UpdateConfig a -> Listbox -> List (Entry a divider) -> Maybe a
+hoveredEntry (UpdateConfig uniqueId _) (Listbox { maybeMouseFocus }) allEntries =
+    maybeMouseFocus
+        |> Maybe.andThen (find uniqueId allEntries)
+        |> Maybe.map Tuple.second
+
+
+{-| TODO
+-}
+focusEntry : UpdateConfig a -> a -> List a -> Listbox -> ( Listbox, List a )
+focusEntry config newEntry selection (Listbox data) =
     let
         (UpdateConfig uniqueId behaviour) =
             config
     in
     data
-        |> updateFocus behaviour uniqueId events [] False newEntry
+        |> updateFocus behaviour uniqueId selection False newEntry
 
 
 {-| TODO
@@ -251,9 +240,10 @@ focusEntry config events newEntry (Listbox data) =
 focusNextOrFirstEntry :
     UpdateConfig a
     -> List (Entry a divider)
+    -> List a
     -> Listbox
-    -> ( Listbox, Maybe outMsg )
-focusNextOrFirstEntry config allEntries listbox =
+    -> ( Listbox, List a )
+focusNextOrFirstEntry config allEntries selection listbox =
     let
         (UpdateConfig uniqueId behaviour) =
             config
@@ -273,7 +263,7 @@ focusNextOrFirstEntry config allEntries listbox =
                             |> Internal.firstEntry
                             |> Maybe.map uniqueId
                 }
-            , Nothing
+            , selection
             )
 
         Just ( _, keyboardFocus ) ->
@@ -281,16 +271,16 @@ focusNextOrFirstEntry config allEntries listbox =
                 Just (First firstEntry) ->
                     if behaviour.jumpAtEnds then
                         data
-                            |> updateFocus behaviour uniqueId [] [] False firstEntry
+                            |> updateFocus behaviour uniqueId selection False firstEntry
                     else
-                        ( listbox, Nothing )
+                        ( listbox, selection )
 
                 Just (Next newEntry) ->
                     data
-                        |> updateFocus behaviour uniqueId [] [] False newEntry
+                        |> updateFocus behaviour uniqueId selection False newEntry
 
                 Nothing ->
-                    ( listbox, Nothing )
+                    ( listbox, selection )
 
 
 {-| TODO
@@ -298,9 +288,10 @@ focusNextOrFirstEntry config allEntries listbox =
 focusPreviousOrFirstEntry :
     UpdateConfig a
     -> List (Entry a divider)
+    -> List a
     -> Listbox
-    -> ( Listbox, Maybe outMsg )
-focusPreviousOrFirstEntry config allEntries listbox =
+    -> ( Listbox, List a )
+focusPreviousOrFirstEntry config allEntries selection listbox =
     let
         (UpdateConfig uniqueId behaviour) =
             config
@@ -331,7 +322,7 @@ focusPreviousOrFirstEntry config allEntries listbox =
                             |> firstEntry
                             |> Maybe.map uniqueId
                 }
-            , Nothing
+            , selection
             )
 
         Just ( _, keyboardFocus ) ->
@@ -339,16 +330,16 @@ focusPreviousOrFirstEntry config allEntries listbox =
                 Just (Last lastEntry) ->
                     if behaviour.jumpAtEnds then
                         data
-                            |> updateFocus behaviour uniqueId [] [] False lastEntry
+                            |> updateFocus behaviour uniqueId selection False lastEntry
                     else
-                        ( listbox, Nothing )
+                        ( listbox, selection )
 
                 Just (Previous newEntry) ->
                     data
-                        |> updateFocus behaviour uniqueId [] [] False newEntry
+                        |> updateFocus behaviour uniqueId selection False newEntry
 
                 Nothing ->
-                    ( listbox, Nothing )
+                    ( listbox, selection )
 
 
 
@@ -459,14 +450,19 @@ typeAhead =
 
 
 {-| TODO
--}
-type alias Ids =
-    { id : String
-    , labelledBy : String
-    }
 
+    view model =
+        Html.div []
+            [ Listbox.view viewConfig
+                { id = "listbox"
+                , labelledBy = "label"
+                , lift = ListboxMsg
+                }
+                model.listbox
+                entries
+                model.selection
+            ]
 
-{-| TODO
 -}
 view :
     ViewConfig a divider
@@ -474,13 +470,70 @@ view :
         { id : String
         , labelledBy : String
         , lift : Msg a -> msg
-        , onKeyDown : Decoder msg
         }
     -> Listbox
     -> List (Entry a divider)
     -> List a
     -> Html msg
-view (ViewConfig uniqueId views) cfg listbox allEntries selection =
+view config { id, labelledBy, lift } entries selection =
+    customView config
+        { id = id
+        , labelledBy = labelledBy
+        , lift = lift
+        , onKeyPress = Decode.fail "not handling this event here"
+        , onMouseDown = Decode.fail "not handling this event here"
+        , onMouseUp = Decode.fail "not handling this event here"
+        , onBlur = Decode.fail "not handling this event here"
+        }
+        entries
+        selection
+
+
+{-| TODO
+
+    viewExample model =
+        Html.div []
+            [ Listbox.customView viewConfig
+                { id = "listbox"
+                , labelledBy = "label"
+                , lift = ListboxMsg
+                , onKeyPress =
+                    Decode.field "key" Decode.string
+                        |> Decode.andThen
+                            (\code ->
+                                case code of
+                                    "ArrowUp" ->
+                                        Decode.succeed ArrowUpPressed
+
+                                    _ ->
+                                        Decode.fail "not handling that key here"
+                            )
+                , onMouseDown = Decode.fail ""
+                , onMouseUp = Decode.fail ""
+                , onBlur = Decode.fail ""
+                }
+                model.listbox
+                entries
+                model.selection
+            ]
+
+-}
+customView :
+    ViewConfig a divider
+    ->
+        { id : String
+        , labelledBy : String
+        , lift : Msg a -> msg
+        , onKeyPress : Decoder msg
+        , onMouseDown : Decoder msg
+        , onMouseUp : Decoder msg
+        , onBlur : Decoder msg
+        }
+    -> Listbox
+    -> List (Entry a divider)
+    -> List a -- Maybe a
+    -> Html msg
+customView (ViewConfig uniqueId views) cfg listbox allEntries selection =
     let
         renderedEntries =
             { spaceAboveFirst = 0
@@ -509,7 +562,10 @@ viewLazy :
         { id : String
         , labelledBy : String
         , lift : Msg a -> msg
-        , onKeyDown : Decoder msg
+        , onKeyPress : Decoder msg
+        , onMouseDown : Decoder msg
+        , onMouseUp : Decoder msg
+        , onBlur : Decoder msg
         }
     -> Listbox
     -> List (Entry a divider)
@@ -542,7 +598,10 @@ viewHelp :
         { id : String
         , labelledBy : String
         , lift : Msg a -> msg
-        , onKeyDown : Decoder msg
+        , onKeyPress : Decoder msg
+        , onMouseDown : Decoder msg
+        , onMouseUp : Decoder msg
+        , onBlur : Decoder msg
         }
     -> Listbox
     -> List (Entry a divider)
@@ -563,12 +622,12 @@ viewHelp renderedEntries uniqueId views cfg (Listbox data) allEntries selection 
          , Attributes.style "position" "relative"
          , Attributes.attribute "role" "listbox"
          , Attributes.attribute "aria-labelledby" cfg.labelledBy
-         , Events.preventDefaultOn "keydown"
+         , Events.preventDefaultOn "keypress"
             (Decode.oneOf
-                [ cfg.onKeyDown
+                [ cfg.onKeyPress
                 , keyInfoDecoder
                     |> Decode.andThen
-                        (listKeydown
+                        (listKeyPress
                             uniqueId
                             cfg.id
                             data.maybeKeyboardFocus
@@ -578,8 +637,16 @@ viewHelp renderedEntries uniqueId views cfg (Listbox data) allEntries selection 
                 ]
                 |> preventDefault
             )
-         , Events.onMouseDown (cfg.lift ListMouseDown)
-         , Events.onMouseUp (cfg.lift ListMouseUp)
+         , Events.on "mousedown" <|
+            Decode.oneOf
+                [ cfg.onMouseDown
+                , Decode.succeed (cfg.lift ListMouseDown)
+                ]
+         , Events.on "mouseup" <|
+            Decode.oneOf
+                [ cfg.onMouseUp
+                , Decode.succeed (cfg.lift ListMouseUp)
+                ]
          , Events.on "scroll" <|
             Decode.map cfg.lift <|
                 Decode.map2 ListScrolled
@@ -600,7 +667,11 @@ viewHelp renderedEntries uniqueId views cfg (Listbox data) allEntries selection 
                 |> Decode.map (ListFocused cfg.id)
                 |> Decode.map cfg.lift
             )
-         , Events.on "blur" (Decode.succeed (cfg.lift ListBlured))
+         , Events.on "blur" <|
+            Decode.oneOf
+                [ cfg.onBlur
+                , Decode.succeed (cfg.lift ListBlured)
+                ]
          ]
             |> setAriaActivedescendant cfg.id uniqueId data.maybeKeyboardFocus allEntries
             |> setTabindex views.focusable
@@ -633,14 +704,14 @@ keyInfoDecoder =
         |> Decode.required "ctrlKey" Decode.bool
 
 
-listKeydown :
+listKeyPress :
     (a -> String)
     -> String
     -> Maybe String
     -> List (Entry a divider)
     -> KeyInfo
     -> Decoder (Msg a)
-listKeydown uniqueId id maybeKeyboardFocus visibleEntries { code, shiftDown, controlDown } =
+listKeyPress uniqueId id maybeKeyboardFocus visibleEntries { code, shiftDown, controlDown } =
     case code of
         "ArrowUp" ->
             Decode.oneOf
@@ -998,7 +1069,10 @@ viewEntries :
         { id : String
         , labelledBy : String
         , lift : Msg a -> msg
-        , onKeyDown : Decoder msg
+        , onKeyPress : Decoder msg
+        , onMouseDown : Decoder msg
+        , onMouseUp : Decoder msg
+        , onBlur : Decoder msg
         }
     -> Maybe String
     -> Maybe String
@@ -1205,206 +1279,51 @@ type Msg a
 
 
 {-| TODO
--}
-type Event a outMsg
-    = OnEntrySelect (a -> outMsg)
-    | OnEntriesSelect (List a -> outMsg)
-    | OnEntryUnselect (a -> outMsg)
-    | OnAllEntriesSelect outMsg
-    | OnAllEntriesUnselect outMsg
-    | OnListboxBlur outMsg
-    | OnMouseDown outMsg
-    | OnMouseUp outMsg
 
+    update msg model =
+        case msg of
+            ListboxMsg listboxMsg ->
+                let
+                    ( newListbox, listboxCmd, newSelection ) =
+                        Listbox.update updateConfig
+                            model.listbox
+                            entries
+                            model.selection
+                            listboxMsg
+                in
+                ( { model
+                    | listbox = newListbox
+                    , selection = newSelection
+                  }
+                , Cmd.map ListboxMsg listboxCmd
+                )
 
-{-| TODO
--}
-onEntrySelect : (a -> outMsg) -> Event a outMsg
-onEntrySelect =
-    OnEntrySelect
-
-
-{-| TODO
--}
-onEntriesSelect : (List a -> outMsg) -> Event a outMsg
-onEntriesSelect =
-    OnEntriesSelect
-
-
-{-| TODO
--}
-onEntryUnselect : (a -> outMsg) -> Event a outMsg
-onEntryUnselect =
-    OnEntryUnselect
-
-
-{-| TODO
--}
-onAllEntriesSelect : outMsg -> Event a outMsg
-onAllEntriesSelect =
-    OnAllEntriesSelect
-
-
-{-| TODO
--}
-onAllEntriesUnselect : outMsg -> Event a outMsg
-onAllEntriesUnselect =
-    OnAllEntriesUnselect
-
-
-{-| TODO
--}
-onListboxBlur : outMsg -> Event a outMsg
-onListboxBlur =
-    OnListboxBlur
-
-
-{-| TODO
--}
-onMouseDown : outMsg -> Event a outMsg
-onMouseDown =
-    OnMouseDown
-
-
-{-| TODO
--}
-onMouseUp : outMsg -> Event a outMsg
-onMouseUp =
-    OnMouseUp
-
-
-sendEntrySelected : a -> List (Event a outMsg) -> Maybe outMsg
-sendEntrySelected a events =
-    case events of
-        [] ->
-            Nothing
-
-        (OnEntrySelect entrySelected) :: _ ->
-            Just (entrySelected a)
-
-        _ :: rest ->
-            sendEntrySelected a rest
-
-
-sendEntriesSelected : List (Event a outMsg) -> List a -> Maybe outMsg
-sendEntriesSelected events entries =
-    case events of
-        [] ->
-            Nothing
-
-        (OnEntriesSelect entriesSelected) :: _ ->
-            Just (entriesSelected entries)
-
-        _ :: rest ->
-            sendEntriesSelected rest entries
-
-
-sendEntryUnselected : a -> List (Event a outMsg) -> Maybe outMsg
-sendEntryUnselected a events =
-    case events of
-        [] ->
-            Nothing
-
-        (OnEntryUnselect entryUnselected) :: _ ->
-            Just (entryUnselected a)
-
-        _ :: rest ->
-            sendEntryUnselected a rest
-
-
-sendAllEntriesSelected : List (Event a outMsg) -> Maybe outMsg
-sendAllEntriesSelected events =
-    case events of
-        [] ->
-            Nothing
-
-        (OnAllEntriesSelect allEntriesSelected) :: _ ->
-            Just allEntriesSelected
-
-        _ :: rest ->
-            sendAllEntriesSelected rest
-
-
-sendAllEntriesUnselected : List (Event a outMsg) -> Maybe outMsg
-sendAllEntriesUnselected events =
-    case events of
-        [] ->
-            Nothing
-
-        (OnAllEntriesUnselect allEntriesUnselected) :: _ ->
-            Just allEntriesUnselected
-
-        _ :: rest ->
-            sendAllEntriesUnselected rest
-
-
-sendListboxBlured : List (Event a outMsg) -> Maybe outMsg
-sendListboxBlured events =
-    case events of
-        [] ->
-            Nothing
-
-        (OnListboxBlur listboxBlured) :: _ ->
-            Just listboxBlured
-
-        _ :: rest ->
-            sendListboxBlured rest
-
-
-sendMouseDown : List (Event a outMsg) -> Maybe outMsg
-sendMouseDown events =
-    case events of
-        [] ->
-            Nothing
-
-        (OnMouseDown mouseDown) :: _ ->
-            Just mouseDown
-
-        _ :: rest ->
-            sendMouseDown rest
-
-
-sendMouseUp : List (Event a outMsg) -> Maybe outMsg
-sendMouseUp events =
-    case events of
-        [] ->
-            Nothing
-
-        (OnMouseUp mouseUp) :: _ ->
-            Just mouseUp
-
-        _ :: rest ->
-            sendMouseUp rest
-
-
-{-| TODO
 -}
 update :
     UpdateConfig a
-    -> List (Event a outMsg)
     -> Listbox
     -> List (Entry a divider)
-    -> List a
+    -> List a -- Maybe a
     -> Msg a
-    -> ( Listbox, Cmd (Msg a), Maybe outMsg )
-update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allEntries selection msg =
+    -> ( Listbox, Cmd (Msg a), List a ) -- ( Listbox, Cmd (Msg a), Maybe a )
+update (UpdateConfig uniqueId behaviour) ((Listbox data) as listbox) allEntries selection msg =
     case msg of
         -- LIST
         ListMouseDown ->
             ( Listbox { data | preventScroll = True }
             , Cmd.none
-            , sendMouseDown events
+            , selection
             )
 
         ListMouseUp ->
             ( Listbox { data | preventScroll = False }
             , Cmd.none
-            , sendMouseUp events
+            , selection
             )
 
         ListFocused id maybeScrollData ->
             if data.preventScroll then
-                ( listbox, Cmd.none, Nothing )
+                ( listbox, Cmd.none, selection )
             else
                 let
                     maybeNewEntry =
@@ -1417,10 +1336,10 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                 in
                 case maybeNewEntry of
                     Nothing ->
-                        ( listbox, Cmd.none, Nothing )
+                        ( listbox, Cmd.none, selection )
 
                     Just newEntry ->
-                        updateFocus behaviour uniqueId events selection False newEntry data
+                        updateFocus behaviour uniqueId selection False newEntry data
                             |> andDo
                                 (if data.preventScroll then
                                     Cmd.none
@@ -1435,7 +1354,7 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                     , query = NoQuery
                 }
             , Cmd.none
-            , sendListboxBlured events
+            , selection
             )
 
         ListScrolled ulScrollTop ulClientHeight ->
@@ -1445,7 +1364,7 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                     , ulClientHeight = ulClientHeight
                 }
             , Cmd.none
-            , Nothing
+            , selection
             )
 
         ListArrowUpPressed id shiftDown maybeScrollData ->
@@ -1456,21 +1375,24 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                 Just (Last lastEntry) ->
                     if behaviour.jumpAtEnds then
                         data
-                            |> updateFocus behaviour uniqueId events selection shiftDown lastEntry
+                            |> updateFocus behaviour uniqueId selection shiftDown lastEntry
                             |> andDo (scrollListToBottom id)
                     else
                         ( Listbox { data | query = NoQuery }
                         , Cmd.none
-                        , Nothing
+                        , selection
                         )
 
                 Just (Previous newEntry) ->
                     data
-                        |> updateFocus behaviour uniqueId events selection shiftDown newEntry
+                        |> updateFocus behaviour uniqueId selection shiftDown newEntry
                         |> andDo (adjustScrollTopNew id (uniqueId newEntry) maybeScrollData)
 
                 Nothing ->
-                    ( listbox, Cmd.none, Nothing )
+                    ( Listbox { data | query = NoQuery }
+                    , Cmd.none
+                    , selection
+                    )
 
         ListArrowDownPressed id shiftDown maybeScrollData ->
             case
@@ -1480,23 +1402,23 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                 Just (First firstEntry) ->
                     if behaviour.jumpAtEnds then
                         data
-                            |> updateFocus behaviour uniqueId events selection shiftDown firstEntry
+                            |> updateFocus behaviour uniqueId selection shiftDown firstEntry
                             |> andDo (scrollListToTop id)
                     else
                         ( Listbox { data | query = NoQuery }
                         , Cmd.none
-                        , Nothing
+                        , selection
                         )
 
                 Just (Next newEntry) ->
                     data
-                        |> updateFocus behaviour uniqueId events selection shiftDown newEntry
+                        |> updateFocus behaviour uniqueId selection shiftDown newEntry
                         |> andDo (adjustScrollTopNew id (uniqueId newEntry) maybeScrollData)
 
                 Nothing ->
-                    ( listbox
+                    ( Listbox { data | query = NoQuery }
                     , Cmd.none
-                    , Nothing
+                    , selection
                     )
 
         ListEnterPressed id ->
@@ -1507,15 +1429,15 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                         if List.member a selection then
                             ( Listbox { data | maybeLastSelectedEntry = Nothing }
                             , Cmd.none
-                            , sendEntryUnselected a events
+                            , List.filter (\b -> a /= b) selection
                             )
                         else
                             ( Listbox { data | maybeLastSelectedEntry = Just (uniqueId a) }
                             , Cmd.none
-                            , sendEntrySelected a events
+                            , a :: selection
                             )
                     )
-                |> Maybe.withDefault ( listbox, Cmd.none, Nothing )
+                |> Maybe.withDefault ( listbox, Cmd.none, selection )
 
         ListSpacePressed id ->
             data.maybeKeyboardFocus
@@ -1525,46 +1447,46 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                         if List.member a selection then
                             ( Listbox { data | maybeLastSelectedEntry = Nothing }
                             , Cmd.none
-                            , sendEntryUnselected a events
+                            , List.filter (\b -> a /= b) selection
                             )
                         else
                             ( Listbox { data | maybeLastSelectedEntry = Just (uniqueId a) }
                             , Cmd.none
-                            , sendEntrySelected a events
+                            , a :: selection
                             )
                     )
-                |> Maybe.withDefault ( listbox, Cmd.none, Nothing )
+                |> Maybe.withDefault ( listbox, Cmd.none, selection )
 
         ListShiftSpacePressed id ->
             case ( data.maybeKeyboardFocus, data.maybeLastSelectedEntry ) of
                 ( Just keyboardFocus, Just lastSelectedEntry ) ->
                     case range uniqueId keyboardFocus lastSelectedEntry allEntries of
                         [] ->
-                            ( listbox, Cmd.none, Nothing )
+                            ( listbox, Cmd.none, selection )
 
                         selectedEntries ->
                             ( Listbox { data | maybeLastSelectedEntry = Just keyboardFocus }
                             , Cmd.none
-                            , sendEntriesSelected events selectedEntries
+                            , List.uniqueBy uniqueId (selectedEntries ++ selection)
                             )
 
                 _ ->
-                    ( listbox, Cmd.none, Nothing )
+                    ( listbox, Cmd.none, selection )
 
         ListHomePressed id ->
             case Internal.firstEntry allEntries of
                 Nothing ->
-                    ( listbox, Cmd.none, Nothing )
+                    ( listbox, Cmd.none, selection )
 
                 Just firstEntry ->
                     data
-                        |> updateFocus behaviour uniqueId events [] False firstEntry
+                        |> updateFocus behaviour uniqueId [] False firstEntry
                         |> andDo (scrollListToTop id)
 
         ListControlShiftHomePressed id ->
             case Internal.firstEntry allEntries of
                 Nothing ->
-                    ( listbox, Cmd.none, Nothing )
+                    ( listbox, Cmd.none, selection )
 
                 Just firstEntry ->
                     let
@@ -1573,12 +1495,12 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                     in
                     case data.maybeKeyboardFocus of
                         Nothing ->
-                            ( listbox, Cmd.none, Nothing )
+                            ( listbox, Cmd.none, selection )
 
                         Just keyboardFocus ->
                             case range uniqueId newFocus keyboardFocus allEntries of
                                 [] ->
-                                    ( listbox, Cmd.none, Nothing )
+                                    ( listbox, Cmd.none, selection )
 
                                 selectedEntries ->
                                     ( Listbox
@@ -1592,23 +1514,23 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                                             , maybeLastSelectedEntry = Just newFocus
                                         }
                                     , scrollListToTop id
-                                    , sendEntriesSelected events selectedEntries
+                                    , List.uniqueBy uniqueId (selectedEntries ++ selection)
                                     )
 
         ListEndPressed id ->
             case Internal.lastEntry allEntries of
                 Nothing ->
-                    ( listbox, Cmd.none, Nothing )
+                    ( listbox, Cmd.none, selection )
 
                 Just lastEntry ->
                     data
-                        |> updateFocus behaviour uniqueId events [] False lastEntry
+                        |> updateFocus behaviour uniqueId [] False lastEntry
                         |> andDo (scrollListToBottom id)
 
         ListControlShiftEndPressed id ->
             case Internal.lastEntry allEntries of
                 Nothing ->
-                    ( listbox, Cmd.none, Nothing )
+                    ( listbox, Cmd.none, selection )
 
                 Just lastEntry ->
                     let
@@ -1617,12 +1539,12 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                     in
                     case data.maybeKeyboardFocus of
                         Nothing ->
-                            ( listbox, Cmd.none, Nothing )
+                            ( listbox, Cmd.none, selection )
 
                         Just keyboardFocus ->
                             case range uniqueId newFocus keyboardFocus allEntries of
                                 [] ->
-                                    ( listbox, Cmd.none, Nothing )
+                                    ( listbox, Cmd.none, selection )
 
                                 selectedEntries ->
                                     ( Listbox
@@ -1636,7 +1558,7 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                                             , maybeLastSelectedEntry = Just newFocus
                                         }
                                     , scrollListToBottom id
-                                    , sendEntriesSelected events selectedEntries
+                                    , List.uniqueBy uniqueId (selectedEntries ++ selection)
                                     )
 
         ListControlAPressed ->
@@ -1654,6 +1576,18 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                             )
                         |> Set.fromList
 
+                allEntriesList =
+                    allEntries
+                        |> List.filterMap
+                            (\e ->
+                                case e of
+                                    Divider _ ->
+                                        Nothing
+
+                                    Option a ->
+                                        Just a
+                            )
+
                 selectionSet =
                     selection
                         |> List.map uniqueId
@@ -1662,29 +1596,29 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
             ( listbox
             , Cmd.none
             , if Set.isEmpty (Set.diff allEntriesSet selectionSet) then
-                sendAllEntriesUnselected events
+                []
               else
-                sendAllEntriesSelected events
+                allEntriesList
             )
 
         -- QUERY
         ListKeyPressed id code ->
             case behaviour.typeAhead of
                 NoTypeAhead ->
-                    ( listbox, Cmd.none, Nothing )
+                    ( listbox, Cmd.none, selection )
 
                 TypeAhead _ _ ->
                     ( listbox
                     , Time.now
                         |> Task.perform
                             (CurrentTimeReceived id code)
-                    , Nothing
+                    , selection
                     )
 
         CurrentTimeReceived id code currentTime ->
             case behaviour.typeAhead of
                 NoTypeAhead ->
-                    ( listbox, Cmd.none, Nothing )
+                    ( listbox, Cmd.none, selection )
 
                 TypeAhead timeout matchesQuery ->
                     let
@@ -1706,7 +1640,7 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                     in
                     case newKeyboardFocus of
                         Nothing ->
-                            ( listbox, Cmd.none, Nothing )
+                            ( listbox, Cmd.none, selection )
 
                         Just newFocus ->
                             ( Listbox
@@ -1721,7 +1655,7 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                                 }
                             , Browser.scrollIntoView (printEntryId id newFocus)
                                 |> Task.attempt (\_ -> NoOp)
-                            , Nothing
+                            , selection
                             )
 
         Tick currentTime ->
@@ -1735,7 +1669,7 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                     else
                         listbox
             , Cmd.none
-            , Nothing
+            , selection
             )
 
         -- ENTRY
@@ -1750,7 +1684,7 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                     , maybeMouseFocus = Just newFocus
                 }
             , Cmd.none
-            , Nothing
+            , selection
             )
 
         EntryMouseLeft ->
@@ -1763,7 +1697,7 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                             data.maybeMouseFocus
                 }
             , Cmd.none
-            , Nothing
+            , selection
             )
 
         EntryClicked a ->
@@ -1777,11 +1711,14 @@ update (UpdateConfig uniqueId behaviour) events ((Listbox data) as listbox) allE
                     , maybeLastSelectedEntry = Just (uniqueId a)
                 }
             , Cmd.none
-            , toggleSelectState events selection a
+            , if List.member a selection then
+                List.filter (\b -> a /= b) selection
+              else
+                a :: selection
             )
 
         NoOp ->
-            ( listbox, Cmd.none, Nothing )
+            ( listbox, Cmd.none, selection )
 
 
 andDo : Cmd msg -> ( a, b ) -> ( a, Cmd msg, b )
@@ -1805,13 +1742,12 @@ updateFocus :
         , selectionFollowsFocus : Bool
     }
     -> (a -> String)
-    -> List (Event a outMsg)
     -> List a
     -> Bool
     -> a
     -> Data
-    -> ( Listbox, Maybe outMsg )
-updateFocus behaviour uniqueId events selection shiftDown newEntry data =
+    -> ( Listbox, List a )
+updateFocus behaviour uniqueId selection shiftDown newEntry data =
     let
         newFocus =
             uniqueId newEntry
@@ -1828,7 +1764,7 @@ updateFocus behaviour uniqueId events selection shiftDown newEntry data =
                         Just newFocus
                 , maybeLastSelectedEntry = Just newFocus
             }
-        , sendEntrySelected newEntry events
+        , newEntry :: selection
         )
     else if shiftDown then
         if List.member newEntry selection then
@@ -1843,7 +1779,7 @@ updateFocus behaviour uniqueId events selection shiftDown newEntry data =
                             Just newFocus
                     , maybeLastSelectedEntry = Nothing
                 }
-            , sendEntryUnselected newEntry events
+            , List.remove newEntry selection
             )
         else
             ( Listbox
@@ -1857,7 +1793,7 @@ updateFocus behaviour uniqueId events selection shiftDown newEntry data =
                             Just newFocus
                     , maybeLastSelectedEntry = Just newFocus
                 }
-            , sendEntrySelected newEntry events
+            , newEntry :: selection
             )
     else
         ( Listbox
@@ -1870,16 +1806,8 @@ updateFocus behaviour uniqueId events selection shiftDown newEntry data =
                     else
                         Just newFocus
             }
-        , Nothing
+        , selection
         )
-
-
-toggleSelectState : List (Event a outMsg) -> List a -> a -> Maybe outMsg
-toggleSelectState events selection a =
-    if List.member a selection then
-        sendEntryUnselected a events
-    else
-        sendEntrySelected a events
 
 
 

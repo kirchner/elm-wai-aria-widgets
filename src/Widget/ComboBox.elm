@@ -64,6 +64,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Task
 import Widget exposing (HtmlAttributes, HtmlDetails)
 import Widget.Listbox as Listbox exposing (Listbox, TypeAhead)
+import Widget.Listbox.SingleSelect as SingleSelect
 
 
 {-| TODO
@@ -330,11 +331,14 @@ view config ids (ComboBox data) allEntries maybeSelection =
                     Html.text ""
 
                 _ ->
-                    Listbox.view listboxConfig
+                    Listbox.customView listboxConfig
                         { id = printListboxId ids.id
                         , labelledBy = ids.labelledBy
                         , lift = ListboxMsg (Just ids.id)
-                        , onKeyDown = Decode.fail "not handling keys here"
+                        , onKeyPress = Decode.fail "not handling this event here"
+                        , onMouseDown = Decode.succeed (ListboxMouseDown ids.id)
+                        , onMouseUp = Decode.succeed (ListboxMouseUp ids.id)
+                        , onBlur = Decode.fail "not handling this event here"
                         }
                         data.listbox
                         filteredEntries
@@ -403,25 +407,20 @@ type Msg a
     | TextfieldEnterPressed
       -- LISTBOX
     | ListboxMsg (Maybe String) (Listbox.Msg a)
-
-
-type OutMsg a
-    = ListMouseDown
-    | ListMouseUp
-    | EntrySelected a
+    | ListboxMouseDown String
+    | ListboxMouseUp String
 
 
 {-| TODO
 -}
 update :
     UpdateConfig a
-    -> (a -> outMsg)
     -> ComboBox
     -> List (Entry a divider)
     -> Maybe a
     -> Msg a
-    -> ( ComboBox, Cmd (Msg a), Maybe outMsg )
-update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelection msg =
+    -> ( ComboBox, Cmd (Msg a), Maybe a )
+update config ((ComboBox data) as comboBox) allEntries maybeSelection msg =
     let
         (UpdateConfig { uniqueId, matchesQuery, printEntry } behaviour) =
             config
@@ -470,7 +469,7 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
                 OnDemand ->
                     comboBox
             , Cmd.none
-            , Nothing
+            , maybeSelection
             )
 
         TextfieldBlured id ->
@@ -482,7 +481,7 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
                 focusTextfield id
               else
                 Cmd.none
-            , Nothing
+            , maybeSelection
             )
 
         TextfieldChanged newQuery ->
@@ -510,7 +509,7 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
                 OnDemand ->
                     ComboBox { data | query = Just newQuery }
             , Cmd.none
-            , Nothing
+            , maybeSelection
             )
 
         TextfieldArrowUpPressed id domInfo ->
@@ -528,18 +527,22 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
                             , typeAhead = Listbox.noTypeAhead
                             }
 
-                    ( newListbox, maybeOutMsg ) =
-                        Listbox.focusPreviousOrFirstEntry listboxConfig filteredEntries data.listbox
+                    ( newListbox, newSelection ) =
+                        SingleSelect.focusPreviousOrFirstEntry
+                            listboxConfig
+                            filteredEntries
+                            maybeSelection
+                            data.listbox
                 in
                 ( ComboBox { data | listbox = newListbox }
                 , Task.attempt (\_ -> NoOp) <|
                     Listbox.scrollIntoViewVia domInfo
                         (printListboxId id)
                         newListbox
-                , Nothing
+                , newSelection
                 )
             else
-                ( comboBox, Cmd.none, Nothing )
+                ( comboBox, Cmd.none, maybeSelection )
 
         TextfieldArrowDownPressed id domInfo ->
             if data.open then
@@ -556,18 +559,22 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
                             , typeAhead = Listbox.noTypeAhead
                             }
 
-                    ( newListbox, maybeOutMsg ) =
-                        Listbox.focusNextOrFirstEntry listboxConfig filteredEntries data.listbox
+                    ( newListbox, newSelection ) =
+                        SingleSelect.focusNextOrFirstEntry
+                            listboxConfig
+                            filteredEntries
+                            maybeSelection
+                            data.listbox
                 in
                 ( ComboBox { data | listbox = newListbox }
                 , Task.attempt (\_ -> NoOp) <|
                     Listbox.scrollIntoViewVia domInfo
                         (printListboxId id)
                         newListbox
-                , Nothing
+                , newSelection
                 )
             else
-                ( comboBox, Cmd.none, Nothing )
+                ( comboBox, Cmd.none, maybeSelection )
 
         TextfieldEnterPressed ->
             let
@@ -594,20 +601,12 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
                             , query = Nothing
                         }
                     , Cmd.none
-                    , Just (entrySelected newEntry)
+                    , Just newEntry
                     )
 
         -- LISTBOX
         ListboxMsg maybeId listboxMsg ->
             let
-                selection =
-                    case maybeSelection of
-                        Nothing ->
-                            []
-
-                        Just actualSelection ->
-                            [ actualSelection ]
-
                 listboxConfig =
                     Listbox.updateConfig uniqueId
                         { jumpAtEnds = behaviour.jumpAtEnds
@@ -617,15 +616,11 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
                         , typeAhead = Listbox.noTypeAhead
                         }
 
-                ( newListbox, listboxCmd, maybeOutMsg ) =
-                    Listbox.update listboxConfig
-                        [ Listbox.onMouseDown ListMouseDown
-                        , Listbox.onMouseUp ListMouseUp
-                        , Listbox.onEntrySelect EntrySelected
-                        ]
+                ( newListbox, listboxCmd, newSelection ) =
+                    SingleSelect.update listboxConfig
                         data.listbox
                         allEntries
-                        selection
+                        maybeSelection
                         listboxMsg
 
                 newData =
@@ -634,44 +629,22 @@ update config entrySelected ((ComboBox data) as comboBox) allEntries maybeSelect
                 comboBoxCmd =
                     Cmd.map (ListboxMsg maybeId) listboxCmd
             in
-            case maybeOutMsg of
-                Nothing ->
-                    ( ComboBox newData
-                    , comboBoxCmd
-                    , Nothing
-                    )
+            ( ComboBox data
+            , comboBoxCmd
+            , newSelection
+            )
 
-                Just ListMouseDown ->
-                    ( ComboBox { newData | preventBlur = True }
-                    , Cmd.batch
-                        [ comboBoxCmd
-                        , maybeId
-                            |> Maybe.map focusTextfield
-                            |> Maybe.withDefault Cmd.none
-                        ]
-                    , Nothing
-                    )
+        ListboxMouseDown id ->
+            ( ComboBox { data | preventBlur = True }
+            , focusTextfield id
+            , maybeSelection
+            )
 
-                Just ListMouseUp ->
-                    ( ComboBox { newData | preventBlur = False }
-                    , Cmd.batch
-                        [ comboBoxCmd
-                        , maybeId
-                            |> Maybe.map focusTextfield
-                            |> Maybe.withDefault Cmd.none
-                        ]
-                    , Nothing
-                    )
-
-                Just (EntrySelected a) ->
-                    ( ComboBox
-                        { data
-                            | open = False
-                            , query = Nothing
-                        }
-                    , comboBoxCmd
-                    , Just (entrySelected a)
-                    )
+        ListboxMouseUp id ->
+            ( ComboBox { data | preventBlur = False }
+            , focusTextfield id
+            , maybeSelection
+            )
 
         NoOp ->
             ( comboBox, Cmd.none, Nothing )

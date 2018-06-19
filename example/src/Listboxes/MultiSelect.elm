@@ -8,6 +8,24 @@ module Listboxes.MultiSelect
         , view
         )
 
+{-
+
+   Copyright 2018 Fabian Kirchner
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+-}
+
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
@@ -76,14 +94,8 @@ update msg model =
 
         AvailableListboxMsg listboxMsg ->
             let
-                ( newListbox, listboxCmd, maybeOutMsg ) =
+                ( newListbox, listboxCmd, newSelection ) =
                     Listbox.update updateConfig
-                        [ Listbox.onEntrySelect EntrySelected
-                        , Listbox.onEntriesSelect EntriesSelected
-                        , Listbox.onAllEntriesSelect AllEntriesSelected
-                        , Listbox.onEntryUnselect EntryUnselected
-                        , Listbox.onAllEntriesUnselect AllEntriesUnselected
-                        ]
                         model.availableListbox
                         (List.map Listbox.option model.available)
                         (Set.toList model.selectedAvailable)
@@ -91,26 +103,7 @@ update msg model =
             in
             ( { model
                 | availableListbox = newListbox
-                , selectedAvailable =
-                    case maybeOutMsg of
-                        Nothing ->
-                            model.selectedAvailable
-
-                        Just (EntrySelected new) ->
-                            Set.insert new model.selectedAvailable
-
-                        Just (EntriesSelected news) ->
-                            Set.union model.selectedAvailable
-                                (Set.fromList news)
-
-                        Just AllEntriesSelected ->
-                            Set.fromList model.available
-
-                        Just (EntryUnselected old) ->
-                            Set.remove old model.selectedAvailable
-
-                        Just AllEntriesUnselected ->
-                            Set.empty
+                , selectedAvailable = Set.fromList newSelection
               }
             , Cmd.map AvailableListboxMsg listboxCmd
             )
@@ -130,14 +123,8 @@ update msg model =
 
         ChosenListboxMsg listboxMsg ->
             let
-                ( newListbox, listboxCmd, maybeOutMsg ) =
+                ( newListbox, listboxCmd, newSelection ) =
                     Listbox.update updateConfig
-                        [ Listbox.onEntrySelect EntrySelected
-                        , Listbox.onEntriesSelect EntriesSelected
-                        , Listbox.onAllEntriesSelect AllEntriesSelected
-                        , Listbox.onEntryUnselect EntryUnselected
-                        , Listbox.onAllEntriesUnselect AllEntriesUnselected
-                        ]
                         model.chosenListbox
                         (List.map Listbox.option model.chosen)
                         (Set.toList model.selectedChosen)
@@ -145,26 +132,7 @@ update msg model =
             in
             ( { model
                 | chosenListbox = newListbox
-                , selectedChosen =
-                    case maybeOutMsg of
-                        Nothing ->
-                            model.selectedChosen
-
-                        Just (EntrySelected new) ->
-                            Set.insert new model.selectedChosen
-
-                        Just (EntriesSelected news) ->
-                            Set.union model.selectedChosen
-                                (Set.fromList news)
-
-                        Just AllEntriesSelected ->
-                            Set.fromList model.chosen
-
-                        Just (EntryUnselected old) ->
-                            Set.remove old model.selectedChosen
-
-                        Just AllEntriesUnselected ->
-                            Set.empty
+                , selectedChosen = Set.fromList newSelection
               }
             , Cmd.map ChosenListboxMsg listboxCmd
             )
@@ -216,12 +184,12 @@ view model =
                     [ Html.text "Available upgrades:" ]
                 , Html.div
                     [ Attributes.class "control" ]
-                    [ Listbox.view
+                    [ Listbox.customView
                         viewConfig
                         { id = "available-listbox"
                         , labelledBy = "available-label"
                         , lift = AvailableListboxMsg
-                        , onKeyDown =
+                        , onKeyPress =
                             Decode.field "key" Decode.string
                                 |> Decode.andThen
                                     (\code ->
@@ -232,6 +200,9 @@ view model =
                                             _ ->
                                                 Decode.fail "not handling that key here"
                                     )
+                        , onMouseDown = Decode.fail "not handling this event here"
+                        , onMouseUp = Decode.fail "not handling this event here"
+                        , onBlur = Decode.fail "not handling this event here"
                         }
                         model.availableListbox
                         availableEntries
@@ -280,12 +251,12 @@ view model =
                     [ Html.text "Upgrades you have chosen:" ]
                 , Html.div
                     [ Attributes.class "control" ]
-                    [ Listbox.view
+                    [ Listbox.customView
                         viewConfig
                         { id = "chosen-listbox"
                         , labelledBy = "chosen-label"
                         , lift = ChosenListboxMsg
-                        , onKeyDown =
+                        , onKeyPress =
                             Decode.field "key" Decode.string
                                 |> Decode.andThen
                                     (\code ->
@@ -296,6 +267,9 @@ view model =
                                             _ ->
                                                 Decode.fail "not handling that key here"
                                     )
+                        , onMouseDown = Decode.fail "not handling this event here"
+                        , onMouseUp = Decode.fail "not handling this event here"
+                        , onBlur = Decode.fail "not handling this event here"
                         }
                         model.chosenListbox
                         chosenEntries

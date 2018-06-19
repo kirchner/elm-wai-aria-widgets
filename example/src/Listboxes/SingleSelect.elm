@@ -8,6 +8,24 @@ module Listboxes.SingleSelect
         , view
         )
 
+{-
+
+   Copyright 2018 Fabian Kirchner
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+-}
+
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
@@ -15,6 +33,7 @@ import Json.Decode as Decode
 import List.Extra as List
 import Task
 import Widget.Listbox as Listbox exposing (Listbox)
+import Widget.Listbox.SingleSelect as SingleSelect
 
 
 type alias Model =
@@ -75,23 +94,16 @@ update msg model =
 
         ImportantFeaturesListboxMsg listboxMsg ->
             let
-                ( newListbox, listboxCmd, maybeOutMsg ) =
-                    Listbox.update listboxUpdateConfig
-                        [ Listbox.onEntrySelect identity ]
+                ( newListbox, listboxCmd, newSelection ) =
+                    SingleSelect.update listboxUpdateConfig
                         model.importantFeaturesListbox
                         (List.map Listbox.option model.importantFeatures)
-                        (maybeToList model.selectedImportantFeature)
+                        model.selectedImportantFeature
                         listboxMsg
             in
             ( { model
                 | importantFeaturesListbox = newListbox
-                , selectedImportantFeature =
-                    case maybeOutMsg of
-                        Just feature ->
-                            Just feature
-
-                        _ ->
-                            model.selectedImportantFeature
+                , selectedImportantFeature = newSelection
               }
             , Cmd.map ImportantFeaturesListboxMsg listboxCmd
             )
@@ -134,29 +146,25 @@ update msg model =
                             model.importantFeatures
                                 |> List.break (\f -> f == feature)
 
-                        ( newListbox, maybeOutMsg ) =
+                        ( newListbox, newSelection ) =
                             case
                                 List.head (List.drop 1 end)
                                     |> or (List.head (List.reverse start))
                             of
                                 Nothing ->
-                                    ( model.importantFeaturesListbox, Nothing )
+                                    ( model.importantFeaturesListbox
+                                    , model.selectedImportantFeature
+                                    )
 
                                 Just newFeature ->
-                                    Listbox.focusEntry listboxUpdateConfig
-                                        [ Listbox.onEntrySelect identity ]
+                                    SingleSelect.focusEntry listboxUpdateConfig
                                         newFeature
+                                        model.selectedImportantFeature
                                         model.importantFeaturesListbox
                     in
                     ( { model
                         | importantFeaturesListbox = newListbox
-                        , selectedImportantFeature =
-                            case maybeOutMsg of
-                                Just newFeature ->
-                                    Just newFeature
-
-                                _ ->
-                                    Nothing
+                        , selectedImportantFeature = newSelection
                         , importantFeatures = start ++ List.drop 1 end
                         , unimportantFeatures = feature :: model.unimportantFeatures
                       }
@@ -165,23 +173,16 @@ update msg model =
 
         UnimportantFeaturesListboxMsg listboxMsg ->
             let
-                ( newListbox, listboxCmd, maybeOutMsg ) =
-                    Listbox.update listboxUpdateConfig
-                        [ Listbox.onEntrySelect identity ]
+                ( newListbox, listboxCmd, newSelection ) =
+                    SingleSelect.update listboxUpdateConfig
                         model.unimportantFeaturesListbox
                         (List.map Listbox.option model.unimportantFeatures)
-                        (maybeToList model.selectedUnimportantFeature)
+                        model.selectedUnimportantFeature
                         listboxMsg
             in
             ( { model
                 | unimportantFeaturesListbox = newListbox
-                , selectedUnimportantFeature =
-                    case maybeOutMsg of
-                        Just feature ->
-                            Just feature
-
-                        _ ->
-                            model.selectedUnimportantFeature
+                , selectedUnimportantFeature = newSelection
               }
             , Cmd.map UnimportantFeaturesListboxMsg listboxCmd
             )
@@ -212,29 +213,25 @@ update msg model =
                             model.unimportantFeatures
                                 |> List.break (\f -> f == feature)
 
-                        ( newListbox, maybeOutMsg ) =
+                        ( newListbox, newSelection ) =
                             case
                                 List.head (List.drop 1 end)
                                     |> or (List.head (List.reverse start))
                             of
                                 Nothing ->
-                                    ( model.unimportantFeaturesListbox, Nothing )
+                                    ( model.unimportantFeaturesListbox
+                                    , model.selectedUnimportantFeature
+                                    )
 
                                 Just newFeature ->
-                                    Listbox.focusEntry listboxUpdateConfig
-                                        [ Listbox.onEntrySelect identity ]
+                                    SingleSelect.focusEntry listboxUpdateConfig
                                         newFeature
+                                        model.selectedUnimportantFeature
                                         model.unimportantFeaturesListbox
                     in
                     ( { model
                         | unimportantFeaturesListbox = newListbox
-                        , selectedUnimportantFeature =
-                            case maybeOutMsg of
-                                Just newFeature ->
-                                    Just newFeature
-
-                                _ ->
-                                    Nothing
+                        , selectedUnimportantFeature = newSelection
                         , unimportantFeatures = start ++ List.drop 1 end
                         , importantFeatures = feature :: model.importantFeatures
                       }
@@ -358,12 +355,12 @@ view model =
                     [ Html.text "Important features:" ]
                 , Html.div
                     [ Attributes.class "control" ]
-                    [ Listbox.view
+                    [ Listbox.customView
                         listboxViewConfig
                         { id = "important-features-listbox"
                         , labelledBy = "important-features-listbox-label"
                         , lift = ImportantFeaturesListboxMsg
-                        , onKeyDown =
+                        , onKeyPress =
                             Decode.map2 Tuple.pair
                                 (Decode.field "key" Decode.string)
                                 (Decode.field "altKey" Decode.bool)
@@ -390,6 +387,9 @@ view model =
                                             _ ->
                                                 Decode.fail "not handling that key here"
                                     )
+                        , onMouseDown = Decode.fail "not handling this event here"
+                        , onMouseUp = Decode.fail "not handling this event here"
+                        , onBlur = Decode.fail "not handling this event here"
                         }
                         model.importantFeaturesListbox
                         entries
@@ -470,11 +470,11 @@ view model =
                     [ Html.text "Unimportant features:" ]
                 , Html.div
                     [ Attributes.class "control" ]
-                    [ Listbox.view listboxViewConfig
+                    [ Listbox.customView listboxViewConfig
                         { id = "unimportant-features-listbox"
                         , labelledBy = "unimportant-features-listbox-label"
                         , lift = UnimportantFeaturesListboxMsg
-                        , onKeyDown =
+                        , onKeyPress =
                             Decode.field "key" Decode.string
                                 |> Decode.andThen
                                     (\rawCode ->
@@ -485,6 +485,9 @@ view model =
                                             _ ->
                                                 Decode.fail "not handling that key here"
                                     )
+                        , onMouseDown = Decode.fail "not handling this event here"
+                        , onMouseUp = Decode.fail "not handling this event here"
+                        , onBlur = Decode.fail "not handling this event here"
                         }
                         model.unimportantFeaturesListbox
                         (List.map Listbox.option model.unimportantFeatures)

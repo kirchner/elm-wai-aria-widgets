@@ -8,6 +8,24 @@ module DropdownMenus.ComboBox
         , view
         )
 
+{-
+
+   Copyright 2018 Fabian Kirchner
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+-}
+
 import Data exposing (locales)
 import Helper exposing (matchesQuery)
 import Html exposing (Html)
@@ -65,7 +83,7 @@ update msg model =
     case msg of
         ComboBoxMsg comboBoxMsg ->
             let
-                ( newComboBox, comboBoxCmd, maybeOutMsg ) =
+                ( newComboBox, comboBoxCmd, newSelection ) =
                     ComboBox.update
                         (updateConfig
                             model.jumpAtEnds
@@ -75,7 +93,6 @@ update msg model =
                             model.handleHomeAndEnd
                             model.displayCondition
                         )
-                        identity
                         model.comboBox
                         locales
                         model.selectedLocale2
@@ -83,13 +100,7 @@ update msg model =
             in
             ( { model
                 | comboBox = newComboBox
-                , selectedLocale2 =
-                    case maybeOutMsg of
-                        Just locale ->
-                            Just locale
-
-                        _ ->
-                            model.selectedLocale2
+                , selectedLocale2 = newSelection
               }
             , Cmd.map ComboBoxMsg comboBoxCmd
             )

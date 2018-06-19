@@ -167,6 +167,7 @@ type OutMsg
     | AllEntriesUnselected
 
 
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         NoOp ->
@@ -216,7 +217,7 @@ update msg model =
         -- LISTBOX
         ListboxMsg listboxMsg ->
             let
-                ( newListbox, listboxCmd, maybeOutMsg ) =
+                ( newListbox, listboxCmd, newSelection ) =
                     Listbox.update
                         (listboxUpdateConfig
                             model.listboxJumpAtEnds
@@ -225,12 +226,6 @@ update msg model =
                             model.listboxHandleHomeAndEnd
                             model.listboxTypeAhead
                         )
-                        [ Listbox.onEntrySelect EntrySelected
-                        , Listbox.onEntriesSelect EntriesSelected
-                        , Listbox.onEntryUnselect EntryUnselected
-                        , Listbox.onAllEntriesSelect AllEntriesSelected
-                        , Listbox.onAllEntriesUnselect AllEntriesUnselected
-                        ]
                         model.listbox
                         locales
                         (Set.toList model.selectedLocales)
@@ -238,27 +233,7 @@ update msg model =
             in
             ( { model
                 | listbox = newListbox
-                , selectedLocales =
-                    case maybeOutMsg of
-                        Nothing ->
-                            model.selectedLocales
-
-                        Just (EntrySelected locale) ->
-                            Set.insert locale model.selectedLocales
-
-                        Just (EntriesSelected newLocales) ->
-                            Set.union
-                                (Set.fromList newLocales)
-                                model.selectedLocales
-
-                        Just (EntryUnselected locale) ->
-                            Set.remove locale model.selectedLocales
-
-                        Just AllEntriesSelected ->
-                            Set.fromList allLocales
-
-                        Just AllEntriesUnselected ->
-                            Set.empty
+                , selectedLocales = Set.fromList newSelection
               }
             , Cmd.map ListboxMsg listboxCmd
             )
@@ -291,15 +266,9 @@ update msg model =
         -- MUPPETS LISTBOX
         MuppetsListboxMsg listboxMsg ->
             let
-                ( newListbox, listboxCmd, maybeOutMsg ) =
+                ( newListbox, listboxCmd, newSelection ) =
                     Listbox.update
                         (listboxUpdateConfig True True False True True)
-                        [ Listbox.onEntrySelect EntrySelected
-                        , Listbox.onEntriesSelect EntriesSelected
-                        , Listbox.onEntryUnselect EntryUnselected
-                        , Listbox.onAllEntriesSelect AllEntriesSelected
-                        , Listbox.onAllEntriesUnselect AllEntriesUnselected
-                        ]
                         model.muppetsListbox
                         muppets
                         (Set.toList model.selectedMuppets)
@@ -307,27 +276,7 @@ update msg model =
             in
             ( { model
                 | muppetsListbox = newListbox
-                , selectedMuppets =
-                    case maybeOutMsg of
-                        Nothing ->
-                            model.selectedMuppets
-
-                        Just (EntrySelected muppet) ->
-                            Set.insert muppet model.selectedMuppets
-
-                        Just (EntriesSelected newMuppets) ->
-                            Set.union
-                                (Set.fromList newMuppets)
-                                model.selectedMuppets
-
-                        Just (EntryUnselected muppet) ->
-                            Set.remove muppet model.selectedMuppets
-
-                        Just AllEntriesSelected ->
-                            Set.fromList allMuppets
-
-                        Just AllEntriesUnselected ->
-                            Set.empty
+                , selectedMuppets = Set.fromList newSelection
               }
             , Cmd.map MuppetsListboxMsg listboxCmd
             )
@@ -764,7 +713,10 @@ viewListbox listbox selection =
                     { id = "locales"
                     , labelledBy = "locales-label"
                     , lift = ListboxMsg
-                    , onKeyDown = Decode.fail "not handling keys here"
+                    , onKeyPress = Decode.fail "not handling this event here"
+                    , onMouseDown = Decode.fail "not handling this event here"
+                    , onMouseUp = Decode.fail "not handling this event here"
+                    , onBlur = Decode.fail "not handling this event here"
                     }
                     listbox
                     locales
@@ -824,7 +776,10 @@ viewMuppetsListbox listbox selection =
                     { id = "muppets"
                     , labelledBy = "muppets-label"
                     , lift = MuppetsListboxMsg
-                    , onKeyDown = Decode.fail "not handling keys here"
+                    , onKeyPress = Decode.fail "not handling this event here"
+                    , onMouseDown = Decode.fail "not handling this event here"
+                    , onMouseUp = Decode.fail "not handling this event here"
+                    , onBlur = Decode.fail "not handling this event here"
                     }
                     listbox
                     muppets

@@ -62,6 +62,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Task
 import Widget exposing (HtmlAttributes, HtmlDetails)
 import Widget.Listbox as Listbox exposing (Entry, Listbox, TypeAhead)
+import Widget.Listbox.SingleSelect as SingleSelect
 
 
 {-| TODO
@@ -227,11 +228,11 @@ view (ViewConfig uniqueId views) ids (Dropdown data) allEntries maybeSelection =
             ]
         )
         [ viewButton ids.id buttonHtmlDetails ids.labelledBy maybeSelection True
-        , Listbox.view listboxConfig
+        , Listbox.customView listboxConfig
             { id = printListboxId ids.id
             , labelledBy = ids.labelledBy
             , lift = ListboxMsg (Just ids.id)
-            , onKeyDown =
+            , onKeyPress =
                 Decode.field "key" Decode.string
                     |> Decode.andThen
                         (\rawCode ->
@@ -242,6 +243,9 @@ view (ViewConfig uniqueId views) ids (Dropdown data) allEntries maybeSelection =
                                 _ ->
                                     Decode.fail "not handling keys here"
                         )
+            , onMouseDown = Decode.fail "not handling this event here"
+            , onMouseUp = Decode.fail "not handling this event here"
+            , onBlur = Decode.succeed (ListboxBlured ids.id)
             }
             data.listbox
             allEntries
@@ -335,24 +339,19 @@ type Msg a
       -- LISTBOX
     | ListboxMsg (Maybe String) (Listbox.Msg a)
     | ListboxEscapePressed String
-
-
-type OutMsg a
-    = EntrySelected a
-    | ListboxBlured
+    | ListboxBlured String
 
 
 {-| TODO
 -}
 update :
     UpdateConfig a
-    -> (a -> outMsg)
     -> Dropdown
     -> List (Entry a divider)
     -> Maybe a
     -> Msg a
-    -> ( Dropdown, Cmd (Msg a), Maybe outMsg )
-update (UpdateConfig uniqueId behaviour) entrySelected (Dropdown data) allEntries maybeSelection msg =
+    -> ( Dropdown, Cmd (Msg a), Maybe a )
+update (UpdateConfig uniqueId behaviour) (Dropdown data) allEntries maybeSelection msg =
     let
         listboxConfig =
             Listbox.updateConfig uniqueId
@@ -365,18 +364,18 @@ update (UpdateConfig uniqueId behaviour) entrySelected (Dropdown data) allEntrie
     in
     case msg of
         NoOp ->
-            ( Dropdown data, Cmd.none, Nothing )
+            ( Dropdown data, Cmd.none, maybeSelection )
 
         NextAnimationFrame ->
             case data.pendingFocusListbox of
                 Nothing ->
-                    ( Dropdown data, Cmd.none, Nothing )
+                    ( Dropdown data, Cmd.none, maybeSelection )
 
                 Just id ->
                     ( Dropdown { data | pendingFocusListbox = Nothing }
                     , Task.attempt (\_ -> NoOp) <|
                         Listbox.focus (printListboxId id)
-                    , Nothing
+                    , maybeSelection
                     )
 
         -- CONTAINER
@@ -384,60 +383,20 @@ update (UpdateConfig uniqueId behaviour) entrySelected (Dropdown data) allEntrie
             if data.open then
                 ( Dropdown { data | open = False }
                 , focusButton id
-                , Nothing
+                , maybeSelection
                 )
             else
-                ( Dropdown data, Cmd.none, Nothing )
+                ( Dropdown data, Cmd.none, maybeSelection )
 
         -- BUTTON
         ButtonClicked id ->
             ( Dropdown { data | open = True }
             , Task.attempt (\_ -> NoOp) <|
                 Listbox.focus (printListboxId id)
-            , Nothing
+            , maybeSelection
             )
 
         ButtonArrowUpPressed id ->
-            let
-                ( newListbox, maybeOutMsg ) =
-                    Listbox.focusPreviousOrFirstEntry listboxConfig allEntries data.listbox
-            in
-            handleOutMsg
-                entrySelected
-                (Just id)
-                { data
-                    | open = True
-                    , listbox = newListbox
-                    , pendingFocusListbox =
-                        if data.open then
-                            Nothing
-                        else
-                            Just id
-                }
-                Cmd.none
-                maybeOutMsg
-
-        ButtonArrowDownPressed id ->
-            let
-                ( newListbox, maybeOutMsg ) =
-                    Listbox.focusNextOrFirstEntry listboxConfig allEntries data.listbox
-            in
-            handleOutMsg
-                entrySelected
-                (Just id)
-                { data
-                    | open = True
-                    , listbox = newListbox
-                    , pendingFocusListbox =
-                        if data.open then
-                            Nothing
-                        else
-                            Just id
-                }
-                Cmd.none
-                maybeOutMsg
-
-        ListboxMsg maybeId listboxMsg ->
             let
                 selection =
                     case maybeSelection of
@@ -447,52 +406,84 @@ update (UpdateConfig uniqueId behaviour) entrySelected (Dropdown data) allEntrie
                         Just actualSelection ->
                             [ actualSelection ]
 
-                ( newListbox, listboxCmd, maybeOutMsg ) =
-                    Listbox.update listboxConfig
-                        [ Listbox.onEntrySelect EntrySelected
-                        , Listbox.onListboxBlur ListboxBlured
-                        ]
+                ( newListbox, newSelection ) =
+                    Listbox.focusPreviousOrFirstEntry listboxConfig allEntries selection data.listbox
+            in
+            ( Dropdown
+                { data
+                    | open = True
+                    , listbox = newListbox
+                    , pendingFocusListbox =
+                        if data.open then
+                            Nothing
+                        else
+                            Just id
+                }
+            , Cmd.none
+            , case newSelection of
+                newEntry :: [] ->
+                    Just newEntry
+
+                _ ->
+                    Nothing
+            )
+
+        ButtonArrowDownPressed id ->
+            let
+                selection =
+                    case maybeSelection of
+                        Nothing ->
+                            []
+
+                        Just actualSelection ->
+                            [ actualSelection ]
+
+                ( newListbox, newSelection ) =
+                    Listbox.focusNextOrFirstEntry listboxConfig allEntries selection data.listbox
+            in
+            ( Dropdown
+                { data
+                    | open = True
+                    , listbox = newListbox
+                    , pendingFocusListbox =
+                        if data.open then
+                            Nothing
+                        else
+                            Just id
+                }
+            , Cmd.none
+            , case newSelection of
+                newEntry :: [] ->
+                    Just newEntry
+
+                _ ->
+                    Nothing
+            )
+
+        ListboxMsg maybeId listboxMsg ->
+            let
+                ( newListbox, listboxCmd, newSelection ) =
+                    SingleSelect.update listboxConfig
                         data.listbox
                         allEntries
-                        selection
+                        maybeSelection
                         listboxMsg
             in
-            handleOutMsg
-                entrySelected
-                maybeId
-                { data | listbox = newListbox }
-                (Cmd.map (ListboxMsg maybeId) listboxCmd)
-                maybeOutMsg
+            ( Dropdown { data | listbox = newListbox }
+            , Cmd.map (ListboxMsg maybeId) listboxCmd
+            , newSelection
+            )
 
         ListboxEscapePressed id ->
             ( Dropdown { data | open = False }
             , focusButton id
-            , Nothing
+            , maybeSelection
             )
 
-
-handleOutMsg :
-    (a -> outMsg)
-    -> Maybe String
-    -> Data
-    -> Cmd (Msg a)
-    -> Maybe (OutMsg a)
-    -> ( Dropdown, Cmd (Msg a), Maybe outMsg )
-handleOutMsg entrySelected maybeId data cmd maybeOutMsg =
-    case maybeOutMsg of
-        Nothing ->
-            ( Dropdown data, cmd, Nothing )
-
-        Just ListboxBlured ->
+        ListboxBlured id ->
             ( Dropdown { data | open = False }
-            , cmd
-            , Nothing
-            )
-
-        Just (EntrySelected a) ->
-            ( Dropdown data
-            , cmd
-            , Just (entrySelected a)
+            , focusButton id
+            , maybeSelection
             )
 
 
