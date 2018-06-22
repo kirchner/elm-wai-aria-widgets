@@ -610,7 +610,7 @@ viewListboxes model =
             [ Html.text "These are reimplementations of the "
             , Html.a
                 [ Attributes.href "https://www.w3.org/TR/2017/NOTE-wai-aria-practices-1.1-20171214/examples/listbox/listbox-rearrangeable.html" ]
-                [ Html.text "Example Listboxes with Rearrangable Optios" ]
+                [ Html.text "Example Listboxes with Rearrangable Options" ]
             , Html.text " of the WAI-ARIA Authoring Practices 1.1."
             ]
         , Html.div
