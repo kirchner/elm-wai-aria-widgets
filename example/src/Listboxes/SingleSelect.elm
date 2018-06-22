@@ -33,7 +33,6 @@ import Json.Decode as Decode
 import List.Extra as List
 import Task
 import Widget.Listbox as Listbox exposing (Listbox)
-import Widget.Listbox.SingleSelect as SingleSelect
 
 
 type alias Model =
@@ -95,11 +94,11 @@ update msg model =
         ImportantFeaturesListboxMsg listboxMsg ->
             let
                 ( newListbox, listboxCmd, newSelection ) =
-                    SingleSelect.update listboxUpdateConfig
-                        model.importantFeaturesListbox
+                    Listbox.updateUnique listboxUpdateConfig
                         (List.map Listbox.option model.importantFeatures)
-                        model.selectedImportantFeature
                         listboxMsg
+                        model.importantFeaturesListbox
+                        model.selectedImportantFeature
             in
             ( { model
                 | importantFeaturesListbox = newListbox
@@ -157,10 +156,10 @@ update msg model =
                                     )
 
                                 Just newFeature ->
-                                    SingleSelect.focusEntry listboxUpdateConfig
-                                        newFeature
-                                        model.selectedImportantFeature
-                                        model.importantFeaturesListbox
+                                    Listbox.withUnique model.selectedImportantFeature <|
+                                        Listbox.focusEntry listboxUpdateConfig
+                                            newFeature
+                                            model.importantFeaturesListbox
                     in
                     ( { model
                         | importantFeaturesListbox = newListbox
@@ -174,11 +173,11 @@ update msg model =
         UnimportantFeaturesListboxMsg listboxMsg ->
             let
                 ( newListbox, listboxCmd, newSelection ) =
-                    SingleSelect.update listboxUpdateConfig
-                        model.unimportantFeaturesListbox
+                    Listbox.updateUnique listboxUpdateConfig
                         (List.map Listbox.option model.unimportantFeatures)
-                        model.selectedUnimportantFeature
                         listboxMsg
+                        model.unimportantFeaturesListbox
+                        model.selectedUnimportantFeature
             in
             ( { model
                 | unimportantFeaturesListbox = newListbox
@@ -224,10 +223,10 @@ update msg model =
                                     )
 
                                 Just newFeature ->
-                                    SingleSelect.focusEntry listboxUpdateConfig
-                                        newFeature
-                                        model.selectedUnimportantFeature
-                                        model.unimportantFeaturesListbox
+                                    Listbox.withUnique model.selectedUnimportantFeature <|
+                                        Listbox.focusEntry listboxUpdateConfig
+                                            newFeature
+                                            model.unimportantFeaturesListbox
                     in
                     ( { model
                         | unimportantFeaturesListbox = newListbox
@@ -317,17 +316,15 @@ view model =
             List.head (List.reverse model.importantFeatures)
                 == model.selectedImportantFeature
 
-        aboveFocused =
-            Listbox.fromFocused -1
-                listboxViewConfig
-                model.importantFeaturesListbox
-                entries
+        aboveFocusedDomInfo path =
+            -1
+                |> Listbox.fromFocused listboxViewConfig entries model.importantFeaturesListbox
+                |> Listbox.domInfo path
 
-        belowFocused =
-            Listbox.fromFocused 1
-                listboxViewConfig
-                model.importantFeaturesListbox
-                entries
+        belowFocusedDomInfo path =
+            1
+                |> Listbox.fromFocused listboxViewConfig entries model.importantFeaturesListbox
+                |> Listbox.domInfo path
 
         entries =
             List.map Listbox.option model.importantFeatures
@@ -355,8 +352,7 @@ view model =
                     [ Html.text "Important features:" ]
                 , Html.div
                     [ Attributes.class "control" ]
-                    [ Listbox.customView
-                        listboxViewConfig
+                    [ Listbox.customViewUnique listboxViewConfig
                         { id = "important-features-listbox"
                         , labelledBy = "important-features-listbox-label"
                         , lift = ImportantFeaturesListboxMsg
@@ -371,15 +367,15 @@ view model =
                                                 if firstSelected then
                                                     Decode.fail "not handling that key here"
                                                 else
-                                                    Listbox.domInfoOf aboveFocused [ "target" ]
-                                                        |> Decode.map ImportantFeaturesAltArrowUpPressed
+                                                    Decode.map ImportantFeaturesAltArrowUpPressed <|
+                                                        aboveFocusedDomInfo [ "target" ]
 
                                             ( "ArrowDown", True ) ->
                                                 if lastSelected then
                                                     Decode.fail "not handling that key here"
                                                 else
-                                                    Listbox.domInfoOf belowFocused [ "target" ]
-                                                        |> Decode.map ImportantFeaturesAltArrowDownPressed
+                                                    Decode.map ImportantFeaturesAltArrowDownPressed <|
+                                                        belowFocusedDomInfo [ "target" ]
 
                                             ( "Delete", False ) ->
                                                 Decode.succeed ImportantFeaturesDeletePressed
@@ -391,9 +387,9 @@ view model =
                         , onMouseUp = Decode.fail "not handling this event here"
                         , onBlur = Decode.fail "not handling this event here"
                         }
-                        model.importantFeaturesListbox
                         entries
-                        (maybeToList model.selectedImportantFeature)
+                        model.importantFeaturesListbox
+                        model.selectedImportantFeature
                     ]
                 ]
             , Html.div
@@ -410,7 +406,7 @@ view model =
                             (model.selectedImportantFeature == Nothing || firstSelected)
                         , Events.on "click" <|
                             Decode.map ImportantFeaturesUpPressed <|
-                                Listbox.domInfoOf aboveFocused pathToListbox
+                                aboveFocusedDomInfo pathToListbox
                         , Attributes.attribute "aria-keyshortcuts" "Alt+ArrowUp"
                         , Attributes.attribute "aria-disabled" <|
                             boolToString (model.selectedImportantFeature == Nothing || firstSelected)
@@ -425,7 +421,7 @@ view model =
                             (model.selectedImportantFeature == Nothing || lastSelected)
                         , Events.on "click" <|
                             Decode.map ImportantFeaturesDownPressed <|
-                                Listbox.domInfoOf belowFocused pathToListbox
+                                belowFocusedDomInfo pathToListbox
                         , Attributes.attribute "aria-keyshortcuts" "Alt+ArrowDown"
                         , Attributes.attribute "aria-disabled" <|
                             boolToString (model.selectedImportantFeature == Nothing || lastSelected)
@@ -470,7 +466,7 @@ view model =
                     [ Html.text "Unimportant features:" ]
                 , Html.div
                     [ Attributes.class "control" ]
-                    [ Listbox.customView listboxViewConfig
+                    [ Listbox.customViewUnique listboxViewConfig
                         { id = "unimportant-features-listbox"
                         , labelledBy = "unimportant-features-listbox-label"
                         , lift = UnimportantFeaturesListboxMsg
@@ -489,9 +485,9 @@ view model =
                         , onMouseUp = Decode.fail "not handling this event here"
                         , onBlur = Decode.fail "not handling this event here"
                         }
-                        model.unimportantFeaturesListbox
                         (List.map Listbox.option model.unimportantFeatures)
-                        (maybeToList model.selectedUnimportantFeature)
+                        model.unimportantFeaturesListbox
+                        model.selectedUnimportantFeature
                     ]
                 ]
             , Html.div
@@ -566,16 +562,6 @@ listboxViewConfig =
 
 
 ---- HELPER
-
-
-maybeToList : Maybe a -> List a
-maybeToList maybeA =
-    case maybeA of
-        Nothing ->
-            []
-
-        Just a ->
-            [ a ]
 
 
 or : Maybe a -> Maybe a -> Maybe a

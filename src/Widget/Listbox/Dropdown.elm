@@ -2,12 +2,11 @@ module Widget.Listbox.Dropdown
     exposing
         ( Behaviour
         , Dropdown
-        , Ids
         , Msg
         , UpdateConfig
         , ViewConfig
         , Views
-        , closed
+        , init
         , subscriptions
         , update
         , updateConfig
@@ -17,7 +16,7 @@ module Widget.Listbox.Dropdown
 
 {-|
 
-@docs Dropdown, closed, view, Ids, update, Msg, subscriptions
+@docs Dropdown, init, view, update, Msg, subscriptions
 
 
 # Configuration
@@ -62,7 +61,6 @@ import Json.Decode as Decode exposing (Decoder)
 import Task
 import Widget exposing (HtmlAttributes, HtmlDetails)
 import Widget.Listbox as Listbox exposing (Entry, Listbox, TypeAhead)
-import Widget.Listbox.SingleSelect as SingleSelect
 
 
 {-| TODO
@@ -81,8 +79,8 @@ type alias Data =
 
 {-| TODO
 -}
-closed : Dropdown
-closed =
+init : Dropdown
+init =
     Dropdown
         { open = False
         , preventBlur = False
@@ -165,22 +163,17 @@ type alias Behaviour a =
 
 {-| TODO
 -}
-type alias Ids =
-    { id : String
-    , labelledBy : String
-    }
-
-
-{-| TODO
--}
 view :
     ViewConfig a divider
-    -> Ids
-    -> Dropdown
+    ->
+        { id : String
+        , labelledBy : String
+        }
     -> List (Entry a divider)
+    -> Dropdown
     -> Maybe a
     -> Html (Msg a)
-view (ViewConfig uniqueId views) ids (Dropdown data) allEntries maybeSelection =
+view (ViewConfig uniqueId views) ids allEntries (Dropdown data) maybeSelection =
     let
         buttonHtmlDetails =
             views.button
@@ -202,14 +195,6 @@ view (ViewConfig uniqueId views) ids (Dropdown data) allEntries maybeSelection =
                 , empty = Html.text ""
                 , focusable = True
                 }
-
-        selection =
-            case maybeSelection of
-                Nothing ->
-                    []
-
-                Just actualSelection ->
-                    [ actualSelection ]
     in
     Html.div
         (appendAttributes views.container
@@ -228,7 +213,7 @@ view (ViewConfig uniqueId views) ids (Dropdown data) allEntries maybeSelection =
             ]
         )
         [ viewButton ids.id buttonHtmlDetails ids.labelledBy maybeSelection True
-        , Listbox.customView listboxConfig
+        , Listbox.customViewUnique listboxConfig
             { id = printListboxId ids.id
             , labelledBy = ids.labelledBy
             , lift = ListboxMsg (Just ids.id)
@@ -247,9 +232,9 @@ view (ViewConfig uniqueId views) ids (Dropdown data) allEntries maybeSelection =
             , onMouseUp = Decode.fail "not handling this event here"
             , onBlur = Decode.succeed (ListboxBlured ids.id)
             }
-            data.listbox
             allEntries
-            selection
+            data.listbox
+            maybeSelection
         ]
 
 
@@ -346,12 +331,12 @@ type Msg a
 -}
 update :
     UpdateConfig a
-    -> Dropdown
     -> List (Entry a divider)
-    -> Maybe a
     -> Msg a
+    -> Dropdown
+    -> Maybe a
     -> ( Dropdown, Cmd (Msg a), Maybe a )
-update (UpdateConfig uniqueId behaviour) (Dropdown data) allEntries maybeSelection msg =
+update (UpdateConfig uniqueId behaviour) allEntries msg (Dropdown data) maybeSelection =
     let
         listboxConfig =
             Listbox.updateConfig uniqueId
@@ -398,16 +383,9 @@ update (UpdateConfig uniqueId behaviour) (Dropdown data) allEntries maybeSelecti
 
         ButtonArrowUpPressed id ->
             let
-                selection =
-                    case maybeSelection of
-                        Nothing ->
-                            []
-
-                        Just actualSelection ->
-                            [ actualSelection ]
-
                 ( newListbox, newSelection ) =
-                    Listbox.focusPreviousOrFirstEntry listboxConfig allEntries selection data.listbox
+                    Listbox.withUnique maybeSelection <|
+                        Listbox.focusPreviousOrFirstEntry listboxConfig allEntries data.listbox
             in
             ( Dropdown
                 { data
@@ -420,26 +398,14 @@ update (UpdateConfig uniqueId behaviour) (Dropdown data) allEntries maybeSelecti
                             Just id
                 }
             , Cmd.none
-            , case newSelection of
-                newEntry :: [] ->
-                    Just newEntry
-
-                _ ->
-                    Nothing
+            , newSelection
             )
 
         ButtonArrowDownPressed id ->
             let
-                selection =
-                    case maybeSelection of
-                        Nothing ->
-                            []
-
-                        Just actualSelection ->
-                            [ actualSelection ]
-
                 ( newListbox, newSelection ) =
-                    Listbox.focusNextOrFirstEntry listboxConfig allEntries selection data.listbox
+                    Listbox.withUnique maybeSelection <|
+                        Listbox.focusNextOrFirstEntry listboxConfig allEntries data.listbox
             in
             ( Dropdown
                 { data
@@ -452,22 +418,17 @@ update (UpdateConfig uniqueId behaviour) (Dropdown data) allEntries maybeSelecti
                             Just id
                 }
             , Cmd.none
-            , case newSelection of
-                newEntry :: [] ->
-                    Just newEntry
-
-                _ ->
-                    Nothing
+            , newSelection
             )
 
         ListboxMsg maybeId listboxMsg ->
             let
                 ( newListbox, listboxCmd, newSelection ) =
-                    SingleSelect.update listboxConfig
-                        data.listbox
+                    Listbox.updateUnique listboxConfig
                         allEntries
-                        maybeSelection
                         listboxMsg
+                        data.listbox
+                        maybeSelection
             in
             ( Dropdown { data | listbox = newListbox }
             , Cmd.map (ListboxMsg maybeId) listboxCmd

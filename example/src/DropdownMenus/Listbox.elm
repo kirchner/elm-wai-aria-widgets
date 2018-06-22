@@ -50,7 +50,7 @@ type alias Model =
 init : Model
 init =
     { selectedLocale = Nothing
-    , dropdown = Dropdown.closed
+    , dropdown = Dropdown.init
     , jumpAtEnds = True
     , closeAfterMouseSelection = True
     , separateFocus = True
@@ -89,10 +89,10 @@ update msg model =
                             model.handleHomeAndEnd
                             model.typeAhead
                         )
-                        model.dropdown
                         locales
-                        model.selectedLocale
                         dropdownMsg
+                        model.dropdown
+                        model.selectedLocale
             in
             ( { model
                 | dropdown = newDropdown
@@ -165,8 +165,8 @@ viewDropdown dropdown selection =
                     { id = "locales-dropdown"
                     , labelledBy = "locales-dropdown-label"
                     }
-                    dropdown
                     locales
+                    dropdown
                 |> Html.map DropdownMsg
             ]
         , Html.p

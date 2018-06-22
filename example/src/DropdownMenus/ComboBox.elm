@@ -93,10 +93,10 @@ update msg model =
                             model.handleHomeAndEnd
                             model.displayCondition
                         )
-                        model.comboBox
                         locales
-                        model.selectedLocale2
                         comboBoxMsg
+                        model.comboBox
+                        model.selectedLocale2
             in
             ( { model
                 | comboBox = newComboBox

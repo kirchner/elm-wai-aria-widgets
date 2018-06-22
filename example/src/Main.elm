@@ -19,7 +19,7 @@ module Main exposing (main)
 -}
 
 import Browser
-import Data exposing (allLocales, locales)
+import Data exposing (allLocales, allMuppets, locales, muppets)
 import DropdownMenus.ComboBox
 import DropdownMenus.Listbox
 import Helper exposing (matchesQuery)
@@ -226,10 +226,10 @@ update msg model =
                             model.listboxHandleHomeAndEnd
                             model.listboxTypeAhead
                         )
-                        model.listbox
                         locales
-                        (Set.toList model.selectedLocales)
                         listboxMsg
+                        model.listbox
+                        (Set.toList model.selectedLocales)
             in
             ( { model
                 | listbox = newListbox
@@ -267,12 +267,11 @@ update msg model =
         MuppetsListboxMsg listboxMsg ->
             let
                 ( newListbox, listboxCmd, newSelection ) =
-                    Listbox.update
-                        (listboxUpdateConfig True True False True True)
-                        model.muppetsListbox
+                    Listbox.update (listboxUpdateConfig True True False True True)
                         muppets
-                        (Set.toList model.selectedMuppets)
                         listboxMsg
+                        model.muppetsListbox
+                        (Set.toList model.selectedMuppets)
             in
             ( { model
                 | muppetsListbox = newListbox
@@ -718,8 +717,8 @@ viewListbox listbox selection =
                     , onMouseUp = Decode.fail "not handling this event here"
                     , onBlur = Decode.fail "not handling this event here"
                     }
-                    listbox
                     locales
+                    listbox
             ]
         , Html.p
             [ Attributes.class "help" ]
@@ -781,8 +780,8 @@ viewMuppetsListbox listbox selection =
                     , onMouseUp = Decode.fail "not handling this event here"
                     , onBlur = Decode.fail "not handling this event here"
                     }
-                    listbox
                     muppets
+                    listbox
             ]
         , Html.p
             [ Attributes.class "help" ]
@@ -923,77 +922,3 @@ listboxViewConfig =
         , empty = Html.div [] [ Html.text "this list is empty" ]
         , focusable = True
         }
-
-
-
----- DATA
-
-
-muppets : List (Listbox.Entry String String)
-muppets =
-    List.concat
-        [ [ Listbox.divider "Main character" ]
-        , List.map Listbox.option mainCharacters
-        , [ Listbox.divider "Supporting characters" ]
-        , List.map Listbox.option supportingCharacters
-        , [ Listbox.divider "Minor characters" ]
-        , List.map Listbox.option minorCharacters
-        ]
-
-
-allMuppets : List String
-allMuppets =
-    List.concat
-        [ mainCharacters
-        , supportingCharacters
-        , minorCharacters
-        ]
-
-
-mainCharacters : List String
-mainCharacters =
-    [ "Kermit the Frog"
-    , "Miss Piggy"
-    , "Fozzie Bear"
-    , "Gonzo"
-    , "Rowlf the Dog"
-    , "Scooter"
-    , "Pepe the King Prawn"
-    , "Rizzo the Rat"
-    , "Animal"
-    , "Walter"
-    ]
-
-
-supportingCharacters : List String
-supportingCharacters =
-    [ "Bunsen Honeydew"
-    , "Beaker"
-    , "Sam Eagle"
-    , "The Swedish Chef"
-    , "Dr. Teeth and The Electric Mayhem"
-    , "Statler and Waldorf"
-    , "Camilla the Chicken"
-    , "Bobo the Bear"
-    , "Clifford"
-    ]
-
-
-minorCharacters : List String
-minorCharacters =
-    [ "'80s Robot"
-    , "Andy and Randy Pig"
-    , "Bean Bunny"
-    , "Beauregard"
-    , "Constantine"
-    , "Crazy Harry"
-    , "Johnny Fiama and Sal Minella"
-    , "Lew Zealand"
-    , "Link Hogthrob"
-    , "Marvin Suggs"
-    , "The Muppet Newsman"
-    , "Pops"
-    , "Robin the Frog"
-    , "Sweetums"
-    , "Uncle Deadly"
-    ]

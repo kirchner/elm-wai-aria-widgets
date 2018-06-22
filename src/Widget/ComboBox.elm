@@ -64,7 +64,6 @@ import Json.Decode as Decode exposing (Decoder)
 import Task
 import Widget exposing (HtmlAttributes, HtmlDetails)
 import Widget.Listbox as Listbox exposing (Listbox, TypeAhead)
-import Widget.Listbox.SingleSelect as SingleSelect
 
 
 {-| TODO
@@ -255,14 +254,6 @@ view config ids (ComboBox data) allEntries maybeSelection =
                 , focusable = False
                 }
 
-        selection =
-            case maybeSelection of
-                Nothing ->
-                    []
-
-                Just actualSelection ->
-                    [ actualSelection ]
-
         filteredEntries =
             filterEntries (matchesQuery query) allEntries
 
@@ -293,24 +284,22 @@ view config ids (ComboBox data) allEntries maybeSelection =
                         (\code ->
                             case code of
                                 "ArrowUp" ->
-                                    Decode.map (TextfieldArrowUpPressed ids.id) <|
-                                        Listbox.domInfoOf
-                                            (Listbox.fromFocused -1
-                                                listboxConfig
-                                                data.listbox
-                                                filteredEntries
-                                            )
+                                    -1
+                                        |> Listbox.fromFocused listboxConfig
+                                            filteredEntries
+                                            data.listbox
+                                        |> Listbox.domInfo
                                             [ "target", "nextSibling" ]
+                                        |> Decode.map (TextfieldArrowUpPressed ids.id)
 
                                 "ArrowDown" ->
-                                    Decode.map (TextfieldArrowDownPressed ids.id) <|
-                                        Listbox.domInfoOf
-                                            (Listbox.fromFocused 1
-                                                listboxConfig
-                                                data.listbox
-                                                filteredEntries
-                                            )
+                                    1
+                                        |> Listbox.fromFocused listboxConfig
+                                            filteredEntries
+                                            data.listbox
+                                        |> Listbox.domInfo
                                             [ "target", "nextSibling" ]
+                                        |> Decode.map (TextfieldArrowDownPressed ids.id)
 
                                 "Enter" ->
                                     Decode.succeed TextfieldEnterPressed
@@ -331,7 +320,7 @@ view config ids (ComboBox data) allEntries maybeSelection =
                     Html.text ""
 
                 _ ->
-                    Listbox.customView listboxConfig
+                    Listbox.customViewUnique listboxConfig
                         { id = printListboxId ids.id
                         , labelledBy = ids.labelledBy
                         , lift = ListboxMsg (Just ids.id)
@@ -340,9 +329,9 @@ view config ids (ComboBox data) allEntries maybeSelection =
                         , onMouseUp = Decode.succeed (ListboxMouseUp ids.id)
                         , onBlur = Decode.fail "not handling this event here"
                         }
-                        data.listbox
                         filteredEntries
-                        selection
+                        data.listbox
+                        maybeSelection
           else
             Html.text ""
         ]
@@ -415,12 +404,12 @@ type Msg a
 -}
 update :
     UpdateConfig a
-    -> ComboBox
     -> List (Entry a divider)
-    -> Maybe a
     -> Msg a
+    -> ComboBox
+    -> Maybe a
     -> ( ComboBox, Cmd (Msg a), Maybe a )
-update config ((ComboBox data) as comboBox) allEntries maybeSelection msg =
+update config allEntries msg ((ComboBox data) as comboBox) maybeSelection =
     let
         (UpdateConfig { uniqueId, matchesQuery, printEntry } behaviour) =
             config
@@ -528,11 +517,10 @@ update config ((ComboBox data) as comboBox) allEntries maybeSelection msg =
                             }
 
                     ( newListbox, newSelection ) =
-                        SingleSelect.focusPreviousOrFirstEntry
-                            listboxConfig
-                            filteredEntries
-                            maybeSelection
-                            data.listbox
+                        Listbox.withUnique maybeSelection <|
+                            Listbox.focusPreviousOrFirstEntry listboxConfig
+                                filteredEntries
+                                data.listbox
                 in
                 ( ComboBox { data | listbox = newListbox }
                 , Task.attempt (\_ -> NoOp) <|
@@ -560,11 +548,10 @@ update config ((ComboBox data) as comboBox) allEntries maybeSelection msg =
                             }
 
                     ( newListbox, newSelection ) =
-                        SingleSelect.focusNextOrFirstEntry
-                            listboxConfig
-                            filteredEntries
-                            maybeSelection
-                            data.listbox
+                        Listbox.withUnique maybeSelection <|
+                            Listbox.focusNextOrFirstEntry listboxConfig
+                                filteredEntries
+                                data.listbox
                 in
                 ( ComboBox { data | listbox = newListbox }
                 , Task.attempt (\_ -> NoOp) <|
@@ -617,11 +604,11 @@ update config ((ComboBox data) as comboBox) allEntries maybeSelection msg =
                         }
 
                 ( newListbox, listboxCmd, newSelection ) =
-                    SingleSelect.update listboxConfig
-                        data.listbox
+                    Listbox.updateUnique listboxConfig
                         allEntries
-                        maybeSelection
                         listboxMsg
+                        data.listbox
+                        maybeSelection
 
                 newData =
                     { data | listbox = newListbox }

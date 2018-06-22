@@ -96,10 +96,10 @@ update msg model =
             let
                 ( newListbox, listboxCmd, newSelection ) =
                     Listbox.update updateConfig
-                        model.availableListbox
                         (List.map Listbox.option model.available)
-                        (Set.toList model.selectedAvailable)
                         listboxMsg
+                        model.availableListbox
+                        (Set.toList model.selectedAvailable)
             in
             ( { model
                 | availableListbox = newListbox
@@ -125,10 +125,10 @@ update msg model =
             let
                 ( newListbox, listboxCmd, newSelection ) =
                     Listbox.update updateConfig
-                        model.chosenListbox
                         (List.map Listbox.option model.chosen)
-                        (Set.toList model.selectedChosen)
                         listboxMsg
+                        model.chosenListbox
+                        (Set.toList model.selectedChosen)
             in
             ( { model
                 | chosenListbox = newListbox
@@ -204,8 +204,8 @@ view model =
                         , onMouseUp = Decode.fail "not handling this event here"
                         , onBlur = Decode.fail "not handling this event here"
                         }
-                        model.availableListbox
                         availableEntries
+                        model.availableListbox
                         (Set.toList model.selectedAvailable)
                     ]
                 ]
@@ -271,8 +271,8 @@ view model =
                         , onMouseUp = Decode.fail "not handling this event here"
                         , onBlur = Decode.fail "not handling this event here"
                         }
-                        model.chosenListbox
                         chosenEntries
+                        model.chosenListbox
                         (Set.toList model.selectedChosen)
                     ]
                 ]

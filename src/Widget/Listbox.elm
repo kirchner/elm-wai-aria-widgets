@@ -11,8 +11,9 @@ module Widget.Listbox
         , ViewConfig
         , Views
         , customView
+        , customViewUnique
         , divider
-        , domInfoOf
+        , domInfo
         , focus
         , focusEntry
         , focusNextOrFirstEntry
@@ -30,18 +31,21 @@ module Widget.Listbox
         , typeAhead
         , update
         , updateConfig
+        , updateUnique
         , view
         , viewConfig
         , viewLazy
+        , viewUnique
+        , withUnique
         )
 
 {-|
 
-@docs Listbox, init, view
+@docs Listbox, init, view, viewUnique
 
 @docs Entry, option, divider
 
-@docs update, Msg, subscriptions
+@docs update, updateUnique, Msg, subscriptions
 
 
 # Configuration
@@ -64,7 +68,7 @@ module Widget.Listbox
 
 # Advanced usage
 
-@docs customView, viewLazy
+@docs customView, customViewUnique, viewLazy
 
 
 ## State manipulation
@@ -75,6 +79,8 @@ module Widget.Listbox
 @docs focusedEntry, hoveredEntry
 
 @docs focusEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
+
+@docs withUnique
 
 
 ## DOM Stuff
@@ -87,7 +93,7 @@ module Widget.Listbox
 
 ### Scroll
 
-@docs scrollIntoViewVia, DomInfo, domInfoOf, Position, fromFocused
+@docs scrollIntoViewVia, DomInfo, domInfo, Position, fromFocused
 
 -}
 
@@ -225,8 +231,8 @@ hoveredEntry (UpdateConfig uniqueId _) (Listbox { maybeMouseFocus }) allEntries 
 
 {-| TODO
 -}
-focusEntry : UpdateConfig a -> a -> List a -> Listbox -> ( Listbox, List a )
-focusEntry config newEntry selection (Listbox data) =
+focusEntry : UpdateConfig a -> a -> Listbox -> List a -> ( Listbox, List a )
+focusEntry config newEntry (Listbox data) selection =
     let
         (UpdateConfig uniqueId behaviour) =
             config
@@ -240,10 +246,10 @@ focusEntry config newEntry selection (Listbox data) =
 focusNextOrFirstEntry :
     UpdateConfig a
     -> List (Entry a divider)
-    -> List a
     -> Listbox
+    -> List a
     -> ( Listbox, List a )
-focusNextOrFirstEntry config allEntries selection listbox =
+focusNextOrFirstEntry config allEntries listbox selection =
     let
         (UpdateConfig uniqueId behaviour) =
             config
@@ -288,10 +294,10 @@ focusNextOrFirstEntry config allEntries selection listbox =
 focusPreviousOrFirstEntry :
     UpdateConfig a
     -> List (Entry a divider)
-    -> List a
     -> Listbox
+    -> List a
     -> ( Listbox, List a )
-focusPreviousOrFirstEntry config allEntries selection listbox =
+focusPreviousOrFirstEntry config allEntries listbox selection =
     let
         (UpdateConfig uniqueId behaviour) =
             config
@@ -450,6 +456,23 @@ typeAhead =
 
 
 {-| TODO
+-}
+viewUnique :
+    ViewConfig a divider
+    ->
+        { id : String
+        , labelledBy : String
+        , lift : Msg a -> msg
+        }
+    -> List (Entry a divider)
+    -> Listbox
+    -> Maybe a
+    -> Html msg
+viewUnique config cfg entries listbox selection =
+    view config cfg entries listbox (maybeToList selection)
+
+
+{-| TODO
 
     view model =
         Html.div []
@@ -471,11 +494,11 @@ view :
         , labelledBy : String
         , lift : Msg a -> msg
         }
-    -> Listbox
     -> List (Entry a divider)
+    -> Listbox
     -> List a
     -> Html msg
-view config { id, labelledBy, lift } entries selection =
+view config { id, labelledBy, lift } =
     customView config
         { id = id
         , labelledBy = labelledBy
@@ -485,8 +508,27 @@ view config { id, labelledBy, lift } entries selection =
         , onMouseUp = Decode.fail "not handling this event here"
         , onBlur = Decode.fail "not handling this event here"
         }
-        entries
-        selection
+
+
+{-| TODO
+-}
+customViewUnique :
+    ViewConfig a divider
+    ->
+        { id : String
+        , labelledBy : String
+        , lift : Msg a -> msg
+        , onKeyPress : Decoder msg
+        , onMouseDown : Decoder msg
+        , onMouseUp : Decoder msg
+        , onBlur : Decoder msg
+        }
+    -> List (Entry a divider)
+    -> Listbox
+    -> Maybe a
+    -> Html msg
+customViewUnique config cfg allEntries listbox selection =
+    customView config cfg allEntries listbox (maybeToList selection)
 
 
 {-| TODO
@@ -529,11 +571,11 @@ customView :
         , onMouseUp : Decoder msg
         , onBlur : Decoder msg
         }
-    -> Listbox
     -> List (Entry a divider)
-    -> List a -- Maybe a
+    -> Listbox
+    -> List a
     -> Html msg
-customView (ViewConfig uniqueId views) cfg listbox allEntries selection =
+customView (ViewConfig uniqueId views) cfg allEntries listbox selection =
     let
         renderedEntries =
             { spaceAboveFirst = 0
@@ -567,23 +609,26 @@ viewLazy :
         , onMouseUp : Decoder msg
         , onBlur : Decoder msg
         }
-    -> Listbox
     -> List (Entry a divider)
+    -> Listbox
     -> List a
     -> Html msg
-viewLazy entryHeight dividerHeight (ViewConfig uniqueId views) cfg ((Listbox data) as listbox) allEntries selection =
+viewLazy entryHeight dividerHeight (ViewConfig uniqueId views) cfg allEntries listbox selection =
     let
+        (Listbox { ulScrollTop, ulClientHeight, maybeKeyboardFocus }) =
+            listbox
+
         renderedEntries =
             computeRenderedEntries
                 entryHeight
                 dividerHeight
-                data.ulScrollTop
-                data.ulClientHeight
+                ulScrollTop
+                ulClientHeight
                 maybeFocusIndex
                 allEntries
 
         maybeFocusIndex =
-            data.maybeKeyboardFocus
+            maybeKeyboardFocus
                 |> Maybe.andThen (find uniqueId allEntries)
                 |> Maybe.map Tuple.first
     in
@@ -797,15 +842,15 @@ type Position a divider
 
 {-| TODO
 -}
-fromFocused : Int -> ViewConfig a divider -> Listbox -> List (Entry a divider) -> Position a divider
-fromFocused distance (ViewConfig uniqueId _) (Listbox { maybeKeyboardFocus }) entries =
+fromFocused : ViewConfig a divider -> List (Entry a divider) -> Listbox -> Int -> Position a divider
+fromFocused (ViewConfig uniqueId _) entries (Listbox { maybeKeyboardFocus }) distance =
     FromFocused distance uniqueId maybeKeyboardFocus entries
 
 
 {-| TODO
 -}
-domInfoOf : Position a divider -> List String -> Decoder DomInfo
-domInfoOf position path =
+domInfo : List String -> Position a divider -> Decoder DomInfo
+domInfo path position =
     case position of
         FromFocused distance uniqueId maybeKeyboardFocus entries ->
             case Maybe.andThen (indexOfCurrentEntry 0 uniqueId entries) maybeKeyboardFocus of
@@ -833,8 +878,8 @@ domInfoOf position path =
 {-| TODO
 -}
 scrollIntoViewVia : DomInfo -> String -> Listbox -> Task DomError ()
-scrollIntoViewVia domInfo id (Listbox data) =
-    case domInfo of
+scrollIntoViewVia info id (Listbox data) =
+    case info of
         NoDomInfo ->
             Task.succeed ()
 
@@ -1250,6 +1295,51 @@ setTabindex focusable attrs =
 
 {-| TODO
 -}
+withUnique : Maybe a -> (List a -> ( Listbox, List a )) -> ( Listbox, Maybe a )
+withUnique selection func =
+    Tuple.mapSecond listToMaybe (func (maybeToList selection))
+
+
+maybeToList : Maybe a -> List a
+maybeToList maybeA =
+    case maybeA of
+        Nothing ->
+            []
+
+        Just a ->
+            [ a ]
+
+
+listToMaybe : List a -> Maybe a
+listToMaybe listA =
+    case listA of
+        [] ->
+            Nothing
+
+        a :: _ ->
+            Just a
+
+
+{-| TODO
+-}
+updateUnique :
+    UpdateConfig a
+    -> List (Entry a divider)
+    -> Msg a
+    -> Listbox
+    -> Maybe a
+    -> ( Listbox, Cmd (Msg a), Maybe a )
+updateUnique config allEntries msg listbox selection =
+    let
+        ( newListbox, cmd, newSelection ) =
+            update config allEntries msg listbox <|
+                maybeToList selection
+    in
+    ( newListbox, cmd, listToMaybe newSelection )
+
+
+{-| TODO
+-}
 type Msg a
     = NoOp
       -- LIST
@@ -1301,12 +1391,12 @@ type Msg a
 -}
 update :
     UpdateConfig a
-    -> Listbox
     -> List (Entry a divider)
-    -> List a -- Maybe a
     -> Msg a
-    -> ( Listbox, Cmd (Msg a), List a ) -- ( Listbox, Cmd (Msg a), Maybe a )
-update (UpdateConfig uniqueId behaviour) ((Listbox data) as listbox) allEntries selection msg =
+    -> Listbox
+    -> List a
+    -> ( Listbox, Cmd (Msg a), List a )
+update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listbox) selection =
     case msg of
         -- LIST
         ListMouseDown ->

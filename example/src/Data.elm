@@ -1,4 +1,10 @@
-module Data exposing (allLocales, locales)
+module Data
+    exposing
+        ( allLocales
+        , allMuppets
+        , locales
+        , muppets
+        )
 
 {-
 
@@ -19,6 +25,83 @@ module Data exposing (allLocales, locales)
 -}
 
 import Widget.Listbox as Listbox exposing (Entry, Listbox)
+
+
+---- MUPPETS
+
+
+muppets : List (Listbox.Entry String String)
+muppets =
+    List.concat
+        [ [ Listbox.divider "Main character" ]
+        , List.map Listbox.option mainCharacters
+        , [ Listbox.divider "Supporting characters" ]
+        , List.map Listbox.option supportingCharacters
+        , [ Listbox.divider "Minor characters" ]
+        , List.map Listbox.option minorCharacters
+        ]
+
+
+allMuppets : List String
+allMuppets =
+    List.concat
+        [ mainCharacters
+        , supportingCharacters
+        , minorCharacters
+        ]
+
+
+mainCharacters : List String
+mainCharacters =
+    [ "Kermit the Frog"
+    , "Miss Piggy"
+    , "Fozzie Bear"
+    , "Gonzo"
+    , "Rowlf the Dog"
+    , "Scooter"
+    , "Pepe the King Prawn"
+    , "Rizzo the Rat"
+    , "Animal"
+    , "Walter"
+    ]
+
+
+supportingCharacters : List String
+supportingCharacters =
+    [ "Bunsen Honeydew"
+    , "Beaker"
+    , "Sam Eagle"
+    , "The Swedish Chef"
+    , "Dr. Teeth and The Electric Mayhem"
+    , "Statler and Waldorf"
+    , "Camilla the Chicken"
+    , "Bobo the Bear"
+    , "Clifford"
+    ]
+
+
+minorCharacters : List String
+minorCharacters =
+    [ "'80s Robot"
+    , "Andy and Randy Pig"
+    , "Bean Bunny"
+    , "Beauregard"
+    , "Constantine"
+    , "Crazy Harry"
+    , "Johnny Fiama and Sal Minella"
+    , "Lew Zealand"
+    , "Link Hogthrob"
+    , "Marvin Suggs"
+    , "The Muppet Newsman"
+    , "Pops"
+    , "Robin the Frog"
+    , "Sweetums"
+    , "Uncle Deadly"
+    ]
+
+
+
+---- LOCALES
 
 
 locales : List (Entry String String)
