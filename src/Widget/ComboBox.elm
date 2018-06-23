@@ -55,7 +55,7 @@ module Widget.ComboBox
 
 -}
 
-import Browser
+import Browser.Dom as Dom
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
@@ -284,22 +284,10 @@ view config ids (ComboBox data) allEntries maybeSelection =
                         (\code ->
                             case code of
                                 "ArrowUp" ->
-                                    -1
-                                        |> Listbox.fromFocused listboxConfig
-                                            filteredEntries
-                                            data.listbox
-                                        |> Listbox.domInfo
-                                            [ "target", "nextSibling" ]
-                                        |> Decode.map (TextfieldArrowUpPressed ids.id)
+                                    Decode.succeed (TextfieldArrowUpPressed ids.id)
 
                                 "ArrowDown" ->
-                                    1
-                                        |> Listbox.fromFocused listboxConfig
-                                            filteredEntries
-                                            data.listbox
-                                        |> Listbox.domInfo
-                                            [ "target", "nextSibling" ]
-                                        |> Decode.map (TextfieldArrowDownPressed ids.id)
+                                    Decode.succeed (TextfieldArrowDownPressed ids.id)
 
                                 "Enter" ->
                                     Decode.succeed TextfieldEnterPressed
@@ -391,8 +379,8 @@ type Msg a
     | TextfieldFocused String
     | TextfieldBlured String
     | TextfieldChanged String
-    | TextfieldArrowUpPressed String Listbox.DomInfo
-    | TextfieldArrowDownPressed String Listbox.DomInfo
+    | TextfieldArrowUpPressed String
+    | TextfieldArrowDownPressed String
     | TextfieldEnterPressed
       -- LISTBOX
     | ListboxMsg (Maybe String) (Listbox.Msg a)
@@ -501,7 +489,7 @@ update config allEntries msg ((ComboBox data) as comboBox) maybeSelection =
             , maybeSelection
             )
 
-        TextfieldArrowUpPressed id domInfo ->
+        TextfieldArrowUpPressed id ->
             if data.open then
                 let
                     filteredEntries =
@@ -523,16 +511,14 @@ update config allEntries msg ((ComboBox data) as comboBox) maybeSelection =
                                 data.listbox
                 in
                 ( ComboBox { data | listbox = newListbox }
-                , Task.attempt (\_ -> NoOp) <|
-                    Listbox.scrollIntoViewVia domInfo
-                        (printListboxId id)
-                        newListbox
+                , Cmd.map (ListboxMsg (Just id)) <|
+                    Listbox.scrollToFocus (printListboxId id) newListbox
                 , newSelection
                 )
             else
                 ( comboBox, Cmd.none, maybeSelection )
 
-        TextfieldArrowDownPressed id domInfo ->
+        TextfieldArrowDownPressed id ->
             if data.open then
                 let
                     filteredEntries =
@@ -554,10 +540,8 @@ update config allEntries msg ((ComboBox data) as comboBox) maybeSelection =
                                 data.listbox
                 in
                 ( ComboBox { data | listbox = newListbox }
-                , Task.attempt (\_ -> NoOp) <|
-                    Listbox.scrollIntoViewVia domInfo
-                        (printListboxId id)
-                        newListbox
+                , Cmd.map (ListboxMsg (Just id)) <|
+                    Listbox.scrollToFocus (printListboxId id) newListbox
                 , newSelection
                 )
             else
@@ -653,7 +637,7 @@ filterEntries matchesQuery entries =
 
 focusTextfield : String -> Cmd (Msg a)
 focusTextfield id =
-    Browser.focus (printTextfieldId id)
+    Dom.focus (printTextfieldId id)
         |> Task.attempt (\_ -> NoOp)
 
 

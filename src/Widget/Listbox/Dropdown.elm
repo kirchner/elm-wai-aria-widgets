@@ -44,9 +44,9 @@ module Widget.Listbox.Dropdown
    limitations under the License.
 
 -}
+--import AnimationFrame
 
-import AnimationFrame
-import Browser
+import Browser.Dom as Dom
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
@@ -454,7 +454,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg (Dropdown data) maybeSel
 
 focusButton : String -> Cmd (Msg a)
 focusButton id =
-    Browser.focus (printButtonId id)
+    Dom.focus (printButtonId id)
         |> Task.attempt (\_ -> NoOp)
 
 
@@ -471,12 +471,12 @@ subscriptions (Dropdown data) =
             Sub.map (ListboxMsg Nothing) (Listbox.subscriptions data.listbox)
           else
             Sub.none
-        , case data.pendingFocusListbox of
-            Nothing ->
-                Sub.none
 
-            Just _ ->
-                AnimationFrame.times (\_ -> NextAnimationFrame)
+        --, case data.pendingFocusListbox of
+        --    Nothing ->
+        --        Sub.none
+        --    Just _ ->
+        --        AnimationFrame.times (\_ -> NextAnimationFrame)
         ]
 
 

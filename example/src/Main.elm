@@ -42,7 +42,7 @@ import Widget.Tabs as Tabs exposing (Tabs)
 
 main : Program {} Model Msg
 main =
-    Browser.embed
+    Browser.element
         { init = init
         , view = view
         , update = update
@@ -93,7 +93,7 @@ type alias Model =
 
 
 init _ =
-    ( { tabs = Tabs.init "dialog"
+    ( { tabs = Tabs.init "basic"
       , tabsJumpAtEnds = True
       , tabsHandleHomeAndEnd = True
       , tabsActivateOnFocus = True

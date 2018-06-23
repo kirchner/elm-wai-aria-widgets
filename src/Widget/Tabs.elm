@@ -40,7 +40,7 @@ module Widget.Tabs
 
 -}
 
-import Browser
+import Browser.Dom as Dom
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
@@ -205,7 +205,7 @@ viewTablist { jumpAtEnds, handleHomeAndEnd, activateOnFocus } views id label lif
                         openTabId
             in
             lift
-                (Browser.focus (id ++ "-" ++ tabId ++ "-tab")
+                (Dom.focus (id ++ "-" ++ tabId ++ "-tab")
                     |> Task.attempt (\_ -> lift Cmd.none (Tabs newTabId))
                 )
                 (Tabs newTabId)

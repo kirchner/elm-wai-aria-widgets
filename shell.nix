@@ -4,7 +4,7 @@
     name = "elm-0.19-alpha-2";
     src = pkgs.fetchurl {
       url = https://44a95588fe4cc47efd96-ec3c2a753a12d2be9f23ba16873acc23.ssl.cf2.rackcdn.com/linux-64.tar.gz;
-      sha256 = "0gmsjb2cnccfib6149n3c65pdkii2qcfdjihkg513vjr6nzpz43y";
+      sha256 = "014qnlxlj2jr3g0jhf54bamg6viwnvsl2c55b4agdzmfgl805i0m";
     };
     libPath = pkgs.stdenv.lib.makeLibraryPath [
         pkgs.zlib pkgs.ncurses5 pkgs.gmp pkgs.libffi

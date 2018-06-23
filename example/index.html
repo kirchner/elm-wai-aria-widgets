@@ -236,7 +236,9 @@
     <script src="elm.js"></script>
     <script>
       var container = document.getElementById("container");
-      var app = Elm.Main.embed(container, {});
+      var app = Elm.Main.init({
+          node: container
+      });
     </script>
   </body>
 </html>

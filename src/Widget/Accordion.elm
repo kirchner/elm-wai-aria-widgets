@@ -42,7 +42,7 @@ module Widget.Accordion
 
 -}
 
-import Browser
+import Browser.Dom as Dom
 import Dict exposing (Dict)
 import Html exposing (Html)
 import Html.Attributes as Attributes
@@ -383,7 +383,7 @@ focusNextHeaderHelp : String -> Bool -> msg -> List String -> String -> String -
 focusNextHeaderHelp firstId jumpAtEnds noOp sectionIds id currentSectionId =
     let
         focus headerId =
-            Browser.focus (printHeaderId id headerId)
+            Dom.focus (printHeaderId id headerId)
                 |> Task.attempt (\_ -> noOp)
     in
     case sectionIds of
@@ -412,7 +412,7 @@ focusFirstHeader noOp sectionIds id =
             Cmd.none
 
         Just firstId ->
-            Browser.focus (printHeaderId id firstId)
+            Dom.focus (printHeaderId id firstId)
                 |> Task.attempt (\_ -> noOp)
 
 

@@ -74,10 +74,10 @@ init =
 type Msg
     = NoOp
     | ImportantFeaturesListboxMsg (Listbox.Msg String)
-    | ImportantFeaturesUpPressed Listbox.DomInfo
-    | ImportantFeaturesAltArrowUpPressed Listbox.DomInfo
-    | ImportantFeaturesDownPressed Listbox.DomInfo
-    | ImportantFeaturesAltArrowDownPressed Listbox.DomInfo
+    | ImportantFeaturesUpPressed
+    | ImportantFeaturesAltArrowUpPressed
+    | ImportantFeaturesDownPressed
+    | ImportantFeaturesAltArrowDownPressed
     | ImportantFeaturesNotImportantClicked
     | ImportantFeaturesDeletePressed
     | UnimportantFeaturesListboxMsg (Listbox.Msg String)
@@ -107,17 +107,17 @@ update msg model =
             , Cmd.map ImportantFeaturesListboxMsg listboxCmd
             )
 
-        ImportantFeaturesUpPressed domInfo ->
-            moveImportantFeatureUp domInfo model
+        ImportantFeaturesUpPressed ->
+            moveImportantFeatureUp model
 
-        ImportantFeaturesAltArrowUpPressed domInfo ->
-            moveImportantFeatureUp domInfo model
+        ImportantFeaturesAltArrowUpPressed ->
+            moveImportantFeatureUp model
 
-        ImportantFeaturesDownPressed domInfo ->
-            moveImportantFeatureDown domInfo model
+        ImportantFeaturesDownPressed ->
+            moveImportantFeatureDown model
 
-        ImportantFeaturesAltArrowDownPressed domInfo ->
-            moveImportantFeatureDown domInfo model
+        ImportantFeaturesAltArrowDownPressed ->
+            moveImportantFeatureDown model
 
         ImportantFeaturesNotImportantClicked ->
             case model.selectedImportantFeature of
@@ -238,8 +238,8 @@ update msg model =
                     )
 
 
-moveImportantFeatureUp : Listbox.DomInfo -> Model -> ( Model, Cmd Msg )
-moveImportantFeatureUp domInfo model =
+moveImportantFeatureUp : Model -> ( Model, Cmd Msg )
+moveImportantFeatureUp model =
     case model.selectedImportantFeature of
         Nothing ->
             ( model, Cmd.none )
@@ -258,15 +258,13 @@ moveImportantFeatureUp domInfo model =
                             features
             in
             ( { model | importantFeatures = moveUp model.importantFeatures }
-            , Task.attempt (\_ -> NoOp) <|
-                Listbox.scrollIntoViewVia domInfo
-                    "important-features-listbox"
-                    model.importantFeaturesListbox
+            , Cmd.map ImportantFeaturesListboxMsg <|
+                Listbox.scrollToFocus "important-features-listbox" model.importantFeaturesListbox
             )
 
 
-moveImportantFeatureDown : Listbox.DomInfo -> Model -> ( Model, Cmd Msg )
-moveImportantFeatureDown domInfo model =
+moveImportantFeatureDown : Model -> ( Model, Cmd Msg )
+moveImportantFeatureDown model =
     case model.selectedImportantFeature of
         Nothing ->
             ( model, Cmd.none )
@@ -285,10 +283,8 @@ moveImportantFeatureDown domInfo model =
                             features
             in
             ( { model | importantFeatures = moveDown model.importantFeatures }
-            , Task.attempt (\_ -> NoOp) <|
-                Listbox.scrollIntoViewVia domInfo
-                    "important-features-listbox"
-                    model.importantFeaturesListbox
+            , Cmd.map ImportantFeaturesListboxMsg <|
+                Listbox.scrollToFocus "important-features-listbox" model.importantFeaturesListbox
             )
 
 
@@ -315,16 +311,6 @@ view model =
         lastSelected =
             List.head (List.reverse model.importantFeatures)
                 == model.selectedImportantFeature
-
-        aboveFocusedDomInfo path =
-            -1
-                |> Listbox.fromFocused listboxViewConfig entries model.importantFeaturesListbox
-                |> Listbox.domInfo path
-
-        belowFocusedDomInfo path =
-            1
-                |> Listbox.fromFocused listboxViewConfig entries model.importantFeaturesListbox
-                |> Listbox.domInfo path
 
         entries =
             List.map Listbox.option model.importantFeatures
@@ -367,15 +353,13 @@ view model =
                                                 if firstSelected then
                                                     Decode.fail "not handling that key here"
                                                 else
-                                                    Decode.map ImportantFeaturesAltArrowUpPressed <|
-                                                        aboveFocusedDomInfo [ "target" ]
+                                                    Decode.succeed ImportantFeaturesAltArrowUpPressed
 
                                             ( "ArrowDown", True ) ->
                                                 if lastSelected then
                                                     Decode.fail "not handling that key here"
                                                 else
-                                                    Decode.map ImportantFeaturesAltArrowDownPressed <|
-                                                        belowFocusedDomInfo [ "target" ]
+                                                    Decode.succeed ImportantFeaturesAltArrowDownPressed
 
                                             ( "Delete", False ) ->
                                                 Decode.succeed ImportantFeaturesDeletePressed
@@ -405,8 +389,7 @@ view model =
                         , Attributes.disabled
                             (model.selectedImportantFeature == Nothing || firstSelected)
                         , Events.on "click" <|
-                            Decode.map ImportantFeaturesUpPressed <|
-                                aboveFocusedDomInfo pathToListbox
+                            Decode.succeed ImportantFeaturesUpPressed
                         , Attributes.attribute "aria-keyshortcuts" "Alt+ArrowUp"
                         , Attributes.attribute "aria-disabled" <|
                             boolToString (model.selectedImportantFeature == Nothing || firstSelected)
@@ -420,8 +403,7 @@ view model =
                         , Attributes.disabled
                             (model.selectedImportantFeature == Nothing || lastSelected)
                         , Events.on "click" <|
-                            Decode.map ImportantFeaturesDownPressed <|
-                                belowFocusedDomInfo pathToListbox
+                            Decode.succeed ImportantFeaturesDownPressed
                         , Attributes.attribute "aria-keyshortcuts" "Alt+ArrowDown"
                         , Attributes.attribute "aria-disabled" <|
                             boolToString (model.selectedImportantFeature == Nothing || lastSelected)

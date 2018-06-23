@@ -1,11 +1,9 @@
 module Widget.Listbox
     exposing
         ( Behaviour
-        , DomInfo
         , Entry
         , Listbox
         , Msg
-        , Position
         , TypeAhead
         , UpdateConfig
         , ViewConfig
@@ -13,19 +11,17 @@ module Widget.Listbox
         , customView
         , customViewUnique
         , divider
-        , domInfo
         , focus
         , focusEntry
         , focusNextOrFirstEntry
         , focusPreviousOrFirstEntry
         , focusedEntry
-        , fromFocused
         , hoveredEntry
         , init
         , noDivider
         , noTypeAhead
         , option
-        , scrollIntoViewVia
+        , scrollToFocus
         , simpleTypeAhead
         , subscriptions
         , typeAhead
@@ -85,15 +81,9 @@ module Widget.Listbox
 
 ## DOM Stuff
 
-
-### Focus
-
 @docs focus
 
-
-### Scroll
-
-@docs scrollIntoViewVia, DomInfo, domInfo, Position, fromFocused
+@docs scrollToFocus
 
 -}
 
@@ -114,8 +104,11 @@ module Widget.Listbox
    limitations under the License.
 
 -}
+--import List.Extra as List
+--import Json.Decode.Pipeline as Decode
 
-import Browser exposing (DomError)
+import Browser.Dom as Dom
+import Decode
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
@@ -131,7 +124,6 @@ import Internal.Entries as Internal
         , range
         )
 import Json.Decode as Decode exposing (Decoder)
-import Json.Decode.Pipeline as Decode
 import List.Extra as List
 import Set
 import Task exposing (Task)
@@ -151,6 +143,7 @@ type alias Data =
 
     -- FOCUS
     , maybeKeyboardFocus : Maybe String
+    , maybePendingKeyboardFocus : Maybe String
     , maybeMouseFocus : Maybe String
     , maybeLastSelectedEntry : Maybe String
 
@@ -173,6 +166,7 @@ init =
         { preventScroll = False
         , query = NoQuery
         , maybeKeyboardFocus = Nothing
+        , maybePendingKeyboardFocus = Nothing
         , maybeMouseFocus = Nothing
         , maybeLastSelectedEntry = Nothing
         , ulScrollTop = 0
@@ -206,9 +200,9 @@ divider =
 
 {-| TODO
 -}
-focus : String -> Task DomError ()
+focus : String -> Task Dom.Error ()
 focus id =
-    Browser.focus (printListId id)
+    Dom.focus (printListId id)
 
 
 {-| TODO
@@ -239,6 +233,18 @@ focusEntry config newEntry (Listbox data) selection =
     in
     data
         |> updateFocus behaviour uniqueId selection False newEntry
+
+
+{-| TODO
+-}
+scrollToFocus : String -> Listbox -> Cmd (Msg a)
+scrollToFocus id (Listbox data) =
+    case data.maybeKeyboardFocus of
+        Nothing ->
+            Cmd.none
+
+        Just focusId ->
+            adjustScrollTop id focusId
 
 
 {-| TODO
@@ -671,13 +677,7 @@ viewHelp renderedEntries uniqueId views cfg (Listbox data) allEntries selection 
             (Decode.oneOf
                 [ cfg.onKeyPress
                 , keyInfoDecoder
-                    |> Decode.andThen
-                        (listKeyPress
-                            uniqueId
-                            cfg.id
-                            data.maybeKeyboardFocus
-                            renderedEntries.visibleEntries
-                        )
+                    |> Decode.andThen (listKeyPress cfg.id)
                     |> Decode.map cfg.lift
                 ]
                 |> preventDefault
@@ -692,26 +692,9 @@ viewHelp renderedEntries uniqueId views cfg (Listbox data) allEntries selection 
                 [ cfg.onMouseUp
                 , Decode.succeed (cfg.lift ListMouseUp)
                 ]
-         , Events.on "scroll" <|
+         , Events.on "focus" <|
             Decode.map cfg.lift <|
-                Decode.map2 ListScrolled
-                    (Decode.at [ "target", "scrollTop" ] Decode.float)
-                    (Decode.at [ "target", "clientHeight" ] Decode.float)
-         , Events.on "focus"
-            (Decode.oneOf
-                [ data.maybeKeyboardFocus
-                    |> Maybe.map
-                        (currentScrollDataDecoder [ "target" ]
-                            uniqueId
-                            renderedEntries.visibleEntries
-                            >> Decode.map Just
-                        )
-                    |> Maybe.withDefault (Decode.succeed Nothing)
-                , Decode.succeed Nothing
-                ]
-                |> Decode.map (ListFocused cfg.id)
-                |> Decode.map cfg.lift
-            )
+                Decode.succeed (ListFocused cfg.id)
          , Events.on "blur" <|
             Decode.oneOf
                 [ cfg.onBlur
@@ -749,34 +732,14 @@ keyInfoDecoder =
         |> Decode.required "ctrlKey" Decode.bool
 
 
-listKeyPress :
-    (a -> String)
-    -> String
-    -> Maybe String
-    -> List (Entry a divider)
-    -> KeyInfo
-    -> Decoder (Msg a)
-listKeyPress uniqueId id maybeKeyboardFocus visibleEntries { code, shiftDown, controlDown } =
+listKeyPress : String -> KeyInfo -> Decoder (Msg a)
+listKeyPress id { code, shiftDown, controlDown } =
     case code of
         "ArrowUp" ->
-            Decode.oneOf
-                [ maybeKeyboardFocus
-                    |> Maybe.map
-                        (previousScrollDataDecoder [ "target" ] uniqueId visibleEntries)
-                    |> Maybe.withDefault (Decode.succeed Nothing)
-                , Decode.succeed Nothing
-                ]
-                |> Decode.map (ListArrowUpPressed id shiftDown)
+            Decode.succeed (ListArrowUpPressed id shiftDown)
 
         "ArrowDown" ->
-            Decode.oneOf
-                [ maybeKeyboardFocus
-                    |> Maybe.map
-                        (nextScrollDataDecoder [ "target" ] uniqueId visibleEntries)
-                    |> Maybe.withDefault (Decode.succeed Nothing)
-                , Decode.succeed Nothing
-                ]
-                |> Decode.map (ListArrowDownPressed id shiftDown)
+            Decode.succeed (ListArrowDownPressed id shiftDown)
 
         "Enter" ->
             Decode.succeed (ListEnterPressed id)
@@ -812,299 +775,6 @@ listKeyPress uniqueId id maybeKeyboardFocus visibleEntries { code, shiftDown, co
                 Decode.succeed (ListKeyPressed id code)
             else
                 Decode.fail "not handling that key here"
-
-
-
----- DOM INFO
-
-
-{-| TODO
--}
-type DomInfo
-    = NoDomInfo
-    | DomInfo DomInfoData
-
-
-type alias DomInfoData =
-    { ulScrollTop : Float
-    , ulClientHeight : Float
-    , ulClientTop : Float
-    , liOffsetTop : Float
-    , liOffsetHeight : Float
-    }
-
-
-{-| TODO
--}
-type Position a divider
-    = FromFocused Int (a -> String) (Maybe String) (List (Entry a divider))
-
-
-{-| TODO
--}
-fromFocused : ViewConfig a divider -> List (Entry a divider) -> Listbox -> Int -> Position a divider
-fromFocused (ViewConfig uniqueId _) entries (Listbox { maybeKeyboardFocus }) distance =
-    FromFocused distance uniqueId maybeKeyboardFocus entries
-
-
-{-| TODO
--}
-domInfo : List String -> Position a divider -> Decoder DomInfo
-domInfo path position =
-    case position of
-        FromFocused distance uniqueId maybeKeyboardFocus entries ->
-            case Maybe.andThen (indexOfCurrentEntry 0 uniqueId entries) maybeKeyboardFocus of
-                Nothing ->
-                    Decode.succeed NoDomInfo
-
-                Just index ->
-                    let
-                        requiredAt subPath =
-                            Decode.requiredAt (path ++ subPath) Decode.float
-
-                        actualIndex =
-                            String.fromInt (index + distance + 2)
-                    in
-                    Decode.map DomInfo
-                        (Decode.succeed DomInfoData
-                            |> requiredAt [ "scrollTop" ]
-                            |> requiredAt [ "clientHeight" ]
-                            |> requiredAt [ "clientTop" ]
-                            |> requiredAt [ "childNodes", actualIndex, "offsetTop" ]
-                            |> requiredAt [ "childNodes", actualIndex, "offsetHeight" ]
-                        )
-
-
-{-| TODO
--}
-scrollIntoViewVia : DomInfo -> String -> Listbox -> Task DomError ()
-scrollIntoViewVia info id (Listbox data) =
-    case info of
-        NoDomInfo ->
-            Task.succeed ()
-
-        DomInfo { ulScrollTop, ulClientHeight, ulClientTop, liOffsetTop, liOffsetHeight } ->
-            if (liOffsetTop - ulClientTop + liOffsetHeight) > (ulScrollTop + ulClientHeight) then
-                -- lower parts of new entry are hidden
-                Browser.setScrollTop (printListId id)
-                    (liOffsetTop - ulClientTop + liOffsetHeight - ulClientHeight)
-            else if liOffsetTop - ulClientTop < ulScrollTop then
-                -- upper parts of new entry are hidden
-                Browser.setScrollTop (printListId id) (liOffsetTop - ulClientTop)
-            else
-                Task.succeed ()
-
-
-
----- SCROLL DATA
-
-
-{-| TODO
--}
-type alias CurrentScrollData =
-    { ulScrollTop : Float
-    , ulClientHeight : Float
-    , ulClientTop : Float
-    , liOffsetTop : Float
-    , liOffsetHeight : Float
-    }
-
-
-currentScrollDataDecoder :
-    List String
-    -> (a -> String)
-    -> List (Entry a divider)
-    -> String
-    -> Decoder CurrentScrollData
-currentScrollDataDecoder path uniqueId visibleEntries currentFocus =
-    case indexOfCurrentEntry 0 uniqueId visibleEntries currentFocus of
-        Nothing ->
-            Decode.fail "no scroll data available"
-
-        Just index ->
-            let
-                requiredAt subPath =
-                    Decode.requiredAt (path ++ subPath) Decode.float
-            in
-            Decode.succeed CurrentScrollData
-                |> requiredAt [ "scrollTop" ]
-                |> requiredAt [ "clientHeight" ]
-                |> requiredAt [ "clientTop" ]
-                |> requiredAt [ "childNodes", String.fromInt (index + 2), "offsetTop" ]
-                |> requiredAt [ "childNodes", String.fromInt (index + 2), "offsetHeight" ]
-
-
-indexOfCurrentEntry : Int -> (a -> String) -> List (Entry a divider) -> String -> Maybe Int
-indexOfCurrentEntry currentIndex uniqueId entries id =
-    case entries of
-        [] ->
-            Nothing
-
-        (Divider _) :: rest ->
-            indexOfCurrentEntry (currentIndex + 1) uniqueId rest id
-
-        (Option a) :: rest ->
-            if uniqueId a == id then
-                Just currentIndex
-            else
-                indexOfCurrentEntry (currentIndex + 1) uniqueId rest id
-
-
-{-| TODO
--}
-type alias ScrollData =
-    { ulScrollTop : Float
-    , ulClientHeight : Float
-    , ulClientTop : Float
-    , liCurrentOffsetTop : Float
-    , liCurrentOffsetHeight : Float
-    , liNewOffsetTop : Float
-    , liNewOffsetHeight : Float
-    }
-
-
-previousScrollDataDecoder :
-    List String
-    -> (a -> String)
-    -> List (Entry a divider)
-    -> String
-    -> Decoder (Maybe ScrollData)
-previousScrollDataDecoder path uniqueId entries currentFocus =
-    case indexOfCurrentAndPreviousEntry 0 uniqueId entries currentFocus of
-        Nothing ->
-            Decode.succeed Nothing
-
-        Just { currentIndex, previousIndex } ->
-            let
-                requiredAt subPath =
-                    Decode.requiredAt (path ++ subPath) Decode.float
-            in
-            Decode.map Just
-                (Decode.succeed ScrollData
-                    |> requiredAt [ "scrollTop" ]
-                    |> requiredAt [ "clientHeight" ]
-                    |> requiredAt [ "clientTop" ]
-                    |> requiredAt [ "childNodes", String.fromInt (currentIndex + 2), "offsetTop" ]
-                    |> requiredAt [ "childNodes", String.fromInt (currentIndex + 2), "offsetHeight" ]
-                    |> requiredAt [ "childNodes", String.fromInt (previousIndex + 2), "offsetTop" ]
-                    |> requiredAt [ "childNodes", String.fromInt (previousIndex + 2), "offsetHeight" ]
-                )
-
-
-indexOfCurrentAndPreviousEntry :
-    Int
-    -> (a -> String)
-    -> List (Entry a divider)
-    -> String
-    -> Maybe { currentIndex : Int, previousIndex : Int }
-indexOfCurrentAndPreviousEntry currentIndex uniqueId entries id =
-    case entries of
-        [] ->
-            Nothing
-
-        (Divider _) :: rest ->
-            indexOfCurrentAndPreviousEntry (currentIndex + 1) uniqueId rest id
-
-        (Option first) :: rest ->
-            indexOfCurrentAndPreviousEntryHelp currentIndex (currentIndex + 1) uniqueId rest id
-
-
-indexOfCurrentAndPreviousEntryHelp :
-    Int
-    -> Int
-    -> (a -> String)
-    -> List (Entry a divider)
-    -> String
-    -> Maybe { currentIndex : Int, previousIndex : Int }
-indexOfCurrentAndPreviousEntryHelp previousIndex currentIndex uniqueId entries id =
-    case entries of
-        [] ->
-            Nothing
-
-        (Divider _) :: rest ->
-            indexOfCurrentAndPreviousEntryHelp previousIndex (currentIndex + 1) uniqueId rest id
-
-        (Option next) :: rest ->
-            if uniqueId next == id then
-                Just
-                    { currentIndex = currentIndex
-                    , previousIndex = previousIndex
-                    }
-            else
-                indexOfCurrentAndPreviousEntryHelp currentIndex (currentIndex + 1) uniqueId rest id
-
-
-nextScrollDataDecoder :
-    List String
-    -> (a -> String)
-    -> List (Entry a divider)
-    -> String
-    -> Decoder (Maybe ScrollData)
-nextScrollDataDecoder path uniqueId entries currentFocus =
-    case indexOfCurrentAndNextEntry 0 uniqueId entries currentFocus of
-        Nothing ->
-            Decode.succeed Nothing
-
-        Just { currentIndex, nextIndex } ->
-            let
-                requiredAt subPath =
-                    Decode.requiredAt (path ++ subPath) Decode.float
-            in
-            Decode.map Just
-                (Decode.succeed ScrollData
-                    |> requiredAt [ "scrollTop" ]
-                    |> requiredAt [ "clientHeight" ]
-                    |> requiredAt [ "clientTop" ]
-                    |> requiredAt [ "childNodes", String.fromInt (currentIndex + 2), "offsetTop" ]
-                    |> requiredAt [ "childNodes", String.fromInt (currentIndex + 2), "offsetHeight" ]
-                    |> requiredAt [ "childNodes", String.fromInt (nextIndex + 2), "offsetTop" ]
-                    |> requiredAt [ "childNodes", String.fromInt (nextIndex + 2), "offsetHeight" ]
-                )
-
-
-indexOfCurrentAndNextEntry :
-    Int
-    -> (a -> String)
-    -> List (Entry a divider)
-    -> String
-    -> Maybe { currentIndex : Int, nextIndex : Int }
-indexOfCurrentAndNextEntry currentIndex uniqueId entries id =
-    let
-        indices nextIndex =
-            { currentIndex = currentIndex
-            , nextIndex = nextIndex
-            }
-    in
-    case entries of
-        [] ->
-            Nothing
-
-        (Divider _) :: rest ->
-            indexOfCurrentAndNextEntry (currentIndex + 1) uniqueId rest id
-
-        (Option first) :: rest ->
-            if uniqueId first == id then
-                indexOfNextEntry (currentIndex + 1) rest
-                    |> Maybe.map indices
-            else
-                indexOfCurrentAndNextEntry (currentIndex + 1) uniqueId rest id
-
-
-indexOfNextEntry : Int -> List (Entry a divider) -> Maybe Int
-indexOfNextEntry currentIndex entries =
-    case entries of
-        [] ->
-            Nothing
-
-        (Divider _) :: rest ->
-            indexOfNextEntry (currentIndex + 1) rest
-
-        (Option _) :: _ ->
-            Just currentIndex
-
-
-
-----
 
 
 viewEntries :
@@ -1345,11 +1015,10 @@ type Msg a
       -- LIST
     | ListMouseDown
     | ListMouseUp
-    | ListFocused String (Maybe CurrentScrollData)
+    | ListFocused String
     | ListBlured
-    | ListScrolled Float Float
-    | ListArrowUpPressed String Bool (Maybe ScrollData)
-    | ListArrowDownPressed String Bool (Maybe ScrollData)
+    | ListArrowUpPressed String Bool
+    | ListArrowDownPressed String Bool
     | ListEnterPressed String
     | ListSpacePressed String
     | ListShiftSpacePressed String
@@ -1366,6 +1035,15 @@ type Msg a
     | EntryMouseEntered String
     | EntryMouseLeft
     | EntryClicked a
+      -- SCROLLING
+    | InitialEntryDomElementReceived String Dom.Viewport Dom.Element Dom.Element
+    | EntryDomElementReceived String String Dom.Viewport Dom.Element Dom.Element Dom.Element
+    | ListViewportReceived Direction String Dom.Viewport
+
+
+type Direction
+    = Top
+    | Bottom
 
 
 {-| TODO
@@ -1411,7 +1089,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
             , selection
             )
 
-        ListFocused id maybeScrollData ->
+        ListFocused id ->
             if data.preventScroll then
                 ( listbox, Cmd.none, selection )
             else
@@ -1434,7 +1112,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                                 (if data.preventScroll then
                                     Cmd.none
                                  else
-                                    adjustScrollTop id (uniqueId newEntry) maybeScrollData
+                                    adjustScrollTop id (uniqueId newEntry)
                                 )
 
         ListBlured ->
@@ -1447,69 +1125,79 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
             , selection
             )
 
-        ListScrolled ulScrollTop ulClientHeight ->
-            ( Listbox
-                { data
-                    | ulScrollTop = ulScrollTop
-                    , ulClientHeight = ulClientHeight
-                }
-            , Cmd.none
-            , selection
-            )
-
-        ListArrowUpPressed id shiftDown maybeScrollData ->
-            case
-                data.maybeKeyboardFocus
-                    |> Maybe.andThen (findPrevious uniqueId allEntries)
-            of
-                Just (Last lastEntry) ->
-                    if behaviour.jumpAtEnds then
-                        data
-                            |> updateFocus behaviour uniqueId selection shiftDown lastEntry
-                            |> andDo (scrollListToBottom id)
-                    else
-                        ( Listbox { data | query = NoQuery }
-                        , Cmd.none
-                        , selection
-                        )
-
-                Just (Previous newEntry) ->
-                    data
-                        |> updateFocus behaviour uniqueId selection shiftDown newEntry
-                        |> andDo (adjustScrollTopNew id (uniqueId newEntry) maybeScrollData)
+        ListArrowUpPressed id shiftDown ->
+            case data.maybePendingKeyboardFocus of
+                Just _ ->
+                    ( listbox, Cmd.none, selection )
 
                 Nothing ->
-                    ( Listbox { data | query = NoQuery }
-                    , Cmd.none
-                    , selection
-                    )
+                    case data.maybeKeyboardFocus of
+                        Nothing ->
+                            ( Listbox { data | query = NoQuery }
+                            , Cmd.none
+                            , selection
+                            )
 
-        ListArrowDownPressed id shiftDown maybeScrollData ->
-            case
-                data.maybeKeyboardFocus
-                    |> Maybe.andThen (findNext uniqueId allEntries)
-            of
-                Just (First firstEntry) ->
-                    if behaviour.jumpAtEnds then
-                        data
-                            |> updateFocus behaviour uniqueId selection shiftDown firstEntry
-                            |> andDo (scrollListToTop id)
-                    else
-                        ( Listbox { data | query = NoQuery }
-                        , Cmd.none
-                        , selection
-                        )
+                        Just currentFocusId ->
+                            case findPrevious uniqueId allEntries currentFocusId of
+                                Just (Last lastEntry) ->
+                                    if behaviour.jumpAtEnds then
+                                        data
+                                            |> updateFocus behaviour uniqueId selection shiftDown lastEntry
+                                            |> andDo (scrollListToBottom id)
+                                    else
+                                        ( Listbox { data | query = NoQuery }
+                                        , Cmd.none
+                                        , selection
+                                        )
 
-                Just (Next newEntry) ->
-                    data
-                        |> updateFocus behaviour uniqueId selection shiftDown newEntry
-                        |> andDo (adjustScrollTopNew id (uniqueId newEntry) maybeScrollData)
+                                Just (Previous newEntry) ->
+                                    data
+                                        |> updateFocus behaviour uniqueId selection shiftDown newEntry
+                                        |> andDo (adjustScrollTopNew id (uniqueId newEntry) currentFocusId)
+
+                                Nothing ->
+                                    ( Listbox { data | query = NoQuery }
+                                    , Cmd.none
+                                    , selection
+                                    )
+
+        ListArrowDownPressed id shiftDown ->
+            case data.maybePendingKeyboardFocus of
+                Just _ ->
+                    ( listbox, Cmd.none, selection )
 
                 Nothing ->
-                    ( Listbox { data | query = NoQuery }
-                    , Cmd.none
-                    , selection
-                    )
+                    case data.maybeKeyboardFocus of
+                        Nothing ->
+                            ( Listbox { data | query = NoQuery }
+                            , Cmd.none
+                            , selection
+                            )
+
+                        Just currentFocusId ->
+                            case findNext uniqueId allEntries currentFocusId of
+                                Just (First firstEntry) ->
+                                    if behaviour.jumpAtEnds then
+                                        data
+                                            |> updateFocus behaviour uniqueId selection shiftDown firstEntry
+                                            |> andDo (scrollListToTop id)
+                                    else
+                                        ( Listbox { data | query = NoQuery }
+                                        , Cmd.none
+                                        , selection
+                                        )
+
+                                Just (Next newEntry) ->
+                                    data
+                                        |> updateFocus behaviour uniqueId selection shiftDown newEntry
+                                        |> andDo (adjustScrollTopNew id (uniqueId newEntry) currentFocusId)
+
+                                Nothing ->
+                                    ( Listbox { data | query = NoQuery }
+                                    , Cmd.none
+                                    , selection
+                                    )
 
         ListEnterPressed id ->
             data.maybeKeyboardFocus
@@ -1743,8 +1431,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                                         else
                                             Just newFocus
                                 }
-                            , Browser.scrollIntoView (printEntryId id newFocus)
-                                |> Task.attempt (\_ -> NoOp)
+                            , adjustScrollTop id newFocus
                             , selection
                             )
 
@@ -1807,6 +1494,122 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                 a :: selection
             )
 
+        -- SCROLLING
+        InitialEntryDomElementReceived id { viewport } list li ->
+            let
+                minimalGap =
+                    30
+
+                liY =
+                    li.element.y - list.element.y + viewport.y
+
+                liHeight =
+                    li.element.height
+
+                entryHidden =
+                    (liY + liHeight - minimalGap < viewport.y)
+                        || (liY + minimalGap > viewport.y + viewport.height)
+
+                centerEntry =
+                    Task.attempt (\_ -> NoOp) <|
+                        Dom.setViewportOf (printListId id) viewport.x <|
+                            (liY + liHeight / 2 - viewport.height / 2)
+            in
+            ( Listbox
+                { data
+                    | maybeKeyboardFocus =
+                        data.maybePendingKeyboardFocus
+                            |> or data.maybeKeyboardFocus
+                    , maybePendingKeyboardFocus = Nothing
+                }
+            , if entryHidden then
+                centerEntry
+              else
+                Cmd.none
+            , selection
+            )
+
+        EntryDomElementReceived entryId id { viewport } list li previousLi ->
+            let
+                minimalGap =
+                    30
+
+                initialGap =
+                    200
+
+                -- MEASUREMENTS
+                liY =
+                    li.element.y - list.element.y + viewport.y
+
+                liHeight =
+                    li.element.height
+
+                previousLiY =
+                    previousLi.element.y - list.element.y + viewport.y
+
+                previousLiHeight =
+                    previousLi.element.height
+
+                -- CONDITIONS
+                previousEntryHidden =
+                    (previousLiY + previousLiHeight < viewport.y)
+                        || (previousLiY > viewport.y + viewport.height)
+
+                newEntryTooLow =
+                    liY + liHeight + minimalGap > viewport.y + viewport.height
+
+                newEntryTooHigh =
+                    liY - minimalGap < viewport.y
+
+                -- ACTIONS
+                centerNewEntry =
+                    Task.attempt (\_ -> NoOp) <|
+                        Dom.setViewportOf (printListId id) viewport.x <|
+                            (liY + liHeight / 2 - viewport.height / 2)
+
+                scrollDownToNewEntry =
+                    Task.attempt (\_ -> NoOp) <|
+                        Dom.setViewportOf (printListId id) viewport.x <|
+                            (liY + liHeight - viewport.height + initialGap)
+
+                scrollUpToNewEntry =
+                    Task.attempt (\_ -> NoOp) <|
+                        Dom.setViewportOf (printListId id) viewport.x <|
+                            (liY - initialGap)
+            in
+            ( Listbox
+                { data
+                    | maybeKeyboardFocus = data.maybePendingKeyboardFocus
+                    , maybePendingKeyboardFocus = Nothing
+                }
+            , if previousEntryHidden then
+                centerNewEntry
+              else if newEntryTooLow then
+                scrollDownToNewEntry
+              else if newEntryTooHigh then
+                scrollUpToNewEntry
+              else
+                Cmd.none
+            , selection
+            )
+
+        ListViewportReceived direction id list ->
+            ( Listbox
+                { data
+                    | maybeKeyboardFocus = data.maybePendingKeyboardFocus
+                    , maybePendingKeyboardFocus = Nothing
+                }
+            , case direction of
+                Top ->
+                    Task.attempt (\_ -> NoOp) <|
+                        Dom.setViewportOf (printListId id) list.viewport.x 0
+
+                Bottom ->
+                    Task.attempt (\_ -> NoOp) <|
+                        Dom.setViewportOf (printListId id) list.viewport.x list.scene.height
+            , selection
+            )
+
         NoOp ->
             ( listbox, Cmd.none, selection )
 
@@ -1846,7 +1649,7 @@ updateFocus behaviour uniqueId selection shiftDown newEntry data =
         ( Listbox
             { data
                 | query = NoQuery
-                , maybeKeyboardFocus = Just newFocus
+                , maybePendingKeyboardFocus = Just newFocus
                 , maybeMouseFocus =
                     if behaviour.separateFocus then
                         data.maybeMouseFocus
@@ -1861,7 +1664,7 @@ updateFocus behaviour uniqueId selection shiftDown newEntry data =
             ( Listbox
                 { data
                     | query = NoQuery
-                    , maybeKeyboardFocus = Just newFocus
+                    , maybePendingKeyboardFocus = Just newFocus
                     , maybeMouseFocus =
                         if behaviour.separateFocus then
                             data.maybeMouseFocus
@@ -1875,7 +1678,7 @@ updateFocus behaviour uniqueId selection shiftDown newEntry data =
             ( Listbox
                 { data
                     | query = NoQuery
-                    , maybeKeyboardFocus = Just newFocus
+                    , maybePendingKeyboardFocus = Just newFocus
                     , maybeMouseFocus =
                         if behaviour.separateFocus then
                             data.maybeMouseFocus
@@ -1889,7 +1692,7 @@ updateFocus behaviour uniqueId selection shiftDown newEntry data =
         ( Listbox
             { data
                 | query = NoQuery
-                , maybeKeyboardFocus = Just newFocus
+                , maybePendingKeyboardFocus = Just newFocus
                 , maybeMouseFocus =
                     if behaviour.separateFocus then
                         data.maybeMouseFocus
@@ -1922,89 +1725,81 @@ subscriptions (Listbox data) =
 
 focusList : String -> Cmd (Msg a)
 focusList id =
-    Browser.focus (printListId id)
+    Dom.focus (printListId id)
         |> Task.attempt (\_ -> NoOp)
 
 
 scrollListToTop : String -> Cmd (Msg a)
 scrollListToTop id =
-    Browser.setScrollTop (printListId id) 0
-        |> Task.attempt (\_ -> NoOp)
+    Task.succeed (ListViewportReceived Top id)
+        |> and (Dom.getViewportOf (printListId id))
+        |> Task.attempt
+            (\result ->
+                case result of
+                    Err _ ->
+                        NoOp
+
+                    Ok msg ->
+                        msg
+            )
 
 
 scrollListToBottom : String -> Cmd (Msg a)
 scrollListToBottom id =
-    Browser.setScrollBottom (printListId id) 0
-        |> Task.attempt (\_ -> NoOp)
+    Task.succeed (ListViewportReceived Bottom id)
+        |> and (Dom.getViewportOf (printListId id))
+        |> Task.attempt
+            (\result ->
+                case result of
+                    Err _ ->
+                        NoOp
+
+                    Ok msg ->
+                        msg
+            )
 
 
-adjustScrollTop : String -> String -> Maybe CurrentScrollData -> Cmd (Msg a)
-adjustScrollTop id entryId maybeScrollData =
-    case maybeScrollData of
-        Nothing ->
-            Browser.scrollIntoView (printEntryId id entryId)
-                |> Task.attempt (\_ -> NoOp)
+adjustScrollTop : String -> String -> Cmd (Msg a)
+adjustScrollTop id entryId =
+    Task.succeed (InitialEntryDomElementReceived id)
+        |> and (Dom.getViewportOf (printListId id))
+        |> and (Dom.getElement (printListId id))
+        |> and (Dom.getElement (printEntryId id entryId))
+        |> Task.attempt
+            (\result ->
+                case result of
+                    Err _ ->
+                        NoOp
 
-        Just ({ ulScrollTop, ulClientHeight, liOffsetTop, liOffsetHeight } as scrollData) ->
-            if (liOffsetTop + liOffsetHeight) > (ulScrollTop + ulClientHeight) then
-                if liOffsetTop <= ulScrollTop + ulClientHeight then
-                    Browser.setScrollTop (printListId id)
-                        (liOffsetTop + liOffsetHeight - ulClientHeight)
-                        |> Task.attempt (\_ -> NoOp)
-                else
-                    centerScrollTop id scrollData
-            else if liOffsetTop < ulScrollTop then
-                if liOffsetTop + liOffsetHeight >= ulScrollTop then
-                    Browser.setScrollTop (printListId id) liOffsetTop
-                        |> Task.attempt (\_ -> NoOp)
-                else
-                    centerScrollTop id scrollData
-            else
-                Cmd.none
+                    Ok msg ->
+                        msg
+            )
 
 
-adjustScrollTopNew : String -> String -> Maybe ScrollData -> Cmd (Msg a)
-adjustScrollTopNew id entryId maybeScrollData =
-    case maybeScrollData of
-        Nothing ->
-            Browser.scrollIntoView (printEntryId id entryId)
-                |> Task.attempt (\_ -> NoOp)
+adjustScrollTopNew : String -> String -> String -> Cmd (Msg a)
+adjustScrollTopNew id entryId previousEntryId =
+    Task.succeed (EntryDomElementReceived entryId id)
+        |> and (Dom.getViewportOf (printListId id))
+        |> and (Dom.getElement (printListId id))
+        |> and (Dom.getElement (printEntryId id entryId))
+        |> and (Dom.getElement (printEntryId id previousEntryId))
+        |> Task.attempt
+            (\result ->
+                case result of
+                    Err _ ->
+                        NoOp
 
-        Just { ulScrollTop, ulClientHeight, ulClientTop, liCurrentOffsetTop, liCurrentOffsetHeight, liNewOffsetTop, liNewOffsetHeight } ->
-            if
-                (liCurrentOffsetTop - ulClientTop + liCurrentOffsetHeight < ulScrollTop)
-                    || (liCurrentOffsetTop > ulScrollTop + ulClientHeight)
-            then
-                -- current entry is not visible
-                centerScrollTop id
-                    { ulScrollTop = ulScrollTop
-                    , ulClientHeight = ulClientHeight
-                    , ulClientTop = ulClientTop
-                    , liOffsetTop = liNewOffsetTop
-                    , liOffsetHeight = liNewOffsetHeight
-                    }
-            else
-            -- current entry is visible
-            if
-                (liNewOffsetTop - ulClientTop + liNewOffsetHeight) > (ulScrollTop + ulClientHeight)
-            then
-                -- lower parts of new entry are hidden
-                Browser.setScrollTop (printListId id)
-                    (liNewOffsetTop - ulClientTop + liNewOffsetHeight - ulClientHeight)
-                    |> Task.attempt (\_ -> NoOp)
-            else if liNewOffsetTop - ulClientTop < ulScrollTop then
-                -- upper parts of new entry are hidden
-                Browser.setScrollTop (printListId id) (liNewOffsetTop - ulClientTop)
-                    |> Task.attempt (\_ -> NoOp)
-            else
-                Cmd.none
+                    Ok msg ->
+                        msg
+            )
 
 
-centerScrollTop : String -> CurrentScrollData -> Cmd (Msg a)
-centerScrollTop id { ulClientHeight, liOffsetTop, liOffsetHeight } =
-    Browser.setScrollTop (printListId id)
-        (liOffsetTop + liOffsetHeight / 2 - ulClientHeight / 2)
-        |> Task.attempt (\_ -> NoOp)
+and task previousTask =
+    Task.map2 apply previousTask task
+
+
+apply f a =
+    f a
 
 
 

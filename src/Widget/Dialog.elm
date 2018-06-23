@@ -46,7 +46,7 @@ module Widget.Dialog
 
 -}
 
-import Browser exposing (DomError)
+import Browser.Dom as Dom
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
@@ -78,7 +78,7 @@ open : (Cmd msg -> msg) -> String -> ( Dialog, Cmd msg )
 open lift firstFocusId =
     ( Dialog { open = True }
     , Task.attempt (\_ -> lift Cmd.none) <|
-        Browser.focus firstFocusId
+        Dom.focus firstFocusId
     )
 
 
@@ -88,7 +88,7 @@ close : (Cmd msg -> msg) -> String -> ( Dialog, Cmd msg )
 close lift firstFocusId =
     ( Dialog { open = False }
     , Task.attempt (\_ -> lift Cmd.none) <|
-        Browser.focus firstFocusId
+        Dom.focus firstFocusId
     )
 
 
@@ -111,7 +111,7 @@ wrapToStart lift lastFocusId =
                             Decode.succeed
                                 ( lift <|
                                     Task.attempt (\_ -> lift Cmd.none) <|
-                                        Browser.focus lastFocusId
+                                        Dom.focus lastFocusId
                                 , True
                                 )
 
@@ -136,7 +136,7 @@ wrapToEnd lift firstFocusId =
                             Decode.succeed
                                 ( lift <|
                                     Task.attempt (\_ -> lift Cmd.none) <|
-                                        Browser.focus firstFocusId
+                                        Dom.focus firstFocusId
                                 , True
                                 )
 
