@@ -670,7 +670,6 @@ viewHelp renderedEntries uniqueId views cfg (Listbox data) allEntries selection 
     in
     Html.ul
         ([ Attributes.id (printListId cfg.id)
-         , Attributes.style "position" "relative"
          , Attributes.attribute "role" "listbox"
          , Attributes.attribute "aria-labelledby" cfg.labelledBy
          , Events.preventDefaultOn "keypress"

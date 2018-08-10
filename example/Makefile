@@ -6,3 +6,6 @@ debug:
 
 optimize:
 	`nix-build ../shell.nix`/bin/elm make src/Main.elm --optimize --output elm.js
+
+watch:
+	./watch.sh
