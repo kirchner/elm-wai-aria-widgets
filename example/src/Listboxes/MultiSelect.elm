@@ -189,7 +189,7 @@ view model =
                         { id = "available-listbox"
                         , labelledBy = "available-label"
                         , lift = AvailableListboxMsg
-                        , onKeyPress =
+                        , onKeyDown =
                             Decode.field "key" Decode.string
                                 |> Decode.andThen
                                     (\code ->
@@ -256,7 +256,7 @@ view model =
                         { id = "chosen-listbox"
                         , labelledBy = "chosen-label"
                         , lift = ChosenListboxMsg
-                        , onKeyPress =
+                        , onKeyDown =
                             Decode.field "key" Decode.string
                                 |> Decode.andThen
                                     (\code ->

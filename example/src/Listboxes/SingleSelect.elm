@@ -342,7 +342,7 @@ view model =
                         { id = "important-features-listbox"
                         , labelledBy = "important-features-listbox-label"
                         , lift = ImportantFeaturesListboxMsg
-                        , onKeyPress =
+                        , onKeyDown =
                             Decode.map2 Tuple.pair
                                 (Decode.field "key" Decode.string)
                                 (Decode.field "altKey" Decode.bool)
@@ -452,7 +452,7 @@ view model =
                         { id = "unimportant-features-listbox"
                         , labelledBy = "unimportant-features-listbox-label"
                         , lift = UnimportantFeaturesListboxMsg
-                        , onKeyPress =
+                        , onKeyDown =
                             Decode.field "key" Decode.string
                                 |> Decode.andThen
                                     (\rawCode ->

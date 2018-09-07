@@ -217,7 +217,7 @@ view (ViewConfig uniqueId views) ids allEntries (Dropdown data) maybeSelection =
             { id = printListboxId ids.id
             , labelledBy = ids.labelledBy
             , lift = ListboxMsg (Just ids.id)
-            , onKeyPress =
+            , onKeyDown =
                 Decode.field "key" Decode.string
                     |> Decode.andThen
                         (\rawCode ->

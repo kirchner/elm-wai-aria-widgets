@@ -231,6 +231,14 @@ focusEntry config newEntry (Listbox data) selection =
     in
     data
         |> updateFocus behaviour uniqueId selection False newEntry
+        |> Tuple.mapFirst
+            (\(Listbox newData) ->
+                Listbox
+                    { newData
+                        | maybeKeyboardFocus = newData.maybePendingKeyboardFocus
+                        , maybePendingKeyboardFocus = Nothing
+                    }
+            )
 
 
 {-| TODO
@@ -507,7 +515,7 @@ view config { id, labelledBy, lift } =
         { id = id
         , labelledBy = labelledBy
         , lift = lift
-        , onKeyPress = Decode.fail "not handling this event here"
+        , onKeyDown = Decode.fail "not handling this event here"
         , onMouseDown = Decode.fail "not handling this event here"
         , onMouseUp = Decode.fail "not handling this event here"
         , onBlur = Decode.fail "not handling this event here"
@@ -522,7 +530,7 @@ customViewUnique :
         { id : String
         , labelledBy : String
         , lift : Msg a -> msg
-        , onKeyPress : Decoder msg
+        , onKeyDown : Decoder msg
         , onMouseDown : Decoder msg
         , onMouseUp : Decoder msg
         , onBlur : Decoder msg
@@ -543,7 +551,7 @@ customViewUnique config cfg allEntries listbox selection =
                 { id = "listbox"
                 , labelledBy = "label"
                 , lift = ListboxMsg
-                , onKeyPress =
+                , onKeyDown =
                     Decode.field "key" Decode.string
                         |> Decode.andThen
                             (\code ->
@@ -570,7 +578,7 @@ customView :
         { id : String
         , labelledBy : String
         , lift : Msg a -> msg
-        , onKeyPress : Decoder msg
+        , onKeyDown : Decoder msg
         , onMouseDown : Decoder msg
         , onMouseUp : Decoder msg
         , onBlur : Decoder msg
@@ -608,7 +616,7 @@ viewLazy :
         { id : String
         , labelledBy : String
         , lift : Msg a -> msg
-        , onKeyPress : Decoder msg
+        , onKeyDown : Decoder msg
         , onMouseDown : Decoder msg
         , onMouseUp : Decoder msg
         , onBlur : Decoder msg
@@ -647,7 +655,7 @@ viewHelp :
         { id : String
         , labelledBy : String
         , lift : Msg a -> msg
-        , onKeyPress : Decoder msg
+        , onKeyDown : Decoder msg
         , onMouseDown : Decoder msg
         , onMouseUp : Decoder msg
         , onBlur : Decoder msg
@@ -670,9 +678,9 @@ viewHelp renderedEntries uniqueId views cfg (Listbox data) allEntries selection 
         ([ Attributes.id (printListId cfg.id)
          , Attributes.attribute "role" "listbox"
          , Attributes.attribute "aria-labelledby" cfg.labelledBy
-         , Events.preventDefaultOn "keypress"
+         , Events.preventDefaultOn "keydown"
             (Decode.oneOf
-                [ cfg.onKeyPress
+                [ cfg.onKeyDown
                 , keyInfoDecoder
                     |> Decode.andThen (listKeyPress cfg.id)
                     |> Decode.map cfg.lift
@@ -781,7 +789,7 @@ viewEntries :
         { id : String
         , labelledBy : String
         , lift : Msg a -> msg
-        , onKeyPress : Decoder msg
+        , onKeyDown : Decoder msg
         , onMouseDown : Decoder msg
         , onMouseUp : Decoder msg
         , onBlur : Decoder msg
@@ -962,9 +970,16 @@ setTabindex focusable attrs =
 
 {-| TODO
 -}
-withUnique : Maybe a -> (List a -> ( Listbox, List a )) -> ( Listbox, Maybe a )
+withUnique :
+    Maybe a
+    -> (List a -> ( Listbox, List a ))
+    -> ( Listbox, Maybe a )
 withUnique selection func =
-    Tuple.mapSecond listToMaybe (func (maybeToList selection))
+    let
+        ( listbox, list ) =
+            func (maybeToList selection)
+    in
+    ( listbox, listToMaybe list )
 
 
 maybeToList : Maybe a -> List a
