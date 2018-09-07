@@ -44,7 +44,6 @@ module Widget.Listbox.Dropdown
    limitations under the License.
 
 -}
---import AnimationFrame
 
 import Browser.Dom as Dom
 import Html exposing (Html)
@@ -401,7 +400,8 @@ update (UpdateConfig uniqueId behaviour) allEntries msg (Dropdown data) maybeSel
                         else
                             Just id
                 }
-            , Cmd.none
+            , Task.attempt (\_ -> NoOp) <|
+                Listbox.focus (printListboxId id)
             , newSelection
             )
 
@@ -421,7 +421,8 @@ update (UpdateConfig uniqueId behaviour) allEntries msg (Dropdown data) maybeSel
                         else
                             Just id
                 }
-            , Cmd.none
+            , Task.attempt (\_ -> NoOp) <|
+                Listbox.focus (printListboxId id)
             , newSelection
             )
 

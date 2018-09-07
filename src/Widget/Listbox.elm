@@ -1000,7 +1000,7 @@ listKeyPress id { code, altDown, controlDown, metaDown, shiftDown } =
         "Home" ->
             if not altDown && controlDown && not metaDown && shiftDown then
                 Just (ListControlShiftHomePressed id)
-            else if not altDown && not controlDown && not metaDown && shiftDown then
+            else if not altDown && not controlDown && not metaDown && not shiftDown then
                 Just (ListHomePressed id)
             else
                 Nothing
@@ -1008,7 +1008,7 @@ listKeyPress id { code, altDown, controlDown, metaDown, shiftDown } =
         "End" ->
             if not altDown && controlDown && not metaDown && shiftDown then
                 Just (ListControlShiftEndPressed id)
-            else if not altDown && not controlDown && not metaDown && shiftDown then
+            else if not altDown && not controlDown && not metaDown && not shiftDown then
                 Just (ListEndPressed id)
             else
                 Nothing
