@@ -104,11 +104,8 @@ module Widget.Listbox
    limitations under the License.
 
 -}
---import List.Extra as List
---import Json.Decode.Pipeline as Decode
 
 import Browser.Dom as Dom
-import Decode
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
@@ -124,6 +121,7 @@ import Internal.Entries as Internal
         , range
         )
 import Json.Decode as Decode exposing (Decoder)
+import Json.Decode.Pipeline as Decode
 import List.Extra as List
 import Set
 import Task exposing (Task)
