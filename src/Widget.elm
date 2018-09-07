@@ -4,7 +4,7 @@ module Widget
         , HtmlDetails
         )
 
-{-|
+{-| Types used by most widgets.
 
 @docs HtmlAttributes, HtmlDetails
 
@@ -31,13 +31,14 @@ module Widget
 import Html exposing (Html)
 
 
-{-| TODO
+{-| A list of attributes which never throw messages. Used to apply styling to
+a DOM element.
 -}
 type alias HtmlAttributes =
     List (Html.Attribute Never)
 
 
-{-| TODO
+{-| Used to apply styling and content to a DOM element.
 -}
 type alias HtmlDetails =
     { attributes : List (Html.Attribute Never)
