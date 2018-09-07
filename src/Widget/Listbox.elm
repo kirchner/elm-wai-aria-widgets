@@ -1487,7 +1487,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
 
                 Just firstEntry ->
                     data
-                        |> updateFocus behaviour uniqueId [] False firstEntry
+                        |> updateFocus behaviour uniqueId selection False firstEntry
                         |> andDo (scrollListToTop id)
 
         ListControlShiftHomePressed id ->
@@ -1531,7 +1531,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
 
                 Just lastEntry ->
                     data
-                        |> updateFocus behaviour uniqueId [] False lastEntry
+                        |> updateFocus behaviour uniqueId selection False lastEntry
                         |> andDo (scrollListToBottom id)
 
         ListControlShiftEndPressed id ->
