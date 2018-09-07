@@ -56,6 +56,7 @@ import Internal.Entries
         , findNext
         , findPrevious
         )
+import Internal.KeyInfo as KeyInfo exposing (KeyInfo)
 import Json.Decode as Decode exposing (Decoder)
 import Task
 import Widget exposing (HtmlAttributes, HtmlDetails)
@@ -199,18 +200,8 @@ view (ViewConfig uniqueId views) ids allEntries (Dropdown data) maybeSelection =
     in
     Html.div
         (appendAttributes views.container
-            [ Events.on "keydown"
-                (Decode.field "key" Decode.string
-                    |> Decode.andThen
-                        (\code ->
-                            case code of
-                                "Enter" ->
-                                    Decode.succeed (ContainerEnterPressed ids.id)
-
-                                _ ->
-                                    Decode.fail "not handling that key here"
-                        )
-                )
+            [ Events.onMouseDown ListboxMousePressed
+            , Events.onMouseUp (ListboxMouseReleased ids.id)
             ]
         )
         [ viewButton ids.id buttonHtmlDetails ids.labelledBy maybeSelection True
@@ -219,15 +210,34 @@ view (ViewConfig uniqueId views) ids allEntries (Dropdown data) maybeSelection =
             , labelledBy = ids.labelledBy
             , lift = ListboxMsg (Just ids.id)
             , onKeyDown =
-                Decode.field "key" Decode.string
+                KeyInfo.decoder
                     |> Decode.andThen
-                        (\rawCode ->
-                            case rawCode of
+                        (\{ code, altDown, controlDown, metaDown, shiftDown } ->
+                            case code of
                                 "Escape" ->
-                                    Decode.succeed (ListboxEscapePressed ids.id)
+                                    if
+                                        not altDown
+                                            && not controlDown
+                                            && not metaDown
+                                            && not shiftDown
+                                    then
+                                        Decode.succeed (ListboxEscapePressed ids.id)
+                                    else
+                                        Decode.fail "not handling that key combination"
+
+                                "Enter" ->
+                                    if
+                                        not altDown
+                                            && not controlDown
+                                            && not metaDown
+                                            && not shiftDown
+                                    then
+                                        Decode.succeed (ListboxEnterPressed ids.id)
+                                    else
+                                        Decode.fail "not handling that key combination"
 
                                 _ ->
-                                    Decode.fail "not handling keys here"
+                                    Decode.fail "not handling that key combination"
                         )
             , onMouseDown = Decode.fail "not handling this event here"
             , onMouseUp = Decode.fail "not handling this event here"
@@ -316,8 +326,6 @@ printListboxId id =
 type Msg a
     = NoOp
     | NextAnimationFrame
-      -- CONTAINER
-    | ContainerEnterPressed String
       -- BUTTON
     | ButtonClicked String
     | ButtonArrowUpPressed String
@@ -325,7 +333,10 @@ type Msg a
       -- LISTBOX
     | ListboxMsg (Maybe String) (Listbox.Msg a)
     | ListboxEscapePressed String
+    | ListboxEnterPressed String
     | ListboxBlured String
+    | ListboxMousePressed
+    | ListboxMouseReleased String
 
 
 {-| TODO
@@ -337,8 +348,11 @@ update :
     -> Dropdown
     -> Maybe a
     -> ( Dropdown, Cmd (Msg a), Maybe a )
-update (UpdateConfig uniqueId behaviour) allEntries msg (Dropdown data) maybeSelection =
+update (UpdateConfig uniqueId behaviour) allEntries msg dropdown maybeSelection =
     let
+        (Dropdown data) =
+            dropdown
+
         listboxConfig =
             Listbox.updateConfig uniqueId
                 { jumpAtEnds = behaviour.jumpAtEnds
@@ -352,12 +366,12 @@ update (UpdateConfig uniqueId behaviour) allEntries msg (Dropdown data) maybeSel
     in
     case msg of
         NoOp ->
-            ( Dropdown data, Cmd.none, maybeSelection )
+            ( dropdown, Cmd.none, maybeSelection )
 
         NextAnimationFrame ->
             case data.pendingFocusListbox of
                 Nothing ->
-                    ( Dropdown data, Cmd.none, maybeSelection )
+                    ( dropdown, Cmd.none, maybeSelection )
 
                 Just id ->
                     ( Dropdown { data | pendingFocusListbox = Nothing }
@@ -365,16 +379,6 @@ update (UpdateConfig uniqueId behaviour) allEntries msg (Dropdown data) maybeSel
                         Listbox.focus (printListboxId id)
                     , maybeSelection
                     )
-
-        -- CONTAINER
-        ContainerEnterPressed id ->
-            if data.open then
-                ( Dropdown { data | open = False }
-                , focusButton id
-                , maybeSelection
-                )
-            else
-                ( Dropdown data, Cmd.none, maybeSelection )
 
         -- BUTTON
         ButtonClicked id ->
@@ -446,11 +450,41 @@ update (UpdateConfig uniqueId behaviour) allEntries msg (Dropdown data) maybeSel
             , maybeSelection
             )
 
+        ListboxEnterPressed id ->
+            if data.open then
+                ( Dropdown { data | open = False }
+                , focusButton id
+                , Listbox.focusedEntry listboxConfig data.listbox allEntries
+                )
+            else
+                ( dropdown, Cmd.none, maybeSelection )
+
         ListboxBlured id ->
-            ( Dropdown { data | open = False }
-            , focusButton id
+            if data.preventBlur then
+                ( dropdown, Cmd.none, maybeSelection )
+            else
+                ( Dropdown { data | open = False }
+                , focusButton id
+                , maybeSelection
+                )
+
+        ListboxMousePressed ->
+            ( Dropdown { data | preventBlur = True }
+            , Cmd.none
             , maybeSelection
             )
+
+        ListboxMouseReleased id ->
+            if behaviour.closeAfterMouseSelection then
+                ( Dropdown { data | open = False, preventBlur = False }
+                , focusButton id
+                , maybeSelection
+                )
+            else
+                ( Dropdown { data | preventBlur = False }
+                , Cmd.none
+                , maybeSelection
+                )
 
 
 
@@ -476,12 +510,6 @@ subscriptions (Dropdown data) =
             Sub.map (ListboxMsg Nothing) (Listbox.subscriptions data.listbox)
           else
             Sub.none
-
-        --, case data.pendingFocusListbox of
-        --    Nothing ->
-        --        Sub.none
-        --    Just _ ->
-        --        AnimationFrame.times (\_ -> NextAnimationFrame)
         ]
 
 

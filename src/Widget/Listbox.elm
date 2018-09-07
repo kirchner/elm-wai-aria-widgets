@@ -128,6 +128,7 @@ import Internal.Entries as Internal
         , findWith
         , range
         )
+import Internal.KeyInfo as KeyInfo exposing (KeyInfo)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline as Decode
 import List.Extra as List
@@ -905,7 +906,7 @@ viewHelp renderedEntries uniqueId views cfg (Listbox data) allEntries selection 
          , Events.preventDefaultOn "keydown"
             (Decode.oneOf
                 [ cfg.onKeyDown
-                , keyInfoDecoder
+                , KeyInfo.decoder
                     |> Decode.andThen
                         (listKeyPress cfg.id
                             >> Maybe.map (Decode.succeed << cfg.lift)
@@ -947,25 +948,6 @@ viewHelp renderedEntries uniqueId views cfg (Listbox data) allEntries selection 
             maybeQuery
             renderedEntries
         )
-
-
-type alias KeyInfo =
-    { code : String
-    , altDown : Bool
-    , controlDown : Bool
-    , metaDown : Bool
-    , shiftDown : Bool
-    }
-
-
-keyInfoDecoder : Decoder KeyInfo
-keyInfoDecoder =
-    Decode.succeed KeyInfo
-        |> Decode.required "key" Decode.string
-        |> Decode.optional "altDown" Decode.bool False
-        |> Decode.optional "ctrlKey" Decode.bool False
-        |> Decode.optional "metaKey" Decode.bool False
-        |> Decode.optional "shiftKey" Decode.bool False
 
 
 listKeyPress : String -> KeyInfo -> Maybe (Msg a)
