@@ -894,6 +894,8 @@ listboxUpdateConfig jumpAtEnds separateFocus selectionFollowsFocus handleHomeAnd
                             |> String.contains (String.toLower query)
             else
                 Listbox.noTypeAhead
+        , minimalGap = 0
+        , initialGap = 0
         }
 
 

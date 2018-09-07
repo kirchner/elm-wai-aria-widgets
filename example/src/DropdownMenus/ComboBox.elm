@@ -322,6 +322,8 @@ updateConfig jumpAtEnds closeAfterMouseSelection separateFocus selectionFollowsF
 
                 OnDemand ->
                     ComboBox.onDemand
+        , minimalGap = 0
+        , initialGap = 0
         }
 
 

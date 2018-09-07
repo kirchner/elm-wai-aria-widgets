@@ -171,6 +171,8 @@ type alias Behaviour =
     , selectionFollowsFocus : Bool
     , handleHomeAndEnd : Bool
     , displayCondition : DisplayCondition
+    , minimalGap : Float
+    , initialGap : Float
     }
 
 
@@ -502,6 +504,8 @@ update config allEntries msg ((ComboBox data) as comboBox) maybeSelection =
                             , selectionFollowsFocus = behaviour.selectionFollowsFocus
                             , handleHomeAndEnd = behaviour.handleHomeAndEnd
                             , typeAhead = Listbox.noTypeAhead
+                            , minimalGap = behaviour.minimalGap
+                            , initialGap = behaviour.initialGap
                             }
 
                     ( newListbox, newSelection ) =
@@ -531,6 +535,8 @@ update config allEntries msg ((ComboBox data) as comboBox) maybeSelection =
                             , selectionFollowsFocus = behaviour.selectionFollowsFocus
                             , handleHomeAndEnd = behaviour.handleHomeAndEnd
                             , typeAhead = Listbox.noTypeAhead
+                            , minimalGap = behaviour.minimalGap
+                            , initialGap = behaviour.initialGap
                             }
 
                     ( newListbox, newSelection ) =
@@ -559,6 +565,8 @@ update config allEntries msg ((ComboBox data) as comboBox) maybeSelection =
                         , selectionFollowsFocus = behaviour.selectionFollowsFocus
                         , handleHomeAndEnd = behaviour.handleHomeAndEnd
                         , typeAhead = Listbox.noTypeAhead
+                        , minimalGap = behaviour.minimalGap
+                        , initialGap = behaviour.initialGap
                         }
             in
             case Listbox.focusedEntry listboxConfig data.listbox filteredEntries of
@@ -585,6 +593,8 @@ update config allEntries msg ((ComboBox data) as comboBox) maybeSelection =
                         , selectionFollowsFocus = behaviour.selectionFollowsFocus
                         , handleHomeAndEnd = behaviour.handleHomeAndEnd
                         , typeAhead = Listbox.noTypeAhead
+                        , minimalGap = behaviour.minimalGap
+                        , initialGap = behaviour.initialGap
                         }
 
                 ( newListbox, listboxCmd, newSelection ) =

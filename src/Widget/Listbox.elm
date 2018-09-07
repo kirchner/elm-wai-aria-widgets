@@ -429,6 +429,8 @@ type alias Behaviour a =
     , selectionFollowsFocus : Bool
     , handleHomeAndEnd : Bool
     , typeAhead : TypeAhead a
+    , minimalGap : Float
+    , initialGap : Float
     }
 
 
@@ -1511,9 +1513,6 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
         -- SCROLLING
         InitialEntryDomElementReceived id { viewport } list li ->
             let
-                minimalGap =
-                    30
-
                 liY =
                     li.element.y - list.element.y + viewport.y
 
@@ -1521,8 +1520,8 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                     li.element.height
 
                 entryHidden =
-                    (liY + liHeight - minimalGap < viewport.y)
-                        || (liY + minimalGap > viewport.y + viewport.height)
+                    (liY + liHeight - behaviour.minimalGap < viewport.y)
+                        || (liY + behaviour.minimalGap > viewport.y + viewport.height)
 
                 centerEntry =
                     Task.attempt (\_ -> NoOp) <|
@@ -1545,12 +1544,6 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
 
         EntryDomElementReceived entryId id { viewport } list li previousLi ->
             let
-                minimalGap =
-                    30
-
-                initialGap =
-                    200
-
                 -- MEASUREMENTS
                 liY =
                     li.element.y - list.element.y + viewport.y
@@ -1570,10 +1563,10 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                         || (previousLiY > viewport.y + viewport.height)
 
                 newEntryTooLow =
-                    liY + liHeight + minimalGap > viewport.y + viewport.height
+                    liY + liHeight + behaviour.minimalGap > viewport.y + viewport.height
 
                 newEntryTooHigh =
-                    liY - minimalGap < viewport.y
+                    liY - behaviour.minimalGap < viewport.y
 
                 -- ACTIONS
                 centerNewEntry =
@@ -1584,12 +1577,12 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                 scrollDownToNewEntry =
                     Task.attempt (\_ -> NoOp) <|
                         Dom.setViewportOf (printListId id) viewport.x <|
-                            (liY + liHeight - viewport.height + initialGap)
+                            (liY + liHeight - viewport.height + behaviour.initialGap)
 
                 scrollUpToNewEntry =
                     Task.attempt (\_ -> NoOp) <|
                         Dom.setViewportOf (printListId id) viewport.x <|
-                            (liY - initialGap)
+                            (liY - behaviour.initialGap)
             in
             ( Listbox
                 { data

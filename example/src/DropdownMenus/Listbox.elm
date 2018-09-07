@@ -228,6 +228,8 @@ updateConfig jumpAtEnds closeAfterMouseSelection separateFocus selectionFollowsF
                             |> String.contains (String.toLower query)
             else
                 Listbox.noTypeAhead
+        , minimalGap = 0
+        , initialGap = 0
         }
 
 

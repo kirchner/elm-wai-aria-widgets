@@ -322,6 +322,8 @@ updateConfig =
         , selectionFollowsFocus = False
         , handleHomeAndEnd = True
         , typeAhead = Listbox.noTypeAhead
+        , minimalGap = 0
+        , initialGap = 0
         }
 
 

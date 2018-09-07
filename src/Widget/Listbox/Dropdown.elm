@@ -154,6 +154,8 @@ type alias Behaviour a =
     , selectionFollowsFocus : Bool
     , handleHomeAndEnd : Bool
     , typeAhead : TypeAhead a
+    , minimalGap : Float
+    , initialGap : Float
     }
 
 
@@ -345,6 +347,8 @@ update (UpdateConfig uniqueId behaviour) allEntries msg (Dropdown data) maybeSel
                 , selectionFollowsFocus = behaviour.selectionFollowsFocus
                 , handleHomeAndEnd = behaviour.handleHomeAndEnd
                 , typeAhead = behaviour.typeAhead
+                , minimalGap = behaviour.minimalGap
+                , initialGap = behaviour.initialGap
                 }
     in
     case msg of
