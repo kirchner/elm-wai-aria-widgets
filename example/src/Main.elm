@@ -705,9 +705,7 @@ viewListbox listbox selection =
             [ Attributes.class "control" ]
             [ selection
                 |> Set.toList
-                |> Listbox.viewLazy
-                    (\_ -> 42)
-                    (\_ -> 31)
+                |> Listbox.customView
                     listboxViewConfig
                     { id = "locales"
                     , labelledBy = "locales-label"
@@ -768,9 +766,7 @@ viewMuppetsListbox listbox selection =
             [ Attributes.class "control" ]
             [ selection
                 |> Set.toList
-                |> Listbox.viewLazy
-                    (\_ -> 42)
-                    (\_ -> 42)
+                |> Listbox.customView
                     listboxViewConfig
                     { id = "muppets"
                     , labelledBy = "muppets-label"

@@ -30,12 +30,20 @@ module Widget.Listbox
         , updateUnique
         , view
         , viewConfig
-        , viewLazy
         , viewUnique
         , withUnique
         )
 
-{-|
+{-| Implementation of the [listbox
+widget](https://www.w3.org/TR/wai-aria-practices-1.1/#Listbox):
+
+> A listbox widget presents a list of options and allows a user to select one
+> or more of them.
+
+TODO: link to ellie example
+
+Take a look at the documentation of `Behaviour` for the default keyboard
+interactions this widget offers.
 
 @docs Listbox, init, view, viewUnique
 
@@ -57,7 +65,7 @@ module Widget.Listbox
 @docs ViewConfig, viewConfig, Views, noDivider
 
 
-## Type ahead
+## Type-ahead
 
 @docs TypeAhead, noTypeAhead, simpleTypeAhead, typeAhead
 
@@ -129,7 +137,8 @@ import Time
 import Widget exposing (HtmlAttributes, HtmlDetails)
 
 
-{-| TODO
+{-| Tracks the keyboard and mouse focus as well as the current query. The full
+list of entries and the currently selected option(s) live in your own model.
 -}
 type Listbox
     = Listbox Data
@@ -156,7 +165,7 @@ type Query
     | Query Int Time.Posix String
 
 
-{-| TODO
+{-| An initial listbox with on option focused.
 -}
 init : Listbox
 init =
@@ -172,20 +181,21 @@ init =
         }
 
 
-{-| TODO
+{-| When updating or viewing a listbox you have to provide a list of entries.
+These can be selectable options or non-selectable dividers.
 -}
 type alias Entry a divider =
     Internal.Entry a divider
 
 
-{-| TODO
+{-| Create a selectable option.
 -}
 option : a -> Entry a divider
 option =
     Option
 
 
-{-| TODO
+{-| Create a non-selectable divider.
 -}
 divider : divider -> Entry a divider
 divider =
@@ -196,14 +206,15 @@ divider =
 ---- EXTERNAL STATE MANIPULATION
 
 
-{-| TODO
+{-| A task to give the listbox focus. The first argument must match the `id`
+used in the `view` function!
 -}
 focus : String -> Task Dom.Error ()
 focus id =
     Dom.focus (printListId id)
 
 
-{-| TODO
+{-| Returns the option which currently has keyboard focus.
 -}
 focusedEntry : UpdateConfig a -> Listbox -> List (Entry a divider) -> Maybe a
 focusedEntry (UpdateConfig uniqueId _) (Listbox { maybeKeyboardFocus }) allEntries =
@@ -212,7 +223,7 @@ focusedEntry (UpdateConfig uniqueId _) (Listbox { maybeKeyboardFocus }) allEntri
         |> Maybe.map Tuple.second
 
 
-{-| TODO
+{-| Returns the option which currently has mouse focus.
 -}
 hoveredEntry : UpdateConfig a -> Listbox -> List (Entry a divider) -> Maybe a
 hoveredEntry (UpdateConfig uniqueId _) (Listbox { maybeMouseFocus }) allEntries =
@@ -221,7 +232,11 @@ hoveredEntry (UpdateConfig uniqueId _) (Listbox { maybeMouseFocus }) allEntries 
         |> Maybe.map Tuple.second
 
 
-{-| TODO
+{-| Sets the keyboard focus to the provided options.
+
+**Note**: This will not adjust the scroll position of the listbox, so you might
+want to apply `scrollToFocus` afterwards.
+
 -}
 focusEntry : UpdateConfig a -> a -> Listbox -> List a -> ( Listbox, List a )
 focusEntry config newEntry (Listbox data) selection =
@@ -241,19 +256,12 @@ focusEntry config newEntry (Listbox data) selection =
             )
 
 
-{-| TODO
--}
-scrollToFocus : String -> Listbox -> Cmd (Msg a)
-scrollToFocus id (Listbox data) =
-    case data.maybeKeyboardFocus of
-        Nothing ->
-            Cmd.none
+{-| Sets the keyboard focus to the next option. If `jumpAtEnds` is true and the
+focus is already on the last option, the first option is selected.
 
-        Just focusId ->
-            adjustScrollTop id focusId
+**Note**: This will not adjust the scroll position of the listbox, so you might
+want to apply `scrollToFocus` afterwards.
 
-
-{-| TODO
 -}
 focusNextOrFirstEntry :
     UpdateConfig a
@@ -301,7 +309,12 @@ focusNextOrFirstEntry config allEntries listbox selection =
                     ( listbox, selection )
 
 
-{-| TODO
+{-| Sets the keyboard focus to the previous option. If `jumpAtEnds` is true and the
+focus is already on the first option, the first option is selected.
+
+**Note**: This will not adjust the scroll position of the listbox, so you might
+want to apply `scrollToFocus` afterwards.
+
 -}
 focusPreviousOrFirstEntry :
     UpdateConfig a
@@ -360,24 +373,133 @@ focusPreviousOrFirstEntry config allEntries listbox selection =
                     ( listbox, selection )
 
 
+{-| A command adjusting the scroll position of the listbox such that the
+current keyboard focus is visible.
+-}
+scrollToFocus : String -> Listbox -> Cmd (Msg a)
+scrollToFocus id (Listbox data) =
+    case data.maybeKeyboardFocus of
+        Nothing ->
+            Cmd.none
+
+        Just focusId ->
+            adjustScrollTop id focusId
+
+
+{-| You can wrap `focusEntry`, `focusNextOrFirstEntry` and
+`focusPreviousOrFirstEntry` with this function if you have a listbox where the
+user can only select at most one option.
+-}
+withUnique :
+    Maybe a
+    -> (List a -> ( Listbox, List a ))
+    -> ( Listbox, Maybe a )
+withUnique selection func =
+    let
+        ( listbox, list ) =
+            func (maybeToList selection)
+    in
+    ( listbox, listToMaybe list )
+
+
+maybeToList : Maybe a -> List a
+maybeToList maybeA =
+    case maybeA of
+        Nothing ->
+            []
+
+        Just a ->
+            [ a ]
+
+
+listToMaybe : List a -> Maybe a
+listToMaybe listA =
+    case listA of
+        [] ->
+            Nothing
+
+        a :: _ ->
+            Just a
+
+
 
 ---- VIEW CONFIG
 
 
-{-| TODO
--}
+{-| -}
 type ViewConfig a divider
     = ViewConfig (a -> String) (Views a divider)
 
 
-{-| TODO
+{-| Generate a `ViewConfig` by providing a hash function for the entries and
+a `Views` record, which holds all the styling information. You usually do
+**not** want to store this inside your model.
 -}
 viewConfig : (a -> String) -> Views a divider -> ViewConfig a divider
 viewConfig =
     ViewConfig
 
 
-{-| TODO
+{-| ** Available view customizations **
+
+This is the second argument to `viewConfig`. You can customize the styling with
+the following fields:
+
+  - **ul**: A list of html attributes applied to the outer listbox.
+
+  - **liOption**: A function return `HtmlDetails` for each option in your
+    entries list. It gets the actual option value `a` and flags telling you if
+    this option is currently `selected` or has focus (`keyboardFocus` and
+    `mouseFocus`). If the user typed in a query, you get this via the
+    `maybeQuery` field.
+
+  - **liDivider**: This lets you style the divider list entries. It gets the
+    actual `divider` entry and returns `HtmlDetails`.
+
+  - **empty**: What should be rendered when the listbox is empty?
+
+  - **focusable**: Should the listbox be focusable?
+
+The DOM structure of a listbox will be something like this:
+
+    listbox =
+        Html.ul
+            [ ... ] -- ul attributes
+            [ li
+                [ ... ] -- liDivider attributes
+                [ ... ] -- liDivider children
+            , li
+                [ ... ] -- liOption attributes
+                [ ... ] -- liOption children
+            , ...
+            , li
+                [ ... ] -- liOption attributes
+                [ ... ] -- liOption children
+            ]
+
+Provided you have specified some CSS classes, a view configuration could look
+like this:
+
+    views : Views String Never
+    views =
+        { ul = [ Html.Attributes.class "listbox__container" ]
+        , liOption =
+            \{ selected, keyboardFocused } option ->
+                { attributes =
+                    [ Html.Attributes.class "listbox__option"
+                    , Html.Attributes.classList
+                        [ ( "listbox__option--selected", selected )
+                        , ( "listbox__option--keyboardFocused", keyboardFocused )
+                        ]
+                    ]
+                , children =
+                    [ Html.text option ]
+                }
+        , liDivider = noDivider
+        , empty = Html.text ""
+        , focusable = True
+        }
+
 -}
 type alias Views a divider =
     { ul : HtmlAttributes
@@ -395,7 +517,8 @@ type alias Views a divider =
     }
 
 
-{-| TODO
+{-| Helper function which can be used for the `liDivider` field in your view
+customizations if you do not have any dividers in your listbox.
 -}
 noDivider : Never -> HtmlDetails
 noDivider _ =
@@ -408,20 +531,67 @@ noDivider _ =
 ---- UPDATE CONFIG
 
 
-{-| TODO
--}
+{-| -}
 type UpdateConfig a
     = UpdateConfig (a -> String) (Behaviour a)
 
 
-{-| TODO
+{-| Generate an `UpdateConfig` by providing a hash function for the entries and
+a `Behaviour` record.
 -}
 updateConfig : (a -> String) -> Behaviour a -> UpdateConfig a
 updateConfig =
     UpdateConfig
 
 
-{-| TODO
+{-| ** Available behaviour customizations **
+
+You can customize the behaviour of the listbox with the following options:
+
+  - **jumpAtEnds**: Should the keyboard focus jump to the other end of the list
+    when pressing `ArrowUp` while focusing the first option (or `ArrowDown` while
+    focusing the last).
+
+  - **separateFocus**: Whether the mouse focus and the keyboard focus can be
+    different.
+
+  - **selectionFollowsFocus**: Do we automatically add the entry gaining
+    keyboard focus to the selection?
+
+  - **handleHomeAndEnd**: Should we handle the `Home` and `End` keys (to jump
+    to the top or bottom of the list)?
+
+  - **typeAhead**: Make it possible to jump to options by typing in a query.
+    Take a look at `TypeAhead` for more information.
+
+  - **minimalGap**: If the distance (in px) of the option having the keyboard
+    focus to the borders of the listbox scene is smaller then this value, the
+    listbox will adjust its scroll position so that this distance is at least
+    `initialGap`.
+
+  - **initialGap**: The minimal distance (in px) of the option having the
+    keyboard focus to the borders of the listbox scene after the scroll position
+    has been adjusted.
+
+A behaviour configuration could look something like this:
+
+    behaviour : Behaviour String
+    behaviour =
+        { jumpAtEnds = True
+        , separateFocus = True
+        , selectionFollowsFocus = False
+        , handleHomeAndEnd = True
+        , typeAhead = simpleTypeAhead 300 identity
+        , minimalGap = 30
+        , initialGap = 200
+        }
+
+The listbox will behave as explained in the [WAI-ARIA Authoring Practices
+1.1](https://www.w3.org/TR/wai-aria-practices-1.1/#Listbox) under `Keyboard
+Interaction`. Note that you get the "recommended selection model" if you
+choose `selectionFollowsFocus = False`, and the "alternative selection model"
+for `selectionFollowsFocus = True`.
+
 -}
 type alias Behaviour a =
     { jumpAtEnds : Bool
@@ -434,21 +604,26 @@ type alias Behaviour a =
     }
 
 
-{-| TODO
--}
+{-| -}
 type TypeAhead a
     = NoTypeAhead
     | TypeAhead Int (String -> a -> Bool)
 
 
-{-| TODO
+{-| Use this inside `Behaviour` if you do not want to activate the type-ahead
+functionality.
 -}
 noTypeAhead : TypeAhead a
 noTypeAhead =
     NoTypeAhead
 
 
-{-| TODO
+{-| Activate the type-ahead functionality. When the user types in a search
+query. The second argument -- `a -> String` -- should be a reasonable
+stringification of the options. It is used to check whether an option starts
+with this query or not. The listbox will then move the keyboard focus forward
+to the next matching option. The first argument is the timeout (in
+milliseconds) after which the query is reseted.
 -}
 simpleTypeAhead : Int -> (a -> String) -> TypeAhead a
 simpleTypeAhead timeout entryToString =
@@ -458,7 +633,10 @@ simpleTypeAhead timeout entryToString =
                 |> String.startsWith (String.toLower query)
 
 
-{-| TODO
+{-| This works like `simpleTypeAhead` but gives you you more flexibility when
+customizing the matching condition. The first argument is the timeout. The
+second argument is a function which gets the current query and an option,
+returning if the query matches this option.
 -}
 typeAhead : Int -> (String -> a -> Bool) -> TypeAhead a
 typeAhead =
@@ -469,36 +647,39 @@ typeAhead =
 ---- VIEW
 
 
-{-| TODO
--}
-viewUnique :
-    ViewConfig a divider
-    ->
-        { id : String
-        , labelledBy : String
-        , lift : Msg a -> msg
-        }
-    -> List (Entry a divider)
-    -> Listbox
-    -> Maybe a
-    -> Html msg
-viewUnique config cfg entries listbox selection =
-    view config cfg entries listbox (maybeToList selection)
+{-| Take a list of all entries and a list of selected options and display it as
+a listbox. You have to provide a `ViewConfig` for the styling and the following
+information:
 
+  - **id**: The unique id of the listbox.
 
-{-| TODO
+  - **labelledBy**: The unique id of a label element describing the content of
+    the listbox.
 
-    view model =
+  - **lift**: Your message type constructor wrapping the listbox `Msg`'s.
+
+For example:
+
+    view : Listbox -> List String -> Html Msg
+    view model selection =
         Html.div []
             [ Listbox.view viewConfig
-                { id = "listbox"
-                , labelledBy = "label"
+                { id = "fruits-listbox"
+                , labelledBy = "fruits"
                 , lift = ListboxMsg
                 }
-                model.listbox
-                entries
-                model.selection
+                listbox
+                fruits
+                selection
             ]
+
+    fruits : List (Entry String divider)
+    fruits =
+        List.map Listbox.option
+            [ "Apple", "Banana", "Cherry", "Durian", "Elderberries" ]
+
+    type Msg
+        = ListboxMsg Listbox.Msg
 
 -}
 view :
@@ -524,30 +705,45 @@ view config { id, labelledBy, lift } =
         }
 
 
-{-| TODO
+{-| Use this instead of `view` if the user can only select **at most one**
+entry in the listbox. The only difference between the type signature of this
+function and the one of `view` is that the last argument is a `Maybe a` instead
+of a `List a`.
 -}
-customViewUnique :
+viewUnique :
     ViewConfig a divider
     ->
         { id : String
         , labelledBy : String
         , lift : Msg a -> msg
-        , onKeyDown : Decoder msg
-        , onMouseDown : Decoder msg
-        , onMouseUp : Decoder msg
-        , onBlur : Decoder msg
         }
     -> List (Entry a divider)
     -> Listbox
     -> Maybe a
     -> Html msg
-customViewUnique config cfg allEntries listbox selection =
-    customView config cfg allEntries listbox (maybeToList selection)
+viewUnique config cfg entries listbox selection =
+    view config cfg entries listbox (maybeToList selection)
 
 
-{-| TODO
+{-| Use this instead of `view` if you need to attach your own event handlers.
+You can provide the following event decoders:
 
-    viewExample model =
+  - **onKeyDown**: Handle `keydown` events on the listbox.
+
+  - **onMouseDown**: Handle `mousedown` events on the listbox.
+
+  - **onMouseUp**: Handle `mouseup` events on the listbox.
+
+  - **onBlur**: Handle `blur` events on the listbox.
+
+If you provide a failing decoder the event will be handled by the listbox
+itself.
+
+For example, to handle the `ArrowUp` key yourself, you could do something like
+this:
+
+    view : Listbox -> List String -> Html Msg
+    view listbox selection =
         Html.div []
             [ Listbox.customView viewConfig
                 { id = "listbox"
@@ -564,14 +760,18 @@ customViewUnique config cfg allEntries listbox selection =
                                     _ ->
                                         Decode.fail "not handling that key here"
                             )
-                , onMouseDown = Decode.fail ""
-                , onMouseUp = Decode.fail ""
-                , onBlur = Decode.fail ""
+                , onMouseDown = Decode.fail "not handling that key here"
+                , onMouseUp = Decode.fail "not handling that key here"
+                , onBlur = Decode.fail "not handling that key here"
                 }
-                model.listbox
+                listbox
                 entries
-                model.selection
+                selection
             ]
+
+    type Msg
+        = ListboxMsg Listbox.Msg
+        | ArrowUpPressed
 
 -}
 customView :
@@ -606,6 +806,28 @@ customView (ViewConfig uniqueId views) cfg allEntries listbox selection =
             }
     in
     viewHelp renderedEntries uniqueId views cfg listbox allEntries selection
+
+
+{-| Use this instead of `viewUnique` if you need to attach your own event
+handlers. Take a look at `customView` for more details.
+-}
+customViewUnique :
+    ViewConfig a divider
+    ->
+        { id : String
+        , labelledBy : String
+        , lift : Msg a -> msg
+        , onKeyDown : Decoder msg
+        , onMouseDown : Decoder msg
+        , onMouseUp : Decoder msg
+        , onBlur : Decoder msg
+        }
+    -> List (Entry a divider)
+    -> Listbox
+    -> Maybe a
+    -> Html msg
+customViewUnique config cfg allEntries listbox selection =
+    customView config cfg allEntries listbox (maybeToList selection)
 
 
 {-| TODO
@@ -1004,41 +1226,10 @@ setTabindex focusable attrs =
 ---- UPDATE
 
 
-{-| TODO
--}
-withUnique :
-    Maybe a
-    -> (List a -> ( Listbox, List a ))
-    -> ( Listbox, Maybe a )
-withUnique selection func =
-    let
-        ( listbox, list ) =
-            func (maybeToList selection)
-    in
-    ( listbox, listToMaybe list )
-
-
-maybeToList : Maybe a -> List a
-maybeToList maybeA =
-    case maybeA of
-        Nothing ->
-            []
-
-        Just a ->
-            [ a ]
-
-
-listToMaybe : List a -> Maybe a
-listToMaybe listA =
-    case listA of
-        [] ->
-            Nothing
-
-        a :: _ ->
-            Just a
-
-
-{-| TODO
+{-| Use this function instead of `update` if the user can only select **at most
+one** entry in the listbox. The only difference between the type signature of
+this function and the one of `update` is that the last argument is a `Maybe
+a` instead of a `List a`.
 -}
 updateUnique :
     UpdateConfig a
@@ -1056,7 +1247,7 @@ updateUnique config allEntries msg listbox selection =
     ( newListbox, cmd, listToMaybe newSelection )
 
 
-{-| TODO
+{-| The listbox's message type.
 -}
 type Msg a
     = NoOp
@@ -1094,7 +1285,10 @@ type Direction
     | Bottom
 
 
-{-| TODO
+{-| Use this function to update the listbox state. You have to provide the same
+entries and selection as to your view function.
+
+For example:
 
     update msg model =
         case msg of
@@ -1113,6 +1307,9 @@ type Direction
                   }
                 , Cmd.map ListboxMsg listboxCmd
                 )
+
+In a more sofisticated example, the entries could be dynamic, as well. (For
+example, loaded via an HTTP request.)
 
 -}
 update :
@@ -1748,7 +1945,11 @@ updateFocus behaviour uniqueId selection shiftDown newEntry data =
 ---- SUBSCRIPTIONS
 
 
-{-| TODO
+{-| Do not forget to add this to your subscriptions:
+
+    subscriptions model =
+        Sub.map ListboxMsg (Listbox.subscriptions model.listbox)
+
 -}
 subscriptions : Listbox -> Sub (Msg a)
 subscriptions (Listbox data) =
