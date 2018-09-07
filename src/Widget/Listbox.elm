@@ -684,8 +684,11 @@ viewHelp renderedEntries uniqueId views cfg (Listbox data) allEntries selection 
             (Decode.oneOf
                 [ cfg.onKeyDown
                 , keyInfoDecoder
-                    |> Decode.andThen (listKeyPress cfg.id)
-                    |> Decode.map cfg.lift
+                    |> Decode.andThen
+                        (listKeyPress cfg.id
+                            >> Maybe.map (Decode.succeed << cfg.lift)
+                            >> Maybe.withDefault (Decode.fail "not handling that key combination")
+                        )
                 ]
                 |> preventDefault
             )
@@ -726,8 +729,10 @@ viewHelp renderedEntries uniqueId views cfg (Listbox data) allEntries selection 
 
 type alias KeyInfo =
     { code : String
-    , shiftDown : Bool
+    , altDown : Bool
     , controlDown : Bool
+    , metaDown : Bool
+    , shiftDown : Bool
     }
 
 
@@ -735,53 +740,82 @@ keyInfoDecoder : Decoder KeyInfo
 keyInfoDecoder =
     Decode.succeed KeyInfo
         |> Decode.required "key" Decode.string
-        |> Decode.required "shiftKey" Decode.bool
-        |> Decode.required "ctrlKey" Decode.bool
+        |> Decode.optional "altDown" Decode.bool False
+        |> Decode.optional "ctrlKey" Decode.bool False
+        |> Decode.optional "metaKey" Decode.bool False
+        |> Decode.optional "shiftKey" Decode.bool False
 
 
-listKeyPress : String -> KeyInfo -> Decoder (Msg a)
-listKeyPress id { code, shiftDown, controlDown } =
+listKeyPress : String -> KeyInfo -> Maybe (Msg a)
+listKeyPress id { code, altDown, controlDown, metaDown, shiftDown } =
     case code of
         "ArrowUp" ->
-            Decode.succeed (ListArrowUpPressed id shiftDown)
+            if not altDown && not controlDown && not metaDown then
+                Just (ListArrowUpPressed id shiftDown)
+            else
+                Nothing
 
         "ArrowDown" ->
-            Decode.succeed (ListArrowDownPressed id shiftDown)
+            if not altDown && not controlDown && not metaDown then
+                Just (ListArrowDownPressed id shiftDown)
+            else
+                Nothing
 
         "Enter" ->
-            Decode.succeed (ListEnterPressed id)
+            if not altDown && not controlDown && not metaDown && not shiftDown then
+                Just (ListEnterPressed id)
+            else
+                Nothing
 
         " " ->
-            if shiftDown then
-                Decode.succeed (ListShiftSpacePressed id)
+            if not altDown && not controlDown && not metaDown && shiftDown then
+                Just (ListShiftSpacePressed id)
+            else if not altDown && not controlDown && not metaDown && not shiftDown then
+                Just (ListSpacePressed id)
             else
-                Decode.succeed (ListSpacePressed id)
+                Nothing
 
         "Home" ->
-            if shiftDown && controlDown then
-                Decode.succeed (ListControlShiftHomePressed id)
+            if not altDown && controlDown && not metaDown && shiftDown then
+                Just (ListControlShiftHomePressed id)
+            else if not altDown && not controlDown && not metaDown && shiftDown then
+                Just (ListHomePressed id)
             else
-                Decode.succeed (ListHomePressed id)
+                Nothing
 
         "End" ->
-            if shiftDown && controlDown then
-                Decode.succeed (ListControlShiftEndPressed id)
+            if not altDown && controlDown && not metaDown && shiftDown then
+                Just (ListControlShiftEndPressed id)
+            else if not altDown && not controlDown && not metaDown && shiftDown then
+                Just (ListEndPressed id)
             else
-                Decode.succeed (ListEndPressed id)
+                Nothing
 
         "a" ->
-            if controlDown then
-                Decode.succeed ListControlAPressed
-            else if String.length code == 1 then
-                Decode.succeed (ListKeyPressed id code)
+            if not altDown && controlDown && not metaDown && not shiftDown then
+                Just ListControlAPressed
+            else if
+                not altDown
+                    && not controlDown
+                    && not metaDown
+                    && not shiftDown
+                    && (String.length code == 1)
+            then
+                Just (ListKeyPressed id code)
             else
-                Decode.fail "not handling that key here"
+                Nothing
 
         _ ->
-            if String.length code == 1 then
-                Decode.succeed (ListKeyPressed id code)
+            if
+                not altDown
+                    && not controlDown
+                    && not metaDown
+                    && not shiftDown
+                    && (String.length code == 1)
+            then
+                Just (ListKeyPressed id code)
             else
-                Decode.fail "not handling that key here"
+                Nothing
 
 
 viewEntries :
