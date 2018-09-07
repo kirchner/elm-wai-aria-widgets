@@ -1112,6 +1112,8 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                             |> Maybe.andThen (find uniqueId allEntries)
                             |> Maybe.map Tuple.second
                             |> or (List.head selection)
+                            |> Maybe.andThen (uniqueId >> find uniqueId allEntries)
+                            |> Maybe.map Tuple.second
                             |> or (Internal.firstEntry allEntries)
                 in
                 case maybeNewEntry of
