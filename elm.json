@@ -1,7 +1,7 @@
 {
     "type": "package",
-    "name": "kirchner/listbox",
-    "summary": "WAI-ARIA Listbox implementation",
+    "name": "kirchner/elm-wai-aria-widgets",
+    "summary": "Implementation of some WAI-ARIA design patterns and widgets",
     "license": "Apache-2.0",
     "version": "1.0.0",
     "exposed-modules": [
