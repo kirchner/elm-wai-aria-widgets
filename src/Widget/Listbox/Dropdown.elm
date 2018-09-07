@@ -14,7 +14,11 @@ module Widget.Listbox.Dropdown
         , viewConfig
         )
 
-{-|
+{-| This is a collapsible dropdown version of `Widget.Listbox`. The behaviour
+is based on the [Collapsible Dropdown Listbox
+Example](https://www.w3.org/TR/wai-aria-practices-1.1/examples/listbox/listbox-collapsible.html).
+
+TODO: add ellie example
 
 @docs Dropdown, init, view, update, Msg, subscriptions
 
@@ -49,13 +53,6 @@ import Browser.Dom as Dom
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
-import Internal.Entries
-    exposing
-        ( Next(..)
-        , Previous(..)
-        , findNext
-        , findPrevious
-        )
 import Internal.KeyInfo as KeyInfo exposing (KeyInfo)
 import Json.Decode as Decode exposing (Decoder)
 import Task
@@ -63,7 +60,9 @@ import Widget exposing (HtmlAttributes, HtmlDetails)
 import Widget.Listbox as Listbox exposing (Entry, Listbox, TypeAhead)
 
 
-{-| TODO
+{-| Tracks the keyboard and mouse focus as well as the current query and
+whether the dropdown is open or closed. The full list of entries and the
+currently selected option(s) live in your own model.
 -}
 type Dropdown
     = Dropdown Data
@@ -77,7 +76,7 @@ type alias Data =
     }
 
 
-{-| TODO
+{-| An initial dropdown with no option focused, and which is closed.
 -}
 init : Dropdown
 init =
@@ -93,20 +92,94 @@ init =
 ---- VIEW CONFIG
 
 
-{-| TODO
--}
+{-| -}
 type ViewConfig a divider
     = ViewConfig (a -> String) (Views a divider)
 
 
-{-| TODO
+{-| Generate a `ViewConfig` by providing a hash function for the entries and
+a `Views` record, which holds all the styling information. You usually do
+**not** want to store this inside your model.
 -}
 viewConfig : (a -> String) -> Views a divider -> ViewConfig a divider
 viewConfig =
     ViewConfig
 
 
-{-| TODO
+{-| ** Available view customizations **
+
+This is the second argument to `viewConfig`. You can customize the styling with
+the following fields:
+
+  - **container**: A list of html attributes applied to the container div which
+    holds the button and the listbox.
+
+  - **button**: A function which returns `HtmlDetails` for the button which
+    shows the current selection and toggles the visibility of the listbox. The
+    function gets as arguments the current selection and whether the listbox is
+    visible or not.
+
+  - **ul**: A list of html attributes applied to the outer listbox.
+
+  - **liOption**: A function which returns `HtmlDetails` for each option in
+    your entries list. It gets the actual option value `a` and flags telling you
+    if this option is currently `selected` or has focus (`keyboardFocus` and
+    `mouseFocus`). If the user typed in a query, you get this via the
+    `maybeQuery` field.
+
+  - **liDivider**: This lets you style the divider list entries. It gets the
+    actual `divider` entry and returns `HtmlDetails`.
+
+The DOM structure of a dropdown will be something like this:
+
+    listbox =
+        Html.div
+            [ ... ] -- container attributes
+            [ Html.button
+                [ ... ] -- button attributes
+            , Html.ul
+                [ ... ] -- ul attributes
+                [ li
+                    [ ... ] -- liDivider attributes
+                    [ ... ] -- liDivider children
+                , li
+                    [ ... ] -- liOption attributes
+                    [ ... ] -- liOption children
+                , ...
+                , li
+                    [ ... ] -- liOption attributes
+                    [ ... ] -- liOption children
+                ]
+            ]
+
+Provided you have specified some CSS classes, a view configuration could look
+like this:
+
+    views : Views String Never
+    views =
+        { container = [ Html.Attributes.class "dropdown__container" ]
+        , button =
+            \{ maybeSelection } ->
+                { attributes = [ Html.Attributes.class "dropdown__button" ]
+                , children =
+                    [ Html.text (Maybe.withDefault "Make a selection.." maybeSelection) ]
+                }
+        , ul = [ Html.Attributes.class "listbox__container" ]
+        , liOption =
+            \{ selected, keyboardFocused } option ->
+                { attributes =
+                    [ Html.Attributes.class "listbox__option"
+                    , Html.Attributes.classList
+                        [ ( "listbox__option--selected", selected )
+                        , ( "listbox__option--keyboardFocused", keyboardFocused )
+                        ]
+                    ]
+                , children =
+                    [ Html.text option ]
+                }
+        , liDivider = noDivider
+        }
+
 -}
 type alias Views a divider =
     { container : HtmlAttributes
@@ -132,20 +205,69 @@ type alias Views a divider =
 ---- UPDATE CONFIG
 
 
-{-| TODO
--}
+{-| -}
 type UpdateConfig a
     = UpdateConfig (a -> String) (Behaviour a)
 
 
-{-| TODO
+{-| Generate an `UpdateConfig` by providing a hash function for the entries and
+a `Behaviour` record.
 -}
 updateConfig : (a -> String) -> Behaviour a -> UpdateConfig a
 updateConfig =
     UpdateConfig
 
 
-{-| TODO
+{-| ** Available behaviour customizations **
+
+You can customize the behaviour of the dropdown with the following options:
+
+  - **jumpAtEnds**: Should the keyboard focus jump to the other end of the list
+    when pressing `ArrowUp` while focusing the first option (or `ArrowDown` while
+    focusing the last).
+
+  - **closeAfterMouseSelection**: Should the dropdown be hidden after the user
+    selected an option with the mouse?
+
+  - **separateFocus**: Whether the mouse focus and the keyboard focus can be
+    different.
+
+  - **selectionFollowsFocus**: Do we automatically select the entry gaining
+    keyboard focus?
+
+  - **handleHomeAndEnd**: Should we handle the `Home` and `End` keys (to jump
+    to the top or bottom of the list)?
+
+  - **typeAhead**: Make it possible to jump to options by typing in a query.
+    Take a look at `TypeAhead` for more information.
+
+  - **minimalGap**: If the distance (in px) of the option having the keyboard
+    focus to the borders of the listbox scene is smaller then this value, the
+    listbox will adjust its scroll position so that this distance is at least
+    `initialGap`.
+
+  - **initialGap**: The minimal distance (in px) of the option having the
+    keyboard focus to the borders of the listbox scene after the scroll position
+    has been adjusted.
+
+A behaviour configuration could look something like this:
+
+    behaviour : Behaviour String
+    behaviour =
+        { jumpAtEnds = True
+        , closeAfterMouseSelection = False
+        , separateFocus = True
+        , selectionFollowsFocus = False
+        , handleHomeAndEnd = True
+        , typeAhead = simpleTypeAhead 300 identity
+        , minimalGap = 30
+        , initialGap = 200
+        }
+
+The dropdown will behave as explained in the [WAI-ARIA Authoring Practices
+1.1](https://www.w3.org/TR/wai-aria-practices-1.1/examples/listbox/listbox-collapsible.html)
+under `Keyboard Support`.
+
 -}
 type alias Behaviour a =
     { jumpAtEnds : Bool
@@ -163,7 +285,37 @@ type alias Behaviour a =
 ---- VIEW
 
 
-{-| TODO
+{-| Take a list of all entries and a list of selected options and display it as
+a dropdown. You have to provide a `ViewConfig` for the styling and the following
+information:
+
+  - **id**: The unique id of the dropdown.
+
+  - **labelledBy**: The unique id of a label element describing the content of
+    the dropdown.
+
+For example:
+
+    view : Dropdown -> Maybe String -> Html Msg
+    view dropdown selection =
+        Html.div []
+            [ Listbox.Dropdown.view viewConfig
+                { id = "fruits-dropdown"
+                , labelledBy = "fruits"
+                }
+                fruits
+                dropdown
+                selection
+            ]
+
+    fruits : List (Entry String divider)
+    fruits =
+        List.map Listbox.option
+            [ "Apple", "Banana", "Cherry", "Durian", "Elderberries" ]
+
+    type Msg
+        = DropdownMsg Listbox.Dropdown.Msg
+
 -}
 view :
     ViewConfig a divider
@@ -321,7 +473,7 @@ printListboxId id =
 ---- UPDATE
 
 
-{-| TODO
+{-| The dropdown's message type.
 -}
 type Msg a
     = NoOp
@@ -339,7 +491,32 @@ type Msg a
     | ListboxMouseReleased String
 
 
-{-| TODO
+{-| Use this function to update the dropdown state. You have to provide the
+same entries and selection as to your view function.
+
+For example:
+
+    update msg model =
+        case msg of
+            DropdownMsg dropdownMsg ->
+                let
+                    ( newDropdown, dropdownCmd, newSelection ) =
+                        Listbox.Dropdown.update updateConfig
+                            entries
+                            model.dropdown
+                            model.selection
+                            dropdownMsg
+                in
+                ( { model
+                    | dropdown = newDropdown
+                    , selection = newSelection
+                  }
+                , Cmd.map DropdownMsg dropdownCmd
+                )
+
+In a more sofisticated example, the entries could be dynamic, as well. (For
+example, loaded via an HTTP request.)
+
 -}
 update :
     UpdateConfig a
@@ -501,7 +678,11 @@ focusButton id =
 ---- SUBSCRIPTIONS
 
 
-{-| TODO
+{-| Do not forget to add this to your subscriptions:
+
+    subscriptions model =
+        Sub.map DropdownMsg (Listbox.Dropdown.subscriptions model.dropdown)
+
 -}
 subscriptions : Dropdown -> Sub (Msg a)
 subscriptions (Dropdown data) =

@@ -166,7 +166,7 @@ type Query
     | Query Int Time.Posix String
 
 
-{-| An initial listbox with on option focused.
+{-| An initial listbox with no option focused.
 -}
 init : Listbox
 init =
@@ -662,15 +662,15 @@ information:
 For example:
 
     view : Listbox -> List String -> Html Msg
-    view model selection =
+    view listbox selection =
         Html.div []
             [ Listbox.view viewConfig
                 { id = "fruits-listbox"
                 , labelledBy = "fruits"
                 , lift = ListboxMsg
                 }
-                listbox
                 fruits
+                listbox
                 selection
             ]
 
@@ -765,8 +765,8 @@ this:
                 , onMouseUp = Decode.fail "not handling that key here"
                 , onBlur = Decode.fail "not handling that key here"
                 }
-                listbox
                 entries
+                listbox
                 selection
             ]
 
@@ -1278,8 +1278,8 @@ For example:
                 let
                     ( newListbox, listboxCmd, newSelection ) =
                         Listbox.update updateConfig
-                            model.listbox
                             entries
+                            model.listbox
                             model.selection
                             listboxMsg
                 in
