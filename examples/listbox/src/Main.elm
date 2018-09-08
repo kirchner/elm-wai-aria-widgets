@@ -121,6 +121,14 @@ view model =
                         model.listbox
                         model.selection
                     ]
+                , Html.p
+                    [ Attributes.class "help" ]
+                    [ Html.text <|
+                        if List.isEmpty model.selection then
+                            "nothing selected"
+                        else
+                            "currently selected: " ++ String.join ", " model.selection
+                    ]
                 ]
             ]
         ]

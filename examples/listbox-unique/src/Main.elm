@@ -122,6 +122,16 @@ view model =
                         model.listbox
                         model.selection
                     ]
+                , Html.p
+                    [ Attributes.class "help" ]
+                    [ Html.text <|
+                        case model.selection of
+                            Nothing ->
+                                "nothing selected"
+
+                            Just selection ->
+                                "currently selected: " ++ selection
+                    ]
                 ]
             ]
         ]
