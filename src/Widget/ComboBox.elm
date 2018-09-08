@@ -3,13 +3,12 @@ module Widget.ComboBox
         ( Behaviour
         , ComboBox
         , DisplayCondition
-        , Ids
         , Msg
         , Shared
         , UpdateConfig
         , ViewConfig
         , Views
-        , closed
+        , init
         , matchingQuery
         , onDemand
         , onFocus
@@ -22,7 +21,7 @@ module Widget.ComboBox
 
 {-|
 
-@docs ComboBox, closed, view, Ids, update, Msg, subscriptions
+@docs ComboBox, init, view, update, Msg, subscriptions
 
 
 # Configuration
@@ -64,6 +63,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Task
 import Widget exposing (HtmlAttributes, HtmlDetails)
 import Widget.Listbox as Listbox exposing (Listbox, TypeAhead)
+import Widget.Listbox.Unique as ListboxUnique
 
 
 {-| TODO
@@ -82,8 +82,8 @@ type alias Data =
 
 {-| TODO
 -}
-closed : ComboBox
-closed =
+init : ComboBox
+init =
     ComboBox
         { preventBlur = False
         , open = False
@@ -211,22 +211,17 @@ onDemand =
 
 {-| TODO
 -}
-type alias Ids =
-    { id : String
-    , labelledBy : String
-    }
-
-
-{-| TODO
--}
 view :
     ViewConfig a divider
-    -> Ids
-    -> ComboBox
+    ->
+        { id : String
+        , labelledBy : String
+        }
     -> List (Entry a divider)
+    -> ComboBox
     -> Maybe a
     -> Html (Msg a)
-view config ids (ComboBox data) allEntries maybeSelection =
+view config ids allEntries (ComboBox data) maybeSelection =
     let
         (ViewConfig { uniqueId, matchesQuery, printEntry } views) =
             config
@@ -310,7 +305,7 @@ view config ids (ComboBox data) allEntries maybeSelection =
                     Html.text ""
 
                 _ ->
-                    Listbox.customViewUnique listboxConfig
+                    ListboxUnique.customView listboxConfig
                         { id = printListboxId ids.id
                         , labelledBy = ids.labelledBy
                         , lift = ListboxMsg (Just ids.id)
@@ -509,10 +504,10 @@ update config allEntries msg ((ComboBox data) as comboBox) maybeSelection =
                             }
 
                     ( newListbox, newSelection ) =
-                        Listbox.withUnique maybeSelection <|
-                            Listbox.focusPreviousOrFirstEntry listboxConfig
-                                filteredEntries
-                                data.listbox
+                        ListboxUnique.focusPreviousOrFirstEntry listboxConfig
+                            filteredEntries
+                            data.listbox
+                            maybeSelection
                 in
                 ( ComboBox { data | listbox = newListbox }
                 , Cmd.map (ListboxMsg (Just id)) <|
@@ -540,10 +535,10 @@ update config allEntries msg ((ComboBox data) as comboBox) maybeSelection =
                             }
 
                     ( newListbox, newSelection ) =
-                        Listbox.withUnique maybeSelection <|
-                            Listbox.focusNextOrFirstEntry listboxConfig
-                                filteredEntries
-                                data.listbox
+                        ListboxUnique.focusNextOrFirstEntry listboxConfig
+                            filteredEntries
+                            data.listbox
+                            maybeSelection
                 in
                 ( ComboBox { data | listbox = newListbox }
                 , Cmd.map (ListboxMsg (Just id)) <|
@@ -598,7 +593,7 @@ update config allEntries msg ((ComboBox data) as comboBox) maybeSelection =
                         }
 
                 ( newListbox, listboxCmd, newSelection ) =
-                    Listbox.updateUnique listboxConfig
+                    ListboxUnique.update listboxConfig
                         allEntries
                         listboxMsg
                         data.listbox

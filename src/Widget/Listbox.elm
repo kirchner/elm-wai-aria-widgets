@@ -241,14 +241,7 @@ focusEntry config newEntry (Listbox data) selection =
     in
     data
         |> updateFocus behaviour uniqueId selection False newEntry
-        |> Tuple.mapFirst
-            (\(Listbox newData) ->
-                Listbox
-                    { newData
-                        | maybeKeyboardFocus = newData.maybePendingKeyboardFocus
-                        , maybePendingKeyboardFocus = Nothing
-                    }
-            )
+        |> Tuple.mapFirst focusPendingKeyboardFocus
 
 
 {-| Sets the keyboard focus to the next option. If `jumpAtEnds` is true and the
@@ -293,12 +286,14 @@ focusNextOrFirstEntry config allEntries listbox selection =
                     if behaviour.jumpAtEnds then
                         data
                             |> updateFocus behaviour uniqueId selection False firstEntry
+                            |> Tuple.mapFirst focusPendingKeyboardFocus
                     else
                         ( listbox, selection )
 
                 Just (Next newEntry) ->
                     data
                         |> updateFocus behaviour uniqueId selection False newEntry
+                        |> Tuple.mapFirst focusPendingKeyboardFocus
 
                 Nothing ->
                     ( listbox, selection )
@@ -357,15 +352,26 @@ focusPreviousOrFirstEntry config allEntries listbox selection =
                     if behaviour.jumpAtEnds then
                         data
                             |> updateFocus behaviour uniqueId selection False lastEntry
+                            |> Tuple.mapFirst focusPendingKeyboardFocus
                     else
                         ( listbox, selection )
 
                 Just (Previous newEntry) ->
                     data
                         |> updateFocus behaviour uniqueId selection False newEntry
+                        |> Tuple.mapFirst focusPendingKeyboardFocus
 
                 Nothing ->
                     ( listbox, selection )
+
+
+focusPendingKeyboardFocus : Listbox -> Listbox
+focusPendingKeyboardFocus (Listbox data) =
+    Listbox
+        { data
+            | maybeKeyboardFocus = data.maybePendingKeyboardFocus
+            , maybePendingKeyboardFocus = Nothing
+        }
 
 
 {-| A command adjusting the scroll position of the listbox such that the
