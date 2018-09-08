@@ -58,6 +58,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Task
 import Widget exposing (HtmlAttributes, HtmlDetails)
 import Widget.Listbox as Listbox exposing (Entry, Listbox, TypeAhead)
+import Widget.Listbox.Unique as ListboxUnique
 
 
 {-| Tracks the keyboard and mouse focus as well as the current query and
@@ -357,7 +358,7 @@ view (ViewConfig uniqueId views) ids allEntries (Dropdown data) maybeSelection =
             ]
         )
         [ viewButton ids.id buttonHtmlDetails ids.labelledBy maybeSelection True
-        , Listbox.customViewUnique listboxConfig
+        , ListboxUnique.customView listboxConfig
             { id = printListboxId ids.id
             , labelledBy = ids.labelledBy
             , lift = ListboxMsg (Just ids.id)
@@ -568,8 +569,10 @@ update (UpdateConfig uniqueId behaviour) allEntries msg dropdown maybeSelection 
         ButtonArrowUpPressed id ->
             let
                 ( newListbox, newSelection ) =
-                    Listbox.withUnique maybeSelection <|
-                        Listbox.focusPreviousOrFirstEntry listboxConfig allEntries data.listbox
+                    ListboxUnique.focusPreviousOrFirstEntry listboxConfig
+                        allEntries
+                        data.listbox
+                        maybeSelection
             in
             ( Dropdown
                 { data
@@ -589,8 +592,10 @@ update (UpdateConfig uniqueId behaviour) allEntries msg dropdown maybeSelection 
         ButtonArrowDownPressed id ->
             let
                 ( newListbox, newSelection ) =
-                    Listbox.withUnique maybeSelection <|
-                        Listbox.focusNextOrFirstEntry listboxConfig allEntries data.listbox
+                    ListboxUnique.focusNextOrFirstEntry listboxConfig
+                        allEntries
+                        data.listbox
+                        maybeSelection
             in
             ( Dropdown
                 { data
@@ -610,7 +615,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg dropdown maybeSelection 
         ListboxMsg maybeId listboxMsg ->
             let
                 ( newListbox, listboxCmd, newSelection ) =
-                    Listbox.updateUnique listboxConfig
+                    ListboxUnique.update listboxConfig
                         allEntries
                         listboxMsg
                         data.listbox

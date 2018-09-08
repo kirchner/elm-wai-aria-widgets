@@ -9,7 +9,6 @@ module Widget.Listbox
         , ViewConfig
         , Views
         , customView
-        , customViewUnique
         , divider
         , focus
         , focusEntry
@@ -27,11 +26,8 @@ module Widget.Listbox
         , typeAhead
         , update
         , updateConfig
-        , updateUnique
         , view
         , viewConfig
-        , viewUnique
-        , withUnique
         )
 
 {-| Implementation of the [listbox
@@ -45,11 +41,11 @@ TODO: link to ellie example
 Take a look at the documentation of `Behaviour` for the default keyboard
 interactions this widget offers.
 
-@docs Listbox, init, view, viewUnique
+@docs Listbox, init, view
 
 @docs Entry, option, divider
 
-@docs update, updateUnique, Msg, subscriptions
+@docs update, Msg, subscriptions
 
 
 # Configuration
@@ -72,7 +68,7 @@ interactions this widget offers.
 
 # Advanced usage
 
-@docs customView, customViewUnique, viewLazy
+@docs customView
 
 
 ## State manipulation
@@ -83,8 +79,6 @@ interactions this widget offers.
 @docs focusedEntry, hoveredEntry
 
 @docs focusEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
-
-@docs withUnique
 
 
 ## DOM Stuff
@@ -387,42 +381,6 @@ scrollToFocus id (Listbox data) =
             adjustScrollTop id focusId
 
 
-{-| You can wrap `focusEntry`, `focusNextOrFirstEntry` and
-`focusPreviousOrFirstEntry` with this function if you have a listbox where the
-user can only select at most one option.
--}
-withUnique :
-    Maybe a
-    -> (List a -> ( Listbox, List a ))
-    -> ( Listbox, Maybe a )
-withUnique selection func =
-    let
-        ( listbox, list ) =
-            func (maybeToList selection)
-    in
-    ( listbox, listToMaybe list )
-
-
-maybeToList : Maybe a -> List a
-maybeToList maybeA =
-    case maybeA of
-        Nothing ->
-            []
-
-        Just a ->
-            [ a ]
-
-
-listToMaybe : List a -> Maybe a
-listToMaybe listA =
-    case listA of
-        [] ->
-            Nothing
-
-        a :: _ ->
-            Just a
-
-
 
 ---- VIEW CONFIG
 
@@ -706,26 +664,6 @@ view config { id, labelledBy, lift } =
         }
 
 
-{-| Use this instead of `view` if the user can only select **at most one**
-entry in the listbox. The only difference between the type signature of this
-function and the one of `view` is that the last argument is a `Maybe a` instead
-of a `List a`.
--}
-viewUnique :
-    ViewConfig a divider
-    ->
-        { id : String
-        , labelledBy : String
-        , lift : Msg a -> msg
-        }
-    -> List (Entry a divider)
-    -> Listbox
-    -> Maybe a
-    -> Html msg
-viewUnique config cfg entries listbox selection =
-    view config cfg entries listbox (maybeToList selection)
-
-
 {-| Use this instead of `view` if you need to attach your own event handlers.
 You can provide the following event decoders:
 
@@ -807,28 +745,6 @@ customView (ViewConfig uniqueId views) cfg allEntries listbox selection =
             }
     in
     viewHelp renderedEntries uniqueId views cfg listbox allEntries selection
-
-
-{-| Use this instead of `viewUnique` if you need to attach your own event
-handlers. Take a look at `customView` for more details.
--}
-customViewUnique :
-    ViewConfig a divider
-    ->
-        { id : String
-        , labelledBy : String
-        , lift : Msg a -> msg
-        , onKeyDown : Decoder msg
-        , onMouseDown : Decoder msg
-        , onMouseUp : Decoder msg
-        , onBlur : Decoder msg
-        }
-    -> List (Entry a divider)
-    -> Listbox
-    -> Maybe a
-    -> Html msg
-customViewUnique config cfg allEntries listbox selection =
-    customView config cfg allEntries listbox (maybeToList selection)
 
 
 {-| TODO
@@ -1206,27 +1122,6 @@ setTabindex focusable attrs =
 
 
 ---- UPDATE
-
-
-{-| Use this function instead of `update` if the user can only select **at most
-one** entry in the listbox. The only difference between the type signature of
-this function and the one of `update` is that the last argument is a `Maybe
-a` instead of a `List a`.
--}
-updateUnique :
-    UpdateConfig a
-    -> List (Entry a divider)
-    -> Msg a
-    -> Listbox
-    -> Maybe a
-    -> ( Listbox, Cmd (Msg a), Maybe a )
-updateUnique config allEntries msg listbox selection =
-    let
-        ( newListbox, cmd, newSelection ) =
-            update config allEntries msg listbox <|
-                maybeToList selection
-    in
-    ( newListbox, cmd, listToMaybe newSelection )
 
 
 {-| The listbox's message type.

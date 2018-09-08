@@ -25,6 +25,7 @@ import Html.Events as Events
 import Html.Lazy as Html
 import Widget exposing (HtmlDetails)
 import Widget.Listbox as Listbox exposing (Entry, Listbox)
+import Widget.Listbox.Unique as ListboxUnique
 
 
 main : Program {} Model Msg
@@ -74,7 +75,7 @@ update msg model =
         ListboxMsg listboxMsg ->
             let
                 ( newListbox, listboxCmd, newSelection ) =
-                    Listbox.updateUnique updateConfig
+                    ListboxUnique.update updateConfig
                         fruits
                         listboxMsg
                         model.listbox
@@ -112,7 +113,7 @@ view model =
                     [ Html.text "Fruits" ]
                 , Html.div
                     [ Attributes.class "control" ]
-                    [ Listbox.viewUnique viewConfig
+                    [ ListboxUnique.view viewConfig
                         { id = "fruits"
                         , labelledBy = "fruits-label"
                         , lift = ListboxMsg
