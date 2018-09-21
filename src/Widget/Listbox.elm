@@ -1,6 +1,7 @@
 module Widget.Listbox
     exposing
         ( Behaviour
+        , Effect(..)
         , Entry
         , Listbox(..)
         , Msg(..)
@@ -17,9 +18,11 @@ module Widget.Listbox
         , focusedEntry
         , hoveredEntry
         , init
+        , internalUpdate
         , noDivider
         , noTypeAhead
         , option
+        , printListId
         , scrollToFocus
         , simpleTypeAhead
         , subscriptions
@@ -128,7 +131,7 @@ import Json.Decode.Pipeline as Decode
 import List.Extra as List
 import Set
 import Task exposing (Task)
-import Time
+import Time exposing (Posix)
 import Widget exposing (HtmlAttributes, HtmlDetails)
 
 
@@ -385,6 +388,7 @@ scrollToFocus id (Listbox data) =
 
         Just focusId ->
             adjustScrollTop id focusId
+                |> perform
 
 
 
@@ -1202,24 +1206,126 @@ update :
     -> Listbox
     -> List a
     -> ( Listbox, Cmd (Msg a), List a )
-update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listbox) selection =
+update config entries msg listbox selection =
+    let
+        ( newListbox, effect, newSelection ) =
+            internalUpdate config entries msg listbox selection
+    in
+    ( newListbox, perform effect, newSelection )
+
+
+type Effect a
+    = CmdNone
+    | TimeNow (Posix -> Msg a)
+    | DomSetViewportOf String Float Float
+    | DomFocus String
+      -- CUSTOM
+    | ScrollListToTop String
+    | ScrollListToBottom String
+    | AdjustScrollTop String String
+    | AdjustScrollTopNew String String String
+
+
+perform : Effect a -> Cmd (Msg a)
+perform effect =
+    case effect of
+        CmdNone ->
+            Cmd.none
+
+        TimeNow toMsg ->
+            Task.perform toMsg Time.now
+
+        DomSetViewportOf id x y ->
+            Task.attempt (\_ -> NoOp) <|
+                Dom.setViewportOf id x y
+
+        DomFocus id ->
+            Task.attempt (\_ -> NoOp) <|
+                Dom.focus id
+
+        ScrollListToTop id ->
+            Task.succeed (ListViewportReceived Top id)
+                |> and (Dom.getViewportOf (printListId id))
+                |> Task.attempt
+                    (\result ->
+                        case result of
+                            Err _ ->
+                                NoOp
+
+                            Ok msg ->
+                                msg
+                    )
+
+        ScrollListToBottom id ->
+            Task.succeed (ListViewportReceived Bottom id)
+                |> and (Dom.getViewportOf (printListId id))
+                |> Task.attempt
+                    (\result ->
+                        case result of
+                            Err _ ->
+                                NoOp
+
+                            Ok msg ->
+                                msg
+                    )
+
+        AdjustScrollTop id entryId ->
+            Task.succeed (InitialEntryDomElementReceived id)
+                |> and (Dom.getViewportOf (printListId id))
+                |> and (Dom.getElement (printListId id))
+                |> and (Dom.getElement (printEntryId id entryId))
+                |> Task.attempt
+                    (\result ->
+                        case result of
+                            Err _ ->
+                                NoOp
+
+                            Ok msg ->
+                                msg
+                    )
+
+        AdjustScrollTopNew id entryId previousEntryId ->
+            Task.succeed (EntryDomElementReceived entryId id)
+                |> and (Dom.getViewportOf (printListId id))
+                |> and (Dom.getElement (printListId id))
+                |> and (Dom.getElement (printEntryId id entryId))
+                |> and (Dom.getElement (printEntryId id previousEntryId))
+                |> Task.attempt
+                    (\result ->
+                        case result of
+                            Err _ ->
+                                NoOp
+
+                            Ok msg ->
+                                msg
+                    )
+
+
+internalUpdate :
+    UpdateConfig a
+    -> List (Entry a divider)
+    -> Msg a
+    -> Listbox
+    -> List a
+    -> ( Listbox, Effect a, List a )
+internalUpdate (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listbox) selection =
     case msg of
         -- LIST
         ListMouseDown ->
             ( Listbox { data | preventScroll = True }
-            , Cmd.none
+            , CmdNone
             , selection
             )
 
         ListMouseUp ->
             ( Listbox { data | preventScroll = False }
-            , Cmd.none
+            , CmdNone
             , selection
             )
 
         ListFocused id ->
             if data.preventScroll then
-                ( listbox, Cmd.none, selection )
+                ( listbox, CmdNone, selection )
             else
                 ( listbox, selection )
                     |> focusFirstEntry id uniqueId behaviour allEntries
@@ -1230,14 +1336,14 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                     | preventScroll = False
                     , query = NoQuery
                 }
-            , Cmd.none
+            , CmdNone
             , selection
             )
 
         ListArrowUpPressed id shiftDown ->
             case data.maybePendingKeyboardFocus of
                 Just _ ->
-                    ( listbox, Cmd.none, selection )
+                    ( listbox, CmdNone, selection )
 
                 Nothing ->
                     case data.maybeKeyboardFocus of
@@ -1255,7 +1361,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                                             |> andDo (scrollListToBottom id)
                                     else
                                         ( Listbox { data | query = NoQuery }
-                                        , Cmd.none
+                                        , CmdNone
                                         , selection
                                         )
 
@@ -1266,14 +1372,14 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
 
                                 Nothing ->
                                     ( Listbox { data | query = NoQuery }
-                                    , Cmd.none
+                                    , CmdNone
                                     , selection
                                     )
 
         ListArrowDownPressed id shiftDown ->
             case data.maybePendingKeyboardFocus of
                 Just _ ->
-                    ( listbox, Cmd.none, selection )
+                    ( listbox, CmdNone, selection )
 
                 Nothing ->
                     case data.maybeKeyboardFocus of
@@ -1291,7 +1397,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                                             |> andDo (scrollListToTop id)
                                     else
                                         ( Listbox { data | query = NoQuery }
-                                        , Cmd.none
+                                        , CmdNone
                                         , selection
                                         )
 
@@ -1302,7 +1408,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
 
                                 Nothing ->
                                     ( Listbox { data | query = NoQuery }
-                                    , Cmd.none
+                                    , CmdNone
                                     , selection
                                     )
 
@@ -1313,16 +1419,16 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                     (\( _, a ) ->
                         if List.member a selection then
                             ( Listbox { data | maybeLastSelectedEntry = Nothing }
-                            , Cmd.none
+                            , CmdNone
                             , List.filter (\b -> a /= b) selection
                             )
                         else
                             ( Listbox { data | maybeLastSelectedEntry = Just (uniqueId a) }
-                            , Cmd.none
+                            , CmdNone
                             , a :: selection
                             )
                     )
-                |> Maybe.withDefault ( listbox, Cmd.none, selection )
+                |> Maybe.withDefault ( listbox, CmdNone, selection )
 
         ListSpacePressed id ->
             data.maybeKeyboardFocus
@@ -1331,37 +1437,37 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                     (\( _, a ) ->
                         if List.member a selection then
                             ( Listbox { data | maybeLastSelectedEntry = Nothing }
-                            , Cmd.none
+                            , CmdNone
                             , List.filter (\b -> a /= b) selection
                             )
                         else
                             ( Listbox { data | maybeLastSelectedEntry = Just (uniqueId a) }
-                            , Cmd.none
+                            , CmdNone
                             , a :: selection
                             )
                     )
-                |> Maybe.withDefault ( listbox, Cmd.none, selection )
+                |> Maybe.withDefault ( listbox, CmdNone, selection )
 
         ListShiftSpacePressed id ->
             case ( data.maybeKeyboardFocus, data.maybeLastSelectedEntry ) of
                 ( Just keyboardFocus, Just lastSelectedEntry ) ->
                     case range uniqueId keyboardFocus lastSelectedEntry allEntries of
                         [] ->
-                            ( listbox, Cmd.none, selection )
+                            ( listbox, CmdNone, selection )
 
                         selectedEntries ->
                             ( Listbox { data | maybeLastSelectedEntry = Just keyboardFocus }
-                            , Cmd.none
+                            , CmdNone
                             , List.uniqueBy uniqueId (selectedEntries ++ selection)
                             )
 
                 _ ->
-                    ( listbox, Cmd.none, selection )
+                    ( listbox, CmdNone, selection )
 
         ListHomePressed id ->
             case Internal.firstEntry allEntries of
                 Nothing ->
-                    ( listbox, Cmd.none, selection )
+                    ( listbox, CmdNone, selection )
 
                 Just firstEntry ->
                     data
@@ -1371,7 +1477,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
         ListControlShiftHomePressed id ->
             case Internal.firstEntry allEntries of
                 Nothing ->
-                    ( listbox, Cmd.none, selection )
+                    ( listbox, CmdNone, selection )
 
                 Just firstEntry ->
                     let
@@ -1380,12 +1486,12 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                     in
                     case data.maybeKeyboardFocus of
                         Nothing ->
-                            ( listbox, Cmd.none, selection )
+                            ( listbox, CmdNone, selection )
 
                         Just keyboardFocus ->
                             case range uniqueId newFocus keyboardFocus allEntries of
                                 [] ->
-                                    ( listbox, Cmd.none, selection )
+                                    ( listbox, CmdNone, selection )
 
                                 selectedEntries ->
                                     ( Listbox
@@ -1405,7 +1511,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
         ListEndPressed id ->
             case Internal.lastEntry allEntries of
                 Nothing ->
-                    ( listbox, Cmd.none, selection )
+                    ( listbox, CmdNone, selection )
 
                 Just lastEntry ->
                     data
@@ -1415,7 +1521,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
         ListControlShiftEndPressed id ->
             case Internal.lastEntry allEntries of
                 Nothing ->
-                    ( listbox, Cmd.none, selection )
+                    ( listbox, CmdNone, selection )
 
                 Just lastEntry ->
                     let
@@ -1424,12 +1530,12 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                     in
                     case data.maybeKeyboardFocus of
                         Nothing ->
-                            ( listbox, Cmd.none, selection )
+                            ( listbox, CmdNone, selection )
 
                         Just keyboardFocus ->
                             case range uniqueId newFocus keyboardFocus allEntries of
                                 [] ->
-                                    ( listbox, Cmd.none, selection )
+                                    ( listbox, CmdNone, selection )
 
                                 selectedEntries ->
                                     ( Listbox
@@ -1479,7 +1585,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                         |> Set.fromList
             in
             ( listbox
-            , Cmd.none
+            , CmdNone
             , if Set.isEmpty (Set.diff allEntriesSet selectionSet) then
                 []
               else
@@ -1490,20 +1596,18 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
         ListKeyPressed id code ->
             case behaviour.typeAhead of
                 NoTypeAhead ->
-                    ( listbox, Cmd.none, selection )
+                    ( listbox, CmdNone, selection )
 
                 TypeAhead _ _ ->
                     ( listbox
-                    , Time.now
-                        |> Task.perform
-                            (CurrentTimeReceived id code)
+                    , TimeNow (CurrentTimeReceived id code)
                     , selection
                     )
 
         CurrentTimeReceived id code currentTime ->
             case behaviour.typeAhead of
                 NoTypeAhead ->
-                    ( listbox, Cmd.none, selection )
+                    ( listbox, CmdNone, selection )
 
                 TypeAhead timeout matchesQuery ->
                     let
@@ -1525,7 +1629,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                     in
                     case newKeyboardFocus of
                         Nothing ->
-                            ( listbox, Cmd.none, selection )
+                            ( listbox, CmdNone, selection )
 
                         Just newFocus ->
                             ( Listbox
@@ -1552,7 +1656,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                         Listbox { data | query = NoQuery }
                     else
                         listbox
-            , Cmd.none
+            , CmdNone
             , selection
             )
 
@@ -1567,7 +1671,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                             Just newFocus
                     , maybeMouseFocus = Just newFocus
                 }
-            , Cmd.none
+            , CmdNone
             , selection
             )
 
@@ -1580,7 +1684,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                         else
                             data.maybeMouseFocus
                 }
-            , Cmd.none
+            , CmdNone
             , selection
             )
 
@@ -1594,7 +1698,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                     , maybeMouseFocus = Just (uniqueId a)
                     , maybeLastSelectedEntry = Just (uniqueId a)
                 }
-            , Cmd.none
+            , CmdNone
             , if List.member a selection then
                 List.filter (\b -> a /= b) selection
               else
@@ -1615,9 +1719,8 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                         || (liY + behaviour.minimalGap > viewport.y + viewport.height)
 
                 centerEntry =
-                    Task.attempt (\_ -> NoOp) <|
-                        Dom.setViewportOf (printListId id) viewport.x <|
-                            (liY + liHeight / 2 - viewport.height / 2)
+                    DomSetViewportOf (printListId id) viewport.x <|
+                        (liY + liHeight / 2 - viewport.height / 2)
             in
             ( Listbox
                 { data
@@ -1629,7 +1732,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
             , if entryHidden then
                 centerEntry
               else
-                Cmd.none
+                CmdNone
             , selection
             )
 
@@ -1661,19 +1764,16 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
 
                 -- ACTIONS
                 centerNewEntry =
-                    Task.attempt (\_ -> NoOp) <|
-                        Dom.setViewportOf (printListId id) viewport.x <|
-                            (liY + liHeight / 2 - viewport.height / 2)
+                    DomSetViewportOf (printListId id) viewport.x <|
+                        (liY + liHeight / 2 - viewport.height / 2)
 
                 scrollDownToNewEntry =
-                    Task.attempt (\_ -> NoOp) <|
-                        Dom.setViewportOf (printListId id) viewport.x <|
-                            (liY + liHeight - viewport.height + behaviour.initialGap)
+                    DomSetViewportOf (printListId id) viewport.x <|
+                        (liY + liHeight - viewport.height + behaviour.initialGap)
 
                 scrollUpToNewEntry =
-                    Task.attempt (\_ -> NoOp) <|
-                        Dom.setViewportOf (printListId id) viewport.x <|
-                            (liY - behaviour.initialGap)
+                    DomSetViewportOf (printListId id) viewport.x <|
+                        (liY - behaviour.initialGap)
             in
             ( Listbox
                 { data
@@ -1687,7 +1787,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
               else if newEntryTooHigh then
                 scrollUpToNewEntry
               else
-                Cmd.none
+                CmdNone
             , selection
             )
 
@@ -1699,22 +1799,20 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                 }
             , case direction of
                 Top ->
-                    Task.attempt (\_ -> NoOp) <|
-                        Dom.setViewportOf (printListId id) list.viewport.x 0
+                    DomSetViewportOf (printListId id) list.viewport.x 0
 
                 Bottom ->
-                    Task.attempt (\_ -> NoOp) <|
-                        Dom.setViewportOf (printListId id) list.viewport.x list.scene.height
+                    DomSetViewportOf (printListId id) list.viewport.x list.scene.height
             , selection
             )
 
         NoOp ->
-            ( listbox, Cmd.none, selection )
+            ( listbox, CmdNone, selection )
 
 
-andDo : Cmd msg -> ( a, b ) -> ( a, Cmd msg, b )
-andDo cmd ( a, b ) =
-    ( a, cmd, b )
+andDo : effect -> ( a, b ) -> ( a, effect, b )
+andDo effect ( a, b ) =
+    ( a, effect, b )
 
 
 or : Maybe a -> Maybe a -> Maybe a
@@ -1727,9 +1825,9 @@ or fallback default =
             default
 
 
-resetQuery : ( Listbox, Cmd (Msg a), List a ) -> ( Listbox, Cmd (Msg a), List a )
-resetQuery ( Listbox data, cmd, selection ) =
-    ( Listbox { data | query = NoQuery }, cmd, selection )
+resetQuery : ( Listbox, Effect a, List a ) -> ( Listbox, Effect a, List a )
+resetQuery ( Listbox data, effect, selection ) =
+    ( Listbox { data | query = NoQuery }, effect, selection )
 
 
 focusFirstEntry :
@@ -1738,7 +1836,7 @@ focusFirstEntry :
     -> Behaviour a
     -> List (Entry a divider)
     -> ( Listbox, List a )
-    -> ( Listbox, Cmd (Msg a), List a )
+    -> ( Listbox, Effect a, List a )
 focusFirstEntry id uniqueId behaviour allEntries ( listbox, selection ) =
     let
         (Listbox data) =
@@ -1756,13 +1854,13 @@ focusFirstEntry id uniqueId behaviour allEntries ( listbox, selection ) =
     in
     case maybeNewEntry of
         Nothing ->
-            ( listbox, Cmd.none, selection )
+            ( listbox, CmdNone, selection )
 
         Just newEntry ->
             updateFocus behaviour uniqueId selection False newEntry data
                 |> andDo
                     (if data.preventScroll then
-                        Cmd.none
+                        CmdNone
                      else
                         adjustScrollTop id (uniqueId newEntry)
                     )
@@ -1863,78 +1961,32 @@ subscriptions (Listbox data) =
 
 
 
--- CMDS
+-- EFFECTS
 
 
-focusList : String -> Cmd (Msg a)
+focusList : String -> Effect a
 focusList id =
-    Dom.focus (printListId id)
-        |> Task.attempt (\_ -> NoOp)
+    DomFocus (printListId id)
 
 
-scrollListToTop : String -> Cmd (Msg a)
-scrollListToTop id =
-    Task.succeed (ListViewportReceived Top id)
-        |> and (Dom.getViewportOf (printListId id))
-        |> Task.attempt
-            (\result ->
-                case result of
-                    Err _ ->
-                        NoOp
-
-                    Ok msg ->
-                        msg
-            )
+scrollListToTop : String -> Effect a
+scrollListToTop =
+    ScrollListToTop
 
 
-scrollListToBottom : String -> Cmd (Msg a)
-scrollListToBottom id =
-    Task.succeed (ListViewportReceived Bottom id)
-        |> and (Dom.getViewportOf (printListId id))
-        |> Task.attempt
-            (\result ->
-                case result of
-                    Err _ ->
-                        NoOp
-
-                    Ok msg ->
-                        msg
-            )
+scrollListToBottom : String -> Effect a
+scrollListToBottom =
+    ScrollListToBottom
 
 
-adjustScrollTop : String -> String -> Cmd (Msg a)
-adjustScrollTop id entryId =
-    Task.succeed (InitialEntryDomElementReceived id)
-        |> and (Dom.getViewportOf (printListId id))
-        |> and (Dom.getElement (printListId id))
-        |> and (Dom.getElement (printEntryId id entryId))
-        |> Task.attempt
-            (\result ->
-                case result of
-                    Err _ ->
-                        NoOp
-
-                    Ok msg ->
-                        msg
-            )
+adjustScrollTop : String -> String -> Effect a
+adjustScrollTop =
+    AdjustScrollTop
 
 
-adjustScrollTopNew : String -> String -> String -> Cmd (Msg a)
-adjustScrollTopNew id entryId previousEntryId =
-    Task.succeed (EntryDomElementReceived entryId id)
-        |> and (Dom.getViewportOf (printListId id))
-        |> and (Dom.getElement (printListId id))
-        |> and (Dom.getElement (printEntryId id entryId))
-        |> and (Dom.getElement (printEntryId id previousEntryId))
-        |> Task.attempt
-            (\result ->
-                case result of
-                    Err _ ->
-                        NoOp
-
-                    Ok msg ->
-                        msg
-            )
+adjustScrollTopNew : String -> String -> String -> Effect a
+adjustScrollTopNew =
+    AdjustScrollTopNew
 
 
 and task previousTask =

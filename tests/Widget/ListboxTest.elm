@@ -14,7 +14,8 @@ import Fuzz exposing (Fuzzer)
 import Internal.Entries exposing (Entry(..))
 import List.Extra as List
 import Test exposing (..)
-import Widget.Listbox as Listbox exposing (Listbox(..), Msg(..), UpdateConfig)
+import Time exposing (Posix)
+import Widget.Listbox as Listbox exposing (Effect(..), Listbox(..), Msg(..), UpdateConfig)
 
 
 suite : Test
@@ -255,8 +256,8 @@ architectureTest =
 
 listboxApp : TestedApp Model (Listbox.Msg String)
 listboxApp =
-    { model = ConstantModel (Model Listbox.init [])
-    , update = NormalUpdate update
+    { model = ConstantModel (Model Listbox.init [] (Time.millisToPosix 0))
+    , update = UpdateWithoutCmds update
     , msgFuzzer = msgFuzzer
     , msgToString = Debug.toString
     , modelToString =
@@ -293,25 +294,58 @@ listboxApp =
 type alias Model =
     { listbox : Listbox
     , selection : List String
+    , now : Posix
     }
 
 
-update : Listbox.Msg String -> Model -> ( Model, Cmd (Listbox.Msg String) )
+update : Listbox.Msg String -> Model -> Model
 update msg model =
     let
-        ( newListbox, listboxCmd, newSelection ) =
-            Listbox.update updateConfig
+        ( newListbox, effect, newSelection ) =
+            Listbox.internalUpdate updateConfig
                 onlyOptions
                 msg
                 model.listbox
                 model.selection
+
+        newModel =
+            { model
+                | listbox = newListbox
+                , selection = newSelection
+                , now =
+                    model.now
+                        |> Time.posixToMillis
+                        |> (+) 123
+                        |> Time.millisToPosix
+            }
     in
-    ( { model
-        | listbox = newListbox
-        , selection = newSelection
-      }
-    , listboxCmd
-    )
+    case effect of
+        CmdNone ->
+            newModel
+
+        TimeNow toMsg ->
+            update (toMsg model.now) newModel
+
+        DomSetViewportOf _ _ _ ->
+            newModel
+
+        DomFocus targetId ->
+            if targetId == Listbox.printListId id then
+                update (ListFocused id) newModel
+            else
+                newModel
+
+        ScrollListToTop _ ->
+            newModel
+
+        ScrollListToBottom _ ->
+            newModel
+
+        AdjustScrollTop _ _ ->
+            newModel
+
+        AdjustScrollTopNew _ _ _ ->
+            newModel
 
 
 id : String
