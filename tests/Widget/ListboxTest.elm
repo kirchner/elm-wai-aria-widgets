@@ -81,177 +81,234 @@ suite =
 architectureTest : Test
 architectureTest =
     concat
-        [ invariantTest "maybeKeyboardFocus"
-            listboxApp
-            (\_ _ { listbox } ->
-                case .maybeKeyboardFocus (data listbox) of
-                    Nothing ->
-                        Expect.pass
-
-                    Just keyboardFocus ->
-                        options
-                            |> List.member keyboardFocus
-                            |> Expect.true
-                                ("Expected '" ++ keyboardFocus ++ "' to be a valid option")
-            )
-        , invariantTest "maybeMouseFocus"
-            listboxApp
-            (\_ _ { listbox } ->
-                case .maybeMouseFocus (data listbox) of
-                    Nothing ->
-                        Expect.pass
-
-                    Just mouseFocus ->
-                        options
-                            |> List.member mouseFocus
-                            |> Expect.true
-                                ("Expected '" ++ mouseFocus ++ "' to be a valid option")
-            )
-        , msgTestWithPrecondition "arrowDown moves keyboardFocus to next option"
-            listboxApp
-            listArrowDownPressed
-            noPendingKeyboardFocus
-            (\before _ after ->
-                let
-                    beforeMaybeKeyboardFocus =
-                        before.listbox
-                            |> data
-                            |> .maybeKeyboardFocus
-
-                    afterMaybePendingKeyboardFocus =
-                        after.listbox
-                            |> data
-                            |> .maybePendingKeyboardFocus
-
-                    afterMaybeKeyboardFocus =
-                        after.listbox
-                            |> data
-                            |> .maybeKeyboardFocus
-                in
-                case ( beforeMaybeKeyboardFocus, afterMaybePendingKeyboardFocus ) of
-                    ( Just focusBefore, Just focusAfter ) ->
-                        let
-                            maybeNextOption =
-                                options
-                                    |> List.splitWhen ((==) focusBefore)
-                                    |> Maybe.andThen (Tuple.second >> List.drop 1 >> List.head)
-                        in
-                        case maybeNextOption of
-                            Nothing ->
-                                focusAfter
-                                    |> Expect.equal focusBefore
-
-                            Just nextOption ->
-                                nextOption
-                                    |> Expect.equal focusAfter
-
-                    ( Nothing, Just afterPendingKeyboardFocus ) ->
-                        afterPendingKeyboardFocus
-                            |> Expect.equal firstOption
-
-                    ( Just focusBefore, Nothing ) ->
-                        case afterMaybeKeyboardFocus of
-                            Nothing ->
-                                Expect.fail "Expected the listbox to not loose its keyboardFocus"
-
-                            Just afterKeyboardFocus ->
-                                afterKeyboardFocus
-                                    |> Expect.equal focusBefore
-
-                    ( Nothing, Nothing ) ->
-                        Expect.fail "Expected the listbox to have a keyboardFocus"
-            )
-        , msgTestWithPrecondition "arrowUp moves keyboardFocus to previous option"
-            listboxApp
-            listArrowUpPressed
-            noPendingKeyboardFocus
-            (\before _ after ->
-                let
-                    beforeMaybeKeyboardFocus =
-                        before.listbox
-                            |> data
-                            |> .maybeKeyboardFocus
-
-                    afterMaybePendingKeyboardFocus =
-                        after.listbox
-                            |> data
-                            |> .maybePendingKeyboardFocus
-
-                    afterMaybeKeyboardFocus =
-                        after.listbox
-                            |> data
-                            |> .maybeKeyboardFocus
-                in
-                case ( beforeMaybeKeyboardFocus, afterMaybePendingKeyboardFocus ) of
-                    ( Just focusBefore, Just focusAfter ) ->
-                        let
-                            maybePreviousOption =
-                                options
-                                    |> List.splitWhen ((==) focusBefore)
-                                    |> Maybe.andThen (Tuple.first >> List.reverse >> List.head)
-                        in
-                        case maybePreviousOption of
-                            Nothing ->
-                                focusAfter
-                                    |> Expect.equal focusBefore
-
-                            Just previousOption ->
-                                previousOption
-                                    |> Expect.equal focusAfter
-
-                    ( Nothing, Just afterPendingKeyboardFocus ) ->
-                        afterPendingKeyboardFocus
-                            |> Expect.equal firstOption
-
-                    ( Just focusBefore, Nothing ) ->
-                        case afterMaybeKeyboardFocus of
-                            Nothing ->
-                                Expect.fail "Expected the listbox to not loose its keyboardFocus"
-
-                            Just afterKeyboardFocus ->
-                                afterKeyboardFocus
-                                    |> Expect.equal focusBefore
-
-                    ( Nothing, Nothing ) ->
-                        Expect.fail "Expected the listbox to have a keyboardFocus"
-            )
-        , msgTestWithPrecondition "arrowHome moves keyboardFocus to first option"
-            listboxApp
-            listHomePressed
-            noPendingKeyboardFocus
-            (\_ _ after ->
-                after.listbox
+        [ invariantTest "maybeKeyboardFocus" listboxApp <|
+            \_ _ { listbox } ->
+                listbox
                     |> data
-                    |> .maybePendingKeyboardFocus
-                    |> Expect.equal (Just firstOption)
-            )
-        , msgTestWithPrecondition "arrowEnd moves keyboardFocus to first option"
-            listboxApp
-            listEndPressed
-            noPendingKeyboardFocus
-            (\_ _ after ->
-                after.listbox
+                    |> .maybeKeyboardFocus
+                    |> expectValidOption
+        , invariantTest "maybeMouseFocus" listboxApp <|
+            \_ _ { listbox } ->
+                listbox
                     |> data
-                    |> .maybePendingKeyboardFocus
-                    |> Expect.equal (Just lastOption)
-            )
-        , msgTest "controlA selects/deselects all options"
-            listboxApp
-            listControlAPressed
-            (\before _ after ->
-                if List.sort before.selection == List.sort options then
-                    after.selection
-                        |> Expect.equalLists []
-                else
-                    after.selection
-                        |> List.sort
-                        |> Expect.equalLists (List.sort options)
-            )
+                    |> .maybeMouseFocus
+                    |> expectValidOption
+        , describe "listBlured"
+            [ msgTest "keeps keyboardFocus" listboxApp (Fuzz.constant ListBlured) <|
+                \before _ after ->
+                    expectUnchangedFocus before after
+            , msgTest "keeps mouseFocus" listboxApp (Fuzz.constant ListBlured) <|
+                \before _ after ->
+                    expectUnchangedHover before after
+            ]
+        , describe "arrowDown"
+            [ msgTest "moves keyboardFocus to next option" listboxApp listArrowDownPressed <|
+                \before _ after ->
+                    let
+                        beforeMaybeKeyboardFocus =
+                            before.listbox
+                                |> data
+                                |> .maybeKeyboardFocus
+
+                        afterMaybeKeyboardFocus =
+                            after.listbox
+                                |> data
+                                |> .maybeKeyboardFocus
+
+                        afterMaybeLastSelectedEntry =
+                            after.listbox
+                                |> data
+                                |> .maybeLastSelectedEntry
+                    in
+                    case ( beforeMaybeKeyboardFocus, afterMaybeKeyboardFocus ) of
+                        ( Just focusBefore, Just focusAfter ) ->
+                            let
+                                maybeNextOption =
+                                    options
+                                        |> List.splitWhen ((==) focusBefore)
+                                        |> Maybe.andThen (Tuple.second >> List.drop 1 >> List.head)
+                            in
+                            case maybeNextOption of
+                                Nothing ->
+                                    focusAfter
+                                        |> Expect.equal focusBefore
+
+                                Just nextOption ->
+                                    nextOption
+                                        |> Expect.equal focusAfter
+
+                        ( Nothing, Just afterKeyboardFocus ) ->
+                            case afterMaybeLastSelectedEntry of
+                                Nothing ->
+                                    afterKeyboardFocus
+                                        |> Expect.equal firstOption
+
+                                Just afterLastSelectedEntry ->
+                                    afterKeyboardFocus
+                                        |> Expect.equal afterLastSelectedEntry
+
+                        ( Just focusBefore, Nothing ) ->
+                            case afterMaybeKeyboardFocus of
+                                Nothing ->
+                                    Expect.fail "Expected the listbox to not loose its keyboardFocus"
+
+                                Just afterKeyboardFocus ->
+                                    afterKeyboardFocus
+                                        |> Expect.equal focusBefore
+
+                        ( Nothing, Nothing ) ->
+                            Expect.fail "Expected the listbox to have a keyboardFocus"
+            ]
+        , describe "arrowUp"
+            [ msgTest "moves keyboardFocus to previous option" listboxApp listArrowUpPressed <|
+                \before _ after ->
+                    let
+                        beforeMaybeKeyboardFocus =
+                            before.listbox
+                                |> data
+                                |> .maybeKeyboardFocus
+
+                        afterMaybeKeyboardFocus =
+                            after.listbox
+                                |> data
+                                |> .maybeKeyboardFocus
+
+                        afterMaybeLastSelectedEntry =
+                            after.listbox
+                                |> data
+                                |> .maybeLastSelectedEntry
+                    in
+                    case ( beforeMaybeKeyboardFocus, afterMaybeKeyboardFocus ) of
+                        ( Just focusBefore, Just focusAfter ) ->
+                            let
+                                maybePreviousOption =
+                                    options
+                                        |> List.splitWhen ((==) focusBefore)
+                                        |> Maybe.andThen (Tuple.first >> List.reverse >> List.head)
+                            in
+                            case maybePreviousOption of
+                                Nothing ->
+                                    focusAfter
+                                        |> Expect.equal focusBefore
+
+                                Just previousOption ->
+                                    previousOption
+                                        |> Expect.equal focusAfter
+
+                        ( Nothing, Just afterKeyboardFocus ) ->
+                            case afterMaybeLastSelectedEntry of
+                                Nothing ->
+                                    afterKeyboardFocus
+                                        |> Expect.equal firstOption
+
+                                Just afterLastSelectedEntry ->
+                                    afterKeyboardFocus
+                                        |> Expect.equal afterLastSelectedEntry
+
+                        ( Just focusBefore, Nothing ) ->
+                            case afterMaybeKeyboardFocus of
+                                Nothing ->
+                                    Expect.fail "Expected the listbox to not loose its keyboardFocus"
+
+                                Just afterKeyboardFocus ->
+                                    afterKeyboardFocus
+                                        |> Expect.equal focusBefore
+
+                        ( Nothing, Nothing ) ->
+                            Expect.fail "Expected the listbox to have a keyboardFocus"
+            ]
+        , describe "home"
+            [ msgTest "moves keyboardFocus to first option" listboxApp listHomePressed <|
+                \_ _ after ->
+                    expectFirstOptionFocused after
+            ]
+        , describe "end"
+            [ msgTest "moves keyboardFocus to last option" listboxApp listEndPressed <|
+                \_ _ after ->
+                    expectLastOptionFocused after
+            ]
+        , describe "controlA"
+            [ msgTest "controlA selects/deselects all options" listboxApp listControlAPressed <|
+                \before _ after ->
+                    if List.sort before.selection == List.sort options then
+                        expectNothingSelected after
+                    else
+                        expectEverythingSelected after
+            ]
         ]
 
 
 
--- SETUP
+---- EXPECTATIONS
+
+
+expectValidOption : Maybe String -> Expectation
+expectValidOption maybeOption =
+    case maybeOption of
+        Nothing ->
+            Expect.pass
+
+        Just option ->
+            options
+                |> List.any ((==) option)
+                |> Expect.true ("'" ++ option ++ "' is not a valid option")
+
+
+expectUnchangedFocus : Model -> Model -> Expectation
+expectUnchangedFocus before after =
+    before.listbox
+        |> data
+        |> .maybeKeyboardFocus
+        |> Expect.equal
+            (after.listbox
+                |> data
+                |> .maybeKeyboardFocus
+            )
+
+
+expectUnchangedHover : Model -> Model -> Expectation
+expectUnchangedHover before after =
+    before.listbox
+        |> data
+        |> .maybeMouseFocus
+        |> Expect.equal
+            (after.listbox
+                |> data
+                |> .maybeMouseFocus
+            )
+
+
+expectFirstOptionFocused : Model -> Expectation
+expectFirstOptionFocused { listbox } =
+    listbox
+        |> data
+        |> .maybeKeyboardFocus
+        |> Expect.equal (Just firstOption)
+
+
+expectLastOptionFocused : Model -> Expectation
+expectLastOptionFocused { listbox } =
+    listbox
+        |> data
+        |> .maybeKeyboardFocus
+        |> Expect.equal (Just lastOption)
+
+
+expectNothingSelected : Model -> Expectation
+expectNothingSelected { selection } =
+    selection
+        |> Expect.equalLists []
+
+
+expectEverythingSelected : Model -> Expectation
+expectEverythingSelected { selection } =
+    selection
+        |> List.sort
+        |> Expect.equalLists (List.sort options)
+
+
+
+---- SETUP
 
 
 listboxApp : TestedApp Model (Listbox.Msg String)
@@ -335,17 +392,74 @@ update msg model =
             else
                 newModel
 
-        ScrollListToTop _ ->
-            newModel
+        ScrollListToTop toMsg _ ->
+            update
+                (toMsg
+                    { scene = listboxScene
+                    , viewport =
+                        { x = 0
+                        , y = 0
+                        , width = 100
+                        , height = 80
+                        }
+                    }
+                )
+                newModel
 
-        ScrollListToBottom _ ->
-            newModel
+        ScrollListToBottom toMsg _ ->
+            update
+                (toMsg
+                    { scene = listboxScene
+                    , viewport =
+                        { x = 0
+                        , y = 30 * toFloat (List.length onlyOptions) - 80
+                        , width = 100
+                        , height = 80
+                        }
+                    }
+                )
+                newModel
 
-        AdjustScrollTop _ _ ->
-            newModel
+        AdjustScrollTop toMsg _ entryId ->
+            let
+                viewportOfList =
+                    { scene = browserScene
+                    , viewport =
+                        { x = 0
+                        , y = 0
+                        , width = 100
+                        , height = 80
+                        }
+                    }
+            in
+            update
+                (toMsg
+                    viewportOfList
+                    elementOfList
+                    (elementOfEntry entryId)
+                )
+                newModel
 
-        AdjustScrollTopNew _ _ _ ->
-            newModel
+        AdjustScrollTopNew toMsg _ entryId previousEntryId ->
+            let
+                viewportOfList =
+                    { scene = browserScene
+                    , viewport =
+                        { x = 0
+                        , y = 0
+                        , width = 100
+                        , height = 80
+                        }
+                    }
+            in
+            update
+                (toMsg
+                    viewportOfList
+                    elementOfList
+                    (elementOfEntry entryId)
+                    (elementOfEntry previousEntryId)
+                )
+                newModel
 
 
 id : String
@@ -354,22 +468,56 @@ id =
 
 
 
+-- DOM LENGTHS
+
+
+browserScene =
+    { width = 100
+    , height = 80
+    }
+
+
+listboxScene =
+    { width = 100
+    , height = 30 * toFloat (List.length onlyOptions)
+    }
+
+
+browserViewport =
+    { x = 0
+    , y = 0
+    , width = browserScene.width
+    , height = browserScene.height
+    }
+
+
+elementOfList =
+    { scene = browserScene
+    , viewport = browserViewport
+    , element = browserViewport
+    }
+
+
+elementOfEntry entryId =
+    let
+        position =
+            options
+                |> List.takeWhile ((/=) entryId)
+                |> List.length
+    in
+    { scene = browserScene
+    , viewport = browserViewport
+    , element =
+        { x = 0
+        , y = toFloat position * 30
+        , width = 100
+        , height = 30
+        }
+    }
+
+
+
 ---- HELPER
-
-
-expectValidOption : List (Entry String String) -> String -> Expectation
-expectValidOption entries option =
-    entries
-        |> List.any (\entry -> entry == Option option)
-        |> Expect.true ("'" ++ option ++ "' is not a valid option")
-
-
-noPendingKeyboardFocus : Model -> Bool
-noPendingKeyboardFocus { listbox } =
-    listbox
-        |> data
-        |> .maybePendingKeyboardFocus
-        |> (==) Nothing
 
 
 focusedEntry : List (Entry String divider) -> Listbox -> Maybe String

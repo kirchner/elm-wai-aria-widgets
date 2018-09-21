@@ -1220,10 +1220,10 @@ type Effect a
     | DomSetViewportOf String Float Float
     | DomFocus String
       -- CUSTOM
-    | ScrollListToTop String
-    | ScrollListToBottom String
-    | AdjustScrollTop String String
-    | AdjustScrollTopNew String String String
+    | ScrollListToTop (Dom.Viewport -> Msg a) String
+    | ScrollListToBottom (Dom.Viewport -> Msg a) String
+    | AdjustScrollTop (Dom.Viewport -> Dom.Element -> Dom.Element -> Msg a) String String
+    | AdjustScrollTopNew (Dom.Viewport -> Dom.Element -> Dom.Element -> Dom.Element -> Msg a) String String String
 
 
 perform : Effect a -> Cmd (Msg a)
@@ -1243,8 +1243,8 @@ perform effect =
             Task.attempt (\_ -> NoOp) <|
                 Dom.focus id
 
-        ScrollListToTop id ->
-            Task.succeed (ListViewportReceived Top id)
+        ScrollListToTop toMsg id ->
+            Task.succeed toMsg
                 |> and (Dom.getViewportOf (printListId id))
                 |> Task.attempt
                     (\result ->
@@ -1256,8 +1256,8 @@ perform effect =
                                 msg
                     )
 
-        ScrollListToBottom id ->
-            Task.succeed (ListViewportReceived Bottom id)
+        ScrollListToBottom toMsg id ->
+            Task.succeed toMsg
                 |> and (Dom.getViewportOf (printListId id))
                 |> Task.attempt
                     (\result ->
@@ -1269,8 +1269,8 @@ perform effect =
                                 msg
                     )
 
-        AdjustScrollTop id entryId ->
-            Task.succeed (InitialEntryDomElementReceived id)
+        AdjustScrollTop toMsg id entryId ->
+            Task.succeed toMsg
                 |> and (Dom.getViewportOf (printListId id))
                 |> and (Dom.getElement (printListId id))
                 |> and (Dom.getElement (printEntryId id entryId))
@@ -1284,8 +1284,8 @@ perform effect =
                                 msg
                     )
 
-        AdjustScrollTopNew id entryId previousEntryId ->
-            Task.succeed (EntryDomElementReceived entryId id)
+        AdjustScrollTopNew toMsg id entryId previousEntryId ->
+            Task.succeed toMsg
                 |> and (Dom.getViewportOf (printListId id))
                 |> and (Dom.getElement (printListId id))
                 |> and (Dom.getElement (printEntryId id entryId))
@@ -1858,12 +1858,12 @@ focusFirstEntry id uniqueId behaviour allEntries ( listbox, selection ) =
 
         Just newEntry ->
             updateFocus behaviour uniqueId selection False newEntry data
-                |> andDo
-                    (if data.preventScroll then
-                        CmdNone
-                     else
-                        adjustScrollTop id (uniqueId newEntry)
-                    )
+                |> (if data.preventScroll then
+                        Tuple.mapFirst focusPendingKeyboardFocus
+                            >> andDo CmdNone
+                    else
+                        andDo (adjustScrollTop id (uniqueId newEntry))
+                   )
 
 
 updateFocus :
@@ -1970,23 +1970,23 @@ focusList id =
 
 
 scrollListToTop : String -> Effect a
-scrollListToTop =
-    ScrollListToTop
+scrollListToTop id =
+    ScrollListToTop (ListViewportReceived Top id) id
 
 
 scrollListToBottom : String -> Effect a
-scrollListToBottom =
-    ScrollListToBottom
+scrollListToBottom id =
+    ScrollListToBottom (ListViewportReceived Bottom id) id
 
 
 adjustScrollTop : String -> String -> Effect a
-adjustScrollTop =
-    AdjustScrollTop
+adjustScrollTop id =
+    AdjustScrollTop (InitialEntryDomElementReceived id) id
 
 
 adjustScrollTopNew : String -> String -> String -> Effect a
-adjustScrollTopNew =
-    AdjustScrollTopNew
+adjustScrollTopNew id entryId =
+    AdjustScrollTopNew (EntryDomElementReceived entryId id) id entryId
 
 
 and task previousTask =
