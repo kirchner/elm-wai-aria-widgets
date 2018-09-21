@@ -2,8 +2,8 @@ module Widget.Listbox
     exposing
         ( Behaviour
         , Entry
-        , Listbox
-        , Msg
+        , Listbox(..)
+        , Msg(..)
         , TypeAhead
         , UpdateConfig
         , ViewConfig
@@ -1180,9 +1180,9 @@ For example:
                     ( newListbox, listboxCmd, newSelection ) =
                         Listbox.update updateConfig
                             entries
+                            listboxMsg
                             model.listbox
                             model.selection
-                            listboxMsg
                 in
                 ( { model
                     | listbox = newListbox
@@ -1221,29 +1221,8 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
             if data.preventScroll then
                 ( listbox, Cmd.none, selection )
             else
-                let
-                    maybeNewEntry =
-                        data.maybeKeyboardFocus
-                            |> or data.maybeLastSelectedEntry
-                            |> Maybe.andThen (find uniqueId allEntries)
-                            |> Maybe.map Tuple.second
-                            |> or (List.head selection)
-                            |> Maybe.andThen (uniqueId >> find uniqueId allEntries)
-                            |> Maybe.map Tuple.second
-                            |> or (Internal.firstEntry allEntries)
-                in
-                case maybeNewEntry of
-                    Nothing ->
-                        ( listbox, Cmd.none, selection )
-
-                    Just newEntry ->
-                        updateFocus behaviour uniqueId selection False newEntry data
-                            |> andDo
-                                (if data.preventScroll then
-                                    Cmd.none
-                                 else
-                                    adjustScrollTop id (uniqueId newEntry)
-                                )
+                ( listbox, selection )
+                    |> focusFirstEntry id uniqueId behaviour allEntries
 
         ListBlured ->
             ( Listbox
@@ -1263,10 +1242,9 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                 Nothing ->
                     case data.maybeKeyboardFocus of
                         Nothing ->
-                            ( Listbox { data | query = NoQuery }
-                            , Cmd.none
-                            , selection
-                            )
+                            ( listbox, selection )
+                                |> focusFirstEntry id uniqueId behaviour allEntries
+                                |> resetQuery
 
                         Just currentFocusId ->
                             case findPrevious uniqueId allEntries currentFocusId of
@@ -1300,10 +1278,9 @@ update (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listb
                 Nothing ->
                     case data.maybeKeyboardFocus of
                         Nothing ->
-                            ( Listbox { data | query = NoQuery }
-                            , Cmd.none
-                            , selection
-                            )
+                            ( listbox, selection )
+                                |> focusFirstEntry id uniqueId behaviour allEntries
+                                |> resetQuery
 
                         Just currentFocusId ->
                             case findNext uniqueId allEntries currentFocusId of
@@ -1748,6 +1725,47 @@ or fallback default =
 
         Just _ ->
             default
+
+
+resetQuery : ( Listbox, Cmd (Msg a), List a ) -> ( Listbox, Cmd (Msg a), List a )
+resetQuery ( Listbox data, cmd, selection ) =
+    ( Listbox { data | query = NoQuery }, cmd, selection )
+
+
+focusFirstEntry :
+    String
+    -> (a -> String)
+    -> Behaviour a
+    -> List (Entry a divider)
+    -> ( Listbox, List a )
+    -> ( Listbox, Cmd (Msg a), List a )
+focusFirstEntry id uniqueId behaviour allEntries ( listbox, selection ) =
+    let
+        (Listbox data) =
+            listbox
+
+        maybeNewEntry =
+            data.maybeKeyboardFocus
+                |> or data.maybeLastSelectedEntry
+                |> Maybe.andThen (find uniqueId allEntries)
+                |> Maybe.map Tuple.second
+                |> or (List.head selection)
+                |> Maybe.andThen (uniqueId >> find uniqueId allEntries)
+                |> Maybe.map Tuple.second
+                |> or (Internal.firstEntry allEntries)
+    in
+    case maybeNewEntry of
+        Nothing ->
+            ( listbox, Cmd.none, selection )
+
+        Just newEntry ->
+            updateFocus behaviour uniqueId selection False newEntry data
+                |> andDo
+                    (if data.preventScroll then
+                        Cmd.none
+                     else
+                        adjustScrollTop id (uniqueId newEntry)
+                    )
 
 
 updateFocus :
