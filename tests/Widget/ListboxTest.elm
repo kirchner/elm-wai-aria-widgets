@@ -90,8 +90,8 @@ architectureTest =
     concat
         [ invariantTest "maybeKeyboardFocus" listboxApp <|
             \_ _ { listbox } ->
-                listbox.maybeKeyboardFocus
-                    |> expectValidOption
+                listbox.focus
+                    |> expectValidFocus
         , invariantTest "maybeMouseFocus" listboxApp <|
             \_ _ { listbox } ->
                 listbox.maybeMouseFocus
@@ -109,16 +109,16 @@ architectureTest =
                 \before _ after ->
                     let
                         beforeMaybeKeyboardFocus =
-                            before.listbox.maybeKeyboardFocus
+                            before.listbox.focus
 
                         afterMaybeKeyboardFocus =
-                            after.listbox.maybeKeyboardFocus
+                            after.listbox.focus
 
                         afterMaybeLastSelectedEntry =
                             after.listbox.maybeLastSelectedEntry
                     in
                     case ( beforeMaybeKeyboardFocus, afterMaybeKeyboardFocus ) of
-                        ( Just focusBefore, Just focusAfter ) ->
+                        ( Listbox.Focus focusBefore, Listbox.Focus focusAfter ) ->
                             let
                                 maybeNextOption =
                                     options
@@ -134,7 +134,7 @@ architectureTest =
                                     nextOption
                                         |> Expect.equal focusAfter
 
-                        ( Nothing, Just afterKeyboardFocus ) ->
+                        ( _, Listbox.Focus afterKeyboardFocus ) ->
                             case afterMaybeLastSelectedEntry of
                                 Nothing ->
                                     afterKeyboardFocus
@@ -144,16 +144,16 @@ architectureTest =
                                     afterKeyboardFocus
                                         |> Expect.equal afterLastSelectedEntry
 
-                        ( Just focusBefore, Nothing ) ->
+                        ( Listbox.Focus focusBefore, _ ) ->
                             case afterMaybeKeyboardFocus of
-                                Nothing ->
-                                    Expect.fail "Expected the listbox to not loose its keyboardFocus"
-
-                                Just afterKeyboardFocus ->
+                                Listbox.Focus afterKeyboardFocus ->
                                     afterKeyboardFocus
                                         |> Expect.equal focusBefore
 
-                        ( Nothing, Nothing ) ->
+                                _ ->
+                                    Expect.fail "Expected the listbox to not loose its keyboardFocus"
+
+                        ( _, _ ) ->
                             Expect.fail "Expected the listbox to have a keyboardFocus"
             ]
         , describe "arrowUp"
@@ -161,19 +161,17 @@ architectureTest =
                 \before _ after ->
                     let
                         beforeMaybeKeyboardFocus =
-                            before.listbox
-                                |> .maybeKeyboardFocus
+                            before.listbox.focus
 
                         afterMaybeKeyboardFocus =
-                            after.listbox
-                                |> .maybeKeyboardFocus
+                            after.listbox.focus
 
                         afterMaybeLastSelectedEntry =
                             after.listbox
                                 |> .maybeLastSelectedEntry
                     in
                     case ( beforeMaybeKeyboardFocus, afterMaybeKeyboardFocus ) of
-                        ( Just focusBefore, Just focusAfter ) ->
+                        ( Listbox.Focus focusBefore, Listbox.Focus focusAfter ) ->
                             let
                                 maybePreviousOption =
                                     options
@@ -189,7 +187,7 @@ architectureTest =
                                     previousOption
                                         |> Expect.equal focusAfter
 
-                        ( Nothing, Just afterKeyboardFocus ) ->
+                        ( _, Listbox.Focus afterKeyboardFocus ) ->
                             case afterMaybeLastSelectedEntry of
                                 Nothing ->
                                     afterKeyboardFocus
@@ -199,16 +197,16 @@ architectureTest =
                                     afterKeyboardFocus
                                         |> Expect.equal afterLastSelectedEntry
 
-                        ( Just focusBefore, Nothing ) ->
+                        ( Listbox.Focus focusBefore, _ ) ->
                             case afterMaybeKeyboardFocus of
-                                Nothing ->
-                                    Expect.fail "Expected the listbox to not loose its keyboardFocus"
-
-                                Just afterKeyboardFocus ->
+                                Listbox.Focus afterKeyboardFocus ->
                                     afterKeyboardFocus
                                         |> Expect.equal focusBefore
 
-                        ( Nothing, Nothing ) ->
+                                _ ->
+                                    Expect.fail "Expected the listbox to not loose its keyboardFocus"
+
+                        ( _, _ ) ->
                             Expect.fail "Expected the listbox to have a keyboardFocus"
             ]
         , describe "home"
@@ -237,6 +235,23 @@ architectureTest =
 ---- EXPECTATIONS
 
 
+expectValidFocus : Listbox.Focus -> Expectation
+expectValidFocus f =
+    case f of
+        Listbox.NoFocus ->
+            Expect.pass
+
+        Listbox.Focus option ->
+            options
+                |> List.any ((==) option)
+                |> Expect.true ("'" ++ option ++ "' is not a valid option")
+
+        Listbox.Pending { next } ->
+            options
+                |> List.any ((==) next)
+                |> Expect.true ("'" ++ next ++ "' is not a valid option")
+
+
 expectValidOption : Maybe String -> Expectation
 expectValidOption maybeOption =
     case maybeOption of
@@ -251,32 +266,26 @@ expectValidOption maybeOption =
 
 expectUnchangedFocus : Model -> Model -> Expectation
 expectUnchangedFocus before after =
-    before.listbox.maybeKeyboardFocus
-        |> Expect.equal
-            (after.listbox
-                |> .maybeKeyboardFocus
-            )
+    before.listbox.focus
+        |> Expect.equal after.listbox.focus
 
 
 expectUnchangedHover : Model -> Model -> Expectation
 expectUnchangedHover before after =
     before.listbox.maybeMouseFocus
-        |> Expect.equal
-            (after.listbox
-                |> .maybeMouseFocus
-            )
+        |> Expect.equal after.listbox.maybeMouseFocus
 
 
 expectFirstOptionFocused : Model -> Expectation
 expectFirstOptionFocused { listbox } =
-    listbox.maybeKeyboardFocus
-        |> Expect.equal (Just firstOption)
+    listbox.focus
+        |> Expect.equal (Listbox.Focus firstOption)
 
 
 expectLastOptionFocused : Model -> Expectation
 expectLastOptionFocused { listbox } =
-    listbox.maybeKeyboardFocus
-        |> Expect.equal (Just lastOption)
+    listbox.focus
+        |> Expect.equal (Listbox.Focus lastOption)
 
 
 expectNothingSelected : Model -> Expectation
@@ -309,11 +318,9 @@ listboxApp =
                 , "      { preventScroll  = "
                     ++ Debug.toString listbox.preventScroll
                     ++ ",    maybeKeyboardFocus        = "
-                    ++ Debug.toString listbox.maybeKeyboardFocus
+                    ++ Debug.toString listbox.focus
                 , "      , query          = "
                     ++ Debug.toString listbox.query
-                    ++ ",  maybePendingKeyboardFocus = "
-                    ++ Debug.toString listbox.maybePendingKeyboardFocus
                 , "      , ulScrollTop    = "
                     ++ Debug.toString listbox.ulScrollTop
                     ++ ",        maybeMouseFocus           = "

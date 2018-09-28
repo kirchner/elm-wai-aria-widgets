@@ -58,7 +58,7 @@ import Browser.Dom as Dom
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
-import Internal.Entries exposing (Entry(..))
+import Internal.Listbox exposing (Entry(..))
 import Json.Decode as Decode exposing (Decoder)
 import Task
 import Widget exposing (HtmlAttributes, HtmlDetails)
