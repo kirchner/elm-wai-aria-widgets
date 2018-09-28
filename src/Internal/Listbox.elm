@@ -30,6 +30,8 @@ module Internal.Listbox exposing
     , viewLazy
     )
 
+import Accessibility.Aria as Aria
+import Accessibility.Role as Role
 import Browser.Dom as Dom
 import Html exposing (Html)
 import Html.Attributes as Attributes
@@ -436,8 +438,8 @@ viewHelp renderedEntries uniqueId views cfg data allEntries selection =
     in
     Html.ul
         ([ Attributes.id (printListId cfg.id)
-         , Attributes.attribute "role" "listbox"
-         , Attributes.attribute "aria-labelledby" cfg.labelledBy
+         , Role.listBox
+         , Aria.labelledBy cfg.labelledBy
          , Events.preventDefaultOn "keydown"
             (Decode.oneOf
                 [ cfg.onKeyDown
@@ -686,7 +688,7 @@ viewEntry config lift maybeQuery selected keyboardFocused mouseFocused e =
                  , Events.onMouseLeave (lift EntryMouseLeft)
                  , Events.onClick (lift (EntryClicked a))
                  , Attributes.id (printEntryId config.id (config.uniqueId a))
-                 , Attributes.attribute "role" "option"
+                 , Role.option
                  ]
                     |> setAriaSelected
                     |> appendAttributes lift attributes
@@ -735,8 +737,7 @@ setAriaActivedescendant id uniqueId f entries attrs =
     findFocus uniqueId entries f
         |> Maybe.map
             (\a ->
-                Attributes.attribute "aria-activedescendant"
-                    (printEntryId id (uniqueId a))
+                Aria.activeDescendant (printEntryId id (uniqueId a))
                     :: attrs
             )
         |> Maybe.withDefault attrs
