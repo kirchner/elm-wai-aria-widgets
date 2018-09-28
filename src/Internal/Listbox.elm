@@ -12,7 +12,6 @@ module Internal.Listbox exposing
     , UpdateConfig
     , ViewConfig
     , Views
-    , focus
     , focusEntry
     , focusFirstEntry
     , focusNextOrFirstEntry
@@ -168,11 +167,6 @@ type Entry a divider
 
 
 ---- EXTERNAL STATE MANIPULATION
-
-
-focus : String -> Task Dom.Error ()
-focus id =
-    Dom.focus (printListId id)
 
 
 focusedEntry : UpdateConfig a -> Listbox -> List (Entry a divider) -> Maybe a

@@ -148,7 +148,7 @@ used in the `view` function!
 -}
 focus : String -> Task Dom.Error ()
 focus id =
-    Internal.focus id
+    Dom.focus (Internal.printListId id)
 
 
 {-| Returns the option which currently has keyboard focus.
