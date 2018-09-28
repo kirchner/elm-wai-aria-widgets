@@ -400,7 +400,7 @@ functionality.
 -}
 noTypeAhead : TypeAhead a
 noTypeAhead =
-    Internal.noTypeAhead
+    Internal.NoTypeAhead
 
 
 {-| Activate the type-ahead functionality. When the user types in a search
@@ -411,8 +411,11 @@ to the next matching option. The first argument is the timeout (in
 milliseconds) after which the query is reseted.
 -}
 simpleTypeAhead : Int -> (a -> String) -> TypeAhead a
-simpleTypeAhead =
-    Internal.simpleTypeAhead
+simpleTypeAhead timeout entryToString =
+    Internal.TypeAhead timeout <|
+        \query a ->
+            String.toLower (entryToString a)
+                |> String.startsWith (String.toLower query)
 
 
 {-| This works like `simpleTypeAhead` but gives you you more flexibility when
@@ -422,7 +425,7 @@ returning if the query matches this option.
 -}
 typeAhead : Int -> (String -> a -> Bool) -> TypeAhead a
 typeAhead =
-    Internal.typeAhead
+    Internal.TypeAhead
 
 
 

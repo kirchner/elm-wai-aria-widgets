@@ -20,15 +20,12 @@ module Internal.Listbox exposing
     , focusedEntry
     , hoveredEntry
     , init
-    , noTypeAhead
     , printEntryId
     , printListId
     , scrollListToBottom
     , scrollListToTop
     , scrollToFocus
-    , simpleTypeAhead
     , subscriptions
-    , typeAhead
     , update
     , view
     , viewLazy
@@ -342,24 +339,6 @@ type alias Behaviour a =
 type TypeAhead a
     = NoTypeAhead
     | TypeAhead Int (String -> a -> Bool)
-
-
-noTypeAhead : TypeAhead a
-noTypeAhead =
-    NoTypeAhead
-
-
-simpleTypeAhead : Int -> (a -> String) -> TypeAhead a
-simpleTypeAhead timeout entryToString =
-    TypeAhead timeout <|
-        \query a ->
-            String.toLower (entryToString a)
-                |> String.startsWith (String.toLower query)
-
-
-typeAhead : Int -> (String -> a -> Bool) -> TypeAhead a
-typeAhead =
-    TypeAhead
 
 
 

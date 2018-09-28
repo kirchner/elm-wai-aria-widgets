@@ -528,7 +528,7 @@ updateConfig =
         , separateFocus = True
         , selectionFollowsFocus = False
         , handleHomeAndEnd = True
-        , typeAhead = Listbox.noTypeAhead
+        , typeAhead = Listbox.NoTypeAhead
         , minimalGap = 0
         , initialGap = 0
         }
