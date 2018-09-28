@@ -11,11 +11,18 @@ import ArchitectureTest
         )
 import Expect exposing (Expectation)
 import Fuzz exposing (Fuzzer)
-import Internal.Entries exposing (Entry(..))
+import Internal.Listbox as Listbox
+    exposing
+        ( Effect(..)
+        , Entry
+        , Listbox
+        , Msg(..)
+        , UpdateConfig
+        )
 import List.Extra as List
 import Test exposing (..)
 import Time exposing (Posix)
-import Widget.Listbox as Listbox exposing (Effect(..), Listbox(..), Msg(..), UpdateConfig)
+import Widget.Listbox
 
 
 suite : Test
@@ -48,7 +55,7 @@ suite =
                                 []
 
                             actualEntries =
-                                Listbox.option option :: entries
+                                Widget.Listbox.option option :: entries
                         in
                         Listbox.focusNextOrFirstEntry updateConfig
                             actualEntries
@@ -65,7 +72,7 @@ suite =
                                 []
 
                             actualEntries =
-                                Listbox.option option :: entries
+                                Widget.Listbox.option option :: entries
                         in
                         Listbox.focusPreviousOrFirstEntry updateConfig
                             actualEntries
@@ -83,15 +90,11 @@ architectureTest =
     concat
         [ invariantTest "maybeKeyboardFocus" listboxApp <|
             \_ _ { listbox } ->
-                listbox
-                    |> data
-                    |> .maybeKeyboardFocus
+                listbox.maybeKeyboardFocus
                     |> expectValidOption
         , invariantTest "maybeMouseFocus" listboxApp <|
             \_ _ { listbox } ->
-                listbox
-                    |> data
-                    |> .maybeMouseFocus
+                listbox.maybeMouseFocus
                     |> expectValidOption
         , describe "listBlured"
             [ msgTest "keeps keyboardFocus" listboxApp (Fuzz.constant ListBlured) <|
@@ -102,23 +105,17 @@ architectureTest =
                     expectUnchangedHover before after
             ]
         , describe "arrowDown"
-            [ msgTest "moves keyboardFocus to next option" listboxApp listArrowDownPressed <|
+            [ msgTest "moves keyboardFocus to next option" listboxApp listArrowDownDown <|
                 \before _ after ->
                     let
                         beforeMaybeKeyboardFocus =
-                            before.listbox
-                                |> data
-                                |> .maybeKeyboardFocus
+                            before.listbox.maybeKeyboardFocus
 
                         afterMaybeKeyboardFocus =
-                            after.listbox
-                                |> data
-                                |> .maybeKeyboardFocus
+                            after.listbox.maybeKeyboardFocus
 
                         afterMaybeLastSelectedEntry =
-                            after.listbox
-                                |> data
-                                |> .maybeLastSelectedEntry
+                            after.listbox.maybeLastSelectedEntry
                     in
                     case ( beforeMaybeKeyboardFocus, afterMaybeKeyboardFocus ) of
                         ( Just focusBefore, Just focusAfter ) ->
@@ -160,22 +157,19 @@ architectureTest =
                             Expect.fail "Expected the listbox to have a keyboardFocus"
             ]
         , describe "arrowUp"
-            [ msgTest "moves keyboardFocus to previous option" listboxApp listArrowUpPressed <|
+            [ msgTest "moves keyboardFocus to previous option" listboxApp listArrowUpDown <|
                 \before _ after ->
                     let
                         beforeMaybeKeyboardFocus =
                             before.listbox
-                                |> data
                                 |> .maybeKeyboardFocus
 
                         afterMaybeKeyboardFocus =
                             after.listbox
-                                |> data
                                 |> .maybeKeyboardFocus
 
                         afterMaybeLastSelectedEntry =
                             after.listbox
-                                |> data
                                 |> .maybeLastSelectedEntry
                     in
                     case ( beforeMaybeKeyboardFocus, afterMaybeKeyboardFocus ) of
@@ -218,20 +212,21 @@ architectureTest =
                             Expect.fail "Expected the listbox to have a keyboardFocus"
             ]
         , describe "home"
-            [ msgTest "moves keyboardFocus to first option" listboxApp listHomePressed <|
+            [ msgTest "moves keyboardFocus to first option" listboxApp listHomeDown <|
                 \_ _ after ->
                     expectFirstOptionFocused after
             ]
         , describe "end"
-            [ msgTest "moves keyboardFocus to last option" listboxApp listEndPressed <|
+            [ msgTest "moves keyboardFocus to last option" listboxApp listEndDown <|
                 \_ _ after ->
                     expectLastOptionFocused after
             ]
         , describe "controlA"
-            [ msgTest "controlA selects/deselects all options" listboxApp listControlAPressed <|
+            [ msgTest "controlA selects/deselects all options" listboxApp listControlADown <|
                 \before _ after ->
                     if List.sort before.selection == List.sort options then
                         expectNothingSelected after
+
                     else
                         expectEverythingSelected after
             ]
@@ -256,41 +251,31 @@ expectValidOption maybeOption =
 
 expectUnchangedFocus : Model -> Model -> Expectation
 expectUnchangedFocus before after =
-    before.listbox
-        |> data
-        |> .maybeKeyboardFocus
+    before.listbox.maybeKeyboardFocus
         |> Expect.equal
             (after.listbox
-                |> data
                 |> .maybeKeyboardFocus
             )
 
 
 expectUnchangedHover : Model -> Model -> Expectation
 expectUnchangedHover before after =
-    before.listbox
-        |> data
-        |> .maybeMouseFocus
+    before.listbox.maybeMouseFocus
         |> Expect.equal
             (after.listbox
-                |> data
                 |> .maybeMouseFocus
             )
 
 
 expectFirstOptionFocused : Model -> Expectation
 expectFirstOptionFocused { listbox } =
-    listbox
-        |> data
-        |> .maybeKeyboardFocus
+    listbox.maybeKeyboardFocus
         |> Expect.equal (Just firstOption)
 
 
 expectLastOptionFocused : Model -> Expectation
 expectLastOptionFocused { listbox } =
-    listbox
-        |> data
-        |> .maybeKeyboardFocus
+    listbox.maybeKeyboardFocus
         |> Expect.equal (Just lastOption)
 
 
@@ -311,7 +296,7 @@ expectEverythingSelected { selection } =
 ---- SETUP
 
 
-listboxApp : TestedApp Model (Listbox.Msg String)
+listboxApp : TestedApp Model (Msg String)
 listboxApp =
     { model = ConstantModel (Model Listbox.init [] (Time.millisToPosix 0))
     , update = UpdateWithoutCmds update
@@ -319,28 +304,24 @@ listboxApp =
     , msgToString = Debug.toString
     , modelToString =
         \{ listbox, selection } ->
-            let
-                (Listbox d) =
-                    listbox
-            in
             String.join "\n"
                 [ "listbox ="
                 , "      { preventScroll  = "
-                    ++ Debug.toString d.preventScroll
+                    ++ Debug.toString listbox.preventScroll
                     ++ ",    maybeKeyboardFocus        = "
-                    ++ Debug.toString d.maybeKeyboardFocus
+                    ++ Debug.toString listbox.maybeKeyboardFocus
                 , "      , query          = "
-                    ++ Debug.toString d.query
+                    ++ Debug.toString listbox.query
                     ++ ",  maybePendingKeyboardFocus = "
-                    ++ Debug.toString d.maybePendingKeyboardFocus
+                    ++ Debug.toString listbox.maybePendingKeyboardFocus
                 , "      , ulScrollTop    = "
-                    ++ Debug.toString d.ulScrollTop
+                    ++ Debug.toString listbox.ulScrollTop
                     ++ ",        maybeMouseFocus           = "
-                    ++ Debug.toString d.maybeMouseFocus
+                    ++ Debug.toString listbox.maybeMouseFocus
                 , "      , ulClientHeight = "
-                    ++ Debug.toString d.ulClientHeight
+                    ++ Debug.toString listbox.ulClientHeight
                     ++ ",     maybeLastSelectedEntry    = "
-                    ++ Debug.toString d.maybeLastSelectedEntry
+                    ++ Debug.toString listbox.maybeLastSelectedEntry
                 , "      }"
                 , "\n    selection ="
                 , "      " ++ Debug.toString selection
@@ -355,11 +336,11 @@ type alias Model =
     }
 
 
-update : Listbox.Msg String -> Model -> Model
+update : Msg String -> Model -> Model
 update msg model =
     let
         ( newListbox, effect, newSelection ) =
-            Listbox.internalUpdate updateConfig
+            Listbox.update updateConfig
                 onlyOptions
                 msg
                 model.listbox
@@ -389,6 +370,7 @@ update msg model =
         DomFocus targetId ->
             if targetId == Listbox.printListId id then
                 update (ListFocused id) newModel
+
             else
                 newModel
 
@@ -434,9 +416,10 @@ update msg model =
             in
             update
                 (toMsg
-                    viewportOfList
-                    elementOfList
-                    (elementOfEntry entryId)
+                    { viewportList = viewportOfList
+                    , elementList = elementOfList
+                    , elementLi = elementOfEntry entryId
+                    }
                 )
                 newModel
 
@@ -454,10 +437,11 @@ update msg model =
             in
             update
                 (toMsg
-                    viewportOfList
-                    elementOfList
-                    (elementOfEntry entryId)
-                    (elementOfEntry previousEntryId)
+                    { viewportList = viewportOfList
+                    , elementList = elementOfList
+                    , elementLi = elementOfEntry entryId
+                    , elementPreviousLi = elementOfEntry previousEntryId
+                    }
                 )
                 newModel
 
@@ -525,21 +509,14 @@ focusedEntry entries listbox =
     Listbox.focusedEntry updateConfig listbox entries
 
 
-data (Listbox d) =
-    d
-
-
 
 ---- FIXTURES
 
 
 updateConfig : UpdateConfig String
 updateConfig =
-    let
-        hashEntry =
-            identity
-    in
-    Listbox.updateConfig hashEntry
+    { uniqueId = identity
+    , behaviour =
         { jumpAtEnds = False
         , separateFocus = True
         , selectionFollowsFocus = False
@@ -548,6 +525,7 @@ updateConfig =
         , minimalGap = 0
         , initialGap = 0
         }
+    }
 
 
 
@@ -577,7 +555,7 @@ lastOption =
 
 onlyOptions : List (Entry String divider)
 onlyOptions =
-    List.map Listbox.option options
+    List.map Widget.Listbox.option options
 
 
 
@@ -603,7 +581,7 @@ entriesWithKnownOptionFuzzer =
                     List.length entries
             in
             { knownOption = knownOption
-            , entries = front ++ Listbox.option knownOption :: back
+            , entries = front ++ Widget.Listbox.option knownOption :: back
             }
         )
         Fuzz.string
@@ -626,45 +604,45 @@ entryFuzzer =
 optionFuzzer : Fuzzer (Entry String divider)
 optionFuzzer =
     Fuzz.string
-        |> Fuzz.map Listbox.option
+        |> Fuzz.map Widget.Listbox.option
 
 
 dividerFuzzer : Fuzzer (Entry a String)
 dividerFuzzer =
     Fuzz.string
-        |> Fuzz.map Listbox.divider
+        |> Fuzz.map Widget.Listbox.divider
 
 
 
 -- MSG
 
 
-listArrowDownPressed : Fuzzer (Listbox.Msg String)
-listArrowDownPressed =
-    Fuzz.constant (ListArrowDownPressed id False)
+listArrowDownDown : Fuzzer (Msg String)
+listArrowDownDown =
+    Fuzz.constant (ListArrowDownDown id)
 
 
-listArrowUpPressed : Fuzzer (Listbox.Msg String)
-listArrowUpPressed =
-    Fuzz.constant (ListArrowUpPressed id False)
+listArrowUpDown : Fuzzer (Msg String)
+listArrowUpDown =
+    Fuzz.constant (ListArrowUpDown id)
 
 
-listHomePressed : Fuzzer (Listbox.Msg String)
-listHomePressed =
-    Fuzz.constant (ListHomePressed id)
+listHomeDown : Fuzzer (Msg String)
+listHomeDown =
+    Fuzz.constant (ListHomeDown id)
 
 
-listEndPressed : Fuzzer (Listbox.Msg String)
-listEndPressed =
-    Fuzz.constant (ListEndPressed id)
+listEndDown : Fuzzer (Msg String)
+listEndDown =
+    Fuzz.constant (ListEndDown id)
 
 
-listControlAPressed : Fuzzer (Listbox.Msg String)
-listControlAPressed =
-    Fuzz.constant ListControlAPressed
+listControlADown : Fuzzer (Msg String)
+listControlADown =
+    Fuzz.constant ListControlADown
 
 
-msgFuzzer : Fuzzer (Listbox.Msg String)
+msgFuzzer : Fuzzer (Msg String)
 msgFuzzer =
     Fuzz.frequency
         [ -- LIST
@@ -672,16 +650,18 @@ msgFuzzer =
         , ( 1, Fuzz.constant ListMouseUp )
         , ( 1, Fuzz.constant (ListFocused id) )
         , ( 1, Fuzz.constant ListBlured )
-        , ( 10, Fuzz.map (ListArrowUpPressed id) Fuzz.bool )
-        , ( 10, Fuzz.map (ListArrowDownPressed id) Fuzz.bool )
-        , ( 1, Fuzz.constant (ListEnterPressed id) )
-        , ( 1, Fuzz.constant (ListSpacePressed id) )
-        , ( 1, Fuzz.constant (ListShiftSpacePressed id) )
-        , ( 1, Fuzz.constant (ListHomePressed id) )
-        , ( 1, Fuzz.constant (ListControlShiftHomePressed id) )
-        , ( 1, Fuzz.constant (ListEndPressed id) )
-        , ( 1, Fuzz.constant (ListControlShiftEndPressed id) )
-        , ( 1, Fuzz.constant ListControlAPressed )
+        , ( 10, Fuzz.constant (ListArrowUpDown id) )
+        , ( 10, Fuzz.constant (ListShiftArrowUpDown id) )
+        , ( 10, Fuzz.constant (ListArrowDownDown id) )
+        , ( 10, Fuzz.constant (ListShiftArrowDownDown id) )
+        , ( 1, Fuzz.constant (ListEnterDown id) )
+        , ( 1, Fuzz.constant (ListSpaceDown id) )
+        , ( 1, Fuzz.constant (ListShiftSpaceDown id) )
+        , ( 1, Fuzz.constant (ListHomeDown id) )
+        , ( 1, Fuzz.constant (ListControlShiftHomeDown id) )
+        , ( 1, Fuzz.constant (ListEndDown id) )
+        , ( 1, Fuzz.constant (ListControlShiftEndDown id) )
+        , ( 1, Fuzz.constant ListControlADown )
 
         -- QUERY
         , ( 1
@@ -689,7 +669,7 @@ msgFuzzer =
                 |> String.toList
                 |> List.map (String.fromChar >> Fuzz.constant)
                 |> Fuzz.oneOf
-                |> Fuzz.map (ListKeyPressed id)
+                |> Fuzz.map (ListKeyDown id)
           )
 
         -- ENTRY

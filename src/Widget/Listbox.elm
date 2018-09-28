@@ -1,37 +1,16 @@
-module Widget.Listbox
-    exposing
-        ( Behaviour
-        , Effect(..)
-        , Entry
-        , Listbox(..)
-        , Msg(..)
-        , TypeAhead
-        , UpdateConfig
-        , ViewConfig
-        , Views
-        , customView
-        , divider
-        , focus
-        , focusEntry
-        , focusNextOrFirstEntry
-        , focusPreviousOrFirstEntry
-        , focusedEntry
-        , hoveredEntry
-        , init
-        , internalUpdate
-        , noDivider
-        , noTypeAhead
-        , option
-        , printListId
-        , scrollToFocus
-        , simpleTypeAhead
-        , subscriptions
-        , typeAhead
-        , update
-        , updateConfig
-        , view
-        , viewConfig
-        )
+module Widget.Listbox exposing
+    ( Listbox(..), init, view
+    , Entry, option, divider
+    , update, Msg(..), subscriptions
+    , UpdateConfig, updateConfig, Behaviour
+    , ViewConfig, viewConfig, Views, noDivider
+    , TypeAhead, noTypeAhead, simpleTypeAhead, typeAhead
+    , customView
+    , focusedEntry, hoveredEntry
+    , focusEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
+    , focus
+    , scrollToFocus
+    )
 
 {-| Implementation of the [listbox
 widget](https://www.w3.org/TR/wai-aria-practices-1.1/#Listbox):
@@ -114,18 +93,8 @@ import Browser.Dom as Dom
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
-import Internal.Entries as Internal
-    exposing
-        ( Entry(..)
-        , Next(..)
-        , Previous(..)
-        , find
-        , findNext
-        , findPrevious
-        , findWith
-        , range
-        )
 import Internal.KeyInfo as KeyInfo exposing (KeyInfo)
+import Internal.Listbox as Internal
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline as Decode
 import List.Extra as List
@@ -139,44 +108,14 @@ import Widget exposing (HtmlAttributes, HtmlDetails)
 list of entries and the currently selected option(s) live in your own model.
 -}
 type Listbox
-    = Listbox Data
-
-
-type alias Data =
-    { preventScroll : Bool
-    , query : Query
-
-    -- FOCUS
-    , maybeKeyboardFocus : Maybe String
-    , maybePendingKeyboardFocus : Maybe String
-    , maybeMouseFocus : Maybe String
-    , maybeLastSelectedEntry : Maybe String
-
-    -- DOM
-    , ulScrollTop : Float
-    , ulClientHeight : Float
-    }
-
-
-type Query
-    = NoQuery
-    | Query Int Time.Posix String
+    = Listbox Internal.Listbox
 
 
 {-| An initial listbox with no option focused.
 -}
 init : Listbox
 init =
-    Listbox
-        { preventScroll = False
-        , query = NoQuery
-        , maybeKeyboardFocus = Nothing
-        , maybePendingKeyboardFocus = Nothing
-        , maybeMouseFocus = Nothing
-        , maybeLastSelectedEntry = Nothing
-        , ulScrollTop = 0
-        , ulClientHeight = 1000
-        }
+    Listbox Internal.init
 
 
 {-| When updating or viewing a listbox you have to provide a list of entries.
@@ -190,14 +129,14 @@ type alias Entry a divider =
 -}
 option : a -> Entry a divider
 option =
-    Option
+    Internal.Option
 
 
 {-| Create a non-selectable divider.
 -}
 divider : divider -> Entry a divider
 divider =
-    Divider
+    Internal.Divider
 
 
 
@@ -209,25 +148,21 @@ used in the `view` function!
 -}
 focus : String -> Task Dom.Error ()
 focus id =
-    Dom.focus (printListId id)
+    Internal.focus id
 
 
 {-| Returns the option which currently has keyboard focus.
 -}
 focusedEntry : UpdateConfig a -> Listbox -> List (Entry a divider) -> Maybe a
-focusedEntry (UpdateConfig uniqueId _) (Listbox { maybeKeyboardFocus }) allEntries =
-    maybeKeyboardFocus
-        |> Maybe.andThen (find uniqueId allEntries)
-        |> Maybe.map Tuple.second
+focusedEntry (UpdateConfig config) (Listbox listbox) =
+    Internal.focusedEntry config listbox
 
 
 {-| Returns the option which currently has mouse focus.
 -}
 hoveredEntry : UpdateConfig a -> Listbox -> List (Entry a divider) -> Maybe a
-hoveredEntry (UpdateConfig uniqueId _) (Listbox { maybeMouseFocus }) allEntries =
-    maybeMouseFocus
-        |> Maybe.andThen (find uniqueId allEntries)
-        |> Maybe.map Tuple.second
+hoveredEntry (UpdateConfig config) (Listbox listbox) =
+    Internal.hoveredEntry config listbox
 
 
 {-| Sets the keyboard focus to the provided options.
@@ -237,14 +172,9 @@ want to apply `scrollToFocus` afterwards.
 
 -}
 focusEntry : UpdateConfig a -> a -> Listbox -> List a -> ( Listbox, List a )
-focusEntry config newEntry (Listbox data) selection =
-    let
-        (UpdateConfig uniqueId behaviour) =
-            config
-    in
-    data
-        |> updateFocus behaviour uniqueId selection False newEntry
-        |> Tuple.mapFirst focusPendingKeyboardFocus
+focusEntry (UpdateConfig config) newEntry (Listbox listbox) selection =
+    Internal.focusEntry config newEntry listbox selection
+        |> Tuple.mapFirst Listbox
 
 
 {-| Sets the keyboard focus to the next option. If `jumpAtEnds` is true and the
@@ -260,46 +190,9 @@ focusNextOrFirstEntry :
     -> Listbox
     -> List a
     -> ( Listbox, List a )
-focusNextOrFirstEntry config allEntries listbox selection =
-    let
-        (UpdateConfig uniqueId behaviour) =
-            config
-
-        (Listbox data) =
-            listbox
-    in
-    case
-        data.maybeKeyboardFocus
-            |> Maybe.andThen (find uniqueId allEntries)
-    of
-        Nothing ->
-            ( Listbox
-                { data
-                    | maybeKeyboardFocus =
-                        allEntries
-                            |> Internal.firstEntry
-                            |> Maybe.map uniqueId
-                }
-            , selection
-            )
-
-        Just ( _, keyboardFocus ) ->
-            case findNext uniqueId allEntries (uniqueId keyboardFocus) of
-                Just (First firstEntry) ->
-                    if behaviour.jumpAtEnds then
-                        data
-                            |> updateFocus behaviour uniqueId selection False firstEntry
-                            |> Tuple.mapFirst focusPendingKeyboardFocus
-                    else
-                        ( listbox, selection )
-
-                Just (Next newEntry) ->
-                    data
-                        |> updateFocus behaviour uniqueId selection False newEntry
-                        |> Tuple.mapFirst focusPendingKeyboardFocus
-
-                Nothing ->
-                    ( listbox, selection )
+focusNextOrFirstEntry (UpdateConfig config) allEntries (Listbox listbox) selection =
+    Internal.focusNextOrFirstEntry config allEntries listbox selection
+        |> Tuple.mapFirst Listbox
 
 
 {-| Sets the keyboard focus to the previous option. If `jumpAtEnds` is true and the
@@ -315,80 +208,17 @@ focusPreviousOrFirstEntry :
     -> Listbox
     -> List a
     -> ( Listbox, List a )
-focusPreviousOrFirstEntry config allEntries listbox selection =
-    let
-        (UpdateConfig uniqueId behaviour) =
-            config
-
-        (Listbox data) =
-            listbox
-
-        firstEntry entries =
-            case entries of
-                [] ->
-                    Nothing
-
-                (Divider _) :: rest ->
-                    firstEntry rest
-
-                (Option a) :: _ ->
-                    Just a
-    in
-    case
-        data.maybeKeyboardFocus
-            |> Maybe.andThen (find uniqueId allEntries)
-    of
-        Nothing ->
-            ( Listbox
-                { data
-                    | maybeKeyboardFocus =
-                        allEntries
-                            |> firstEntry
-                            |> Maybe.map uniqueId
-                }
-            , selection
-            )
-
-        Just ( _, keyboardFocus ) ->
-            case findPrevious uniqueId allEntries (uniqueId keyboardFocus) of
-                Just (Last lastEntry) ->
-                    if behaviour.jumpAtEnds then
-                        data
-                            |> updateFocus behaviour uniqueId selection False lastEntry
-                            |> Tuple.mapFirst focusPendingKeyboardFocus
-                    else
-                        ( listbox, selection )
-
-                Just (Previous newEntry) ->
-                    data
-                        |> updateFocus behaviour uniqueId selection False newEntry
-                        |> Tuple.mapFirst focusPendingKeyboardFocus
-
-                Nothing ->
-                    ( listbox, selection )
-
-
-focusPendingKeyboardFocus : Listbox -> Listbox
-focusPendingKeyboardFocus (Listbox data) =
-    Listbox
-        { data
-            | maybeKeyboardFocus = data.maybePendingKeyboardFocus
-            , maybePendingKeyboardFocus = Nothing
-        }
+focusPreviousOrFirstEntry (UpdateConfig config) allEntries (Listbox listbox) selection =
+    Internal.focusPreviousOrFirstEntry config allEntries listbox selection
+        |> Tuple.mapFirst Listbox
 
 
 {-| A command adjusting the scroll position of the listbox such that the
 current keyboard focus is visible.
 -}
 scrollToFocus : String -> Listbox -> Cmd (Msg a)
-scrollToFocus id (Listbox data) =
-    case data.maybeKeyboardFocus of
-        Nothing ->
-            Cmd.none
-
-        Just focusId ->
-            adjustScrollTop id focusId
-                |> perform
+scrollToFocus id (Listbox listbox) =
+    perform (Internal.scrollToFocus id listbox)
 
 
 
@@ -397,7 +227,7 @@ scrollToFocus id (Listbox data) =
 
 {-| -}
 type ViewConfig a divider
-    = ViewConfig (a -> String) (Views a divider)
+    = ViewConfig (Internal.ViewConfig a divider)
 
 
 {-| Generate a `ViewConfig` by providing a hash function for the entries and
@@ -405,11 +235,14 @@ a `Views` record, which holds all the styling information. You usually do
 **not** want to store this inside your model.
 -}
 viewConfig : (a -> String) -> Views a divider -> ViewConfig a divider
-viewConfig =
+viewConfig uniqueId views =
     ViewConfig
+        { uniqueId = uniqueId
+        , views = views
+        }
 
 
-{-| ** Available view customizations **
+{-| \*\* Available view customizations \*\*
 
 This is the second argument to `viewConfig`. You can customize the styling with
 the following fields:
@@ -471,19 +304,7 @@ like this:
 
 -}
 type alias Views a divider =
-    { ul : HtmlAttributes
-    , liOption :
-        { selected : Bool
-        , keyboardFocused : Bool
-        , mouseFocused : Bool
-        , maybeQuery : Maybe String
-        }
-        -> a
-        -> HtmlDetails
-    , liDivider : divider -> HtmlDetails
-    , empty : Html Never
-    , focusable : Bool
-    }
+    Internal.Views a divider
 
 
 {-| Helper function which can be used for the `liDivider` field in your view
@@ -502,18 +323,21 @@ noDivider _ =
 
 {-| -}
 type UpdateConfig a
-    = UpdateConfig (a -> String) (Behaviour a)
+    = UpdateConfig (Internal.UpdateConfig a)
 
 
 {-| Generate an `UpdateConfig` by providing a hash function for the entries and
 a `Behaviour` record.
 -}
 updateConfig : (a -> String) -> Behaviour a -> UpdateConfig a
-updateConfig =
+updateConfig uniqueId behaviour =
     UpdateConfig
+        { uniqueId = uniqueId
+        , behaviour = behaviour
+        }
 
 
-{-| ** Available behaviour customizations **
+{-| \*\* Available behaviour customizations \*\*
 
 You can customize the behaviour of the listbox with the following options:
 
@@ -563,20 +387,12 @@ for `selectionFollowsFocus = True`.
 
 -}
 type alias Behaviour a =
-    { jumpAtEnds : Bool
-    , separateFocus : Bool
-    , selectionFollowsFocus : Bool
-    , handleHomeAndEnd : Bool
-    , typeAhead : TypeAhead a
-    , minimalGap : Float
-    , initialGap : Float
-    }
+    Internal.Behaviour a
 
 
 {-| -}
-type TypeAhead a
-    = NoTypeAhead
-    | TypeAhead Int (String -> a -> Bool)
+type alias TypeAhead a =
+    Internal.TypeAhead a
 
 
 {-| Use this inside `Behaviour` if you do not want to activate the type-ahead
@@ -584,7 +400,7 @@ functionality.
 -}
 noTypeAhead : TypeAhead a
 noTypeAhead =
-    NoTypeAhead
+    Internal.noTypeAhead
 
 
 {-| Activate the type-ahead functionality. When the user types in a search
@@ -595,11 +411,8 @@ to the next matching option. The first argument is the timeout (in
 milliseconds) after which the query is reseted.
 -}
 simpleTypeAhead : Int -> (a -> String) -> TypeAhead a
-simpleTypeAhead timeout entryToString =
-    TypeAhead timeout <|
-        \query a ->
-            String.toLower (entryToString a)
-                |> String.startsWith (String.toLower query)
+simpleTypeAhead =
+    Internal.simpleTypeAhead
 
 
 {-| This works like `simpleTypeAhead` but gives you you more flexibility when
@@ -609,7 +422,7 @@ returning if the query matches this option.
 -}
 typeAhead : Int -> (String -> a -> Bool) -> TypeAhead a
 typeAhead =
-    TypeAhead
+    Internal.typeAhead
 
 
 
@@ -662,16 +475,19 @@ view :
     -> Listbox
     -> List a
     -> Html msg
-view config { id, labelledBy, lift } =
-    customView config
-        { id = id
-        , labelledBy = labelledBy
-        , lift = lift
-        , onKeyDown = Decode.fail "not handling this event here"
-        , onMouseDown = Decode.fail "not handling this event here"
-        , onMouseUp = Decode.fail "not handling this event here"
-        , onBlur = Decode.fail "not handling this event here"
-        }
+view (ViewConfig config) { id, labelledBy, lift } allEntries (Listbox listbox) selection =
+    let
+        internalCfg =
+            { id = id
+            , labelledBy = labelledBy
+            , lift = Msg >> lift
+            , onKeyDown = Decode.fail "not handling this event here"
+            , onMouseDown = Decode.fail "not handling this event here"
+            , onMouseUp = Decode.fail "not handling this event here"
+            , onBlur = Decode.fail "not handling this event here"
+            }
+    in
+    Internal.view config internalCfg allEntries listbox selection
 
 
 {-| Use this instead of `view` if you need to attach your own event handlers.
@@ -738,23 +554,19 @@ customView :
     -> Listbox
     -> List a
     -> Html msg
-customView (ViewConfig uniqueId views) cfg allEntries listbox selection =
+customView (ViewConfig config) cfg allEntries (Listbox listbox) selection =
     let
-        renderedEntries =
-            { spaceAboveFirst = 0
-            , droppedAboveFirst = 0
-            , spaceAboveSecond = 0
-            , droppedAboveSecond = 0
-            , spaceBelowFirst = 0
-            , droppedBelowFirst = 0
-            , spaceBelowSecond = 0
-            , droppedBelowSecond = 0
-            , entriesAbove = []
-            , visibleEntries = allEntries
-            , entriesBelow = []
+        internalCfg =
+            { id = cfg.id
+            , labelledBy = cfg.labelledBy
+            , lift = Msg >> cfg.lift
+            , onKeyDown = cfg.onKeyDown
+            , onMouseDown = cfg.onMouseDown
+            , onMouseUp = cfg.onMouseUp
+            , onBlur = cfg.onBlur
             }
     in
-    viewHelp renderedEntries uniqueId views cfg listbox allEntries selection
+    Internal.view config internalCfg allEntries listbox selection
 
 
 {-| TODO
@@ -776,358 +588,19 @@ viewLazy :
     -> Listbox
     -> List a
     -> Html msg
-viewLazy entryHeight dividerHeight (ViewConfig uniqueId views) cfg allEntries listbox selection =
+viewLazy entryHeight dividerHeight (ViewConfig config) cfg allEntries (Listbox listbox) selection =
     let
-        (Listbox { ulScrollTop, ulClientHeight, maybeKeyboardFocus }) =
-            listbox
-
-        renderedEntries =
-            computeRenderedEntries
-                entryHeight
-                dividerHeight
-                ulScrollTop
-                ulClientHeight
-                maybeFocusIndex
-                allEntries
-
-        maybeFocusIndex =
-            maybeKeyboardFocus
-                |> Maybe.andThen (find uniqueId allEntries)
-                |> Maybe.map Tuple.first
-    in
-    viewHelp renderedEntries uniqueId views cfg listbox allEntries selection
-
-
-viewHelp :
-    RenderedEntries a divider
-    -> (a -> String)
-    -> Views a divider
-    ->
-        { id : String
-        , labelledBy : String
-        , lift : Msg a -> msg
-        , onKeyDown : Decoder msg
-        , onMouseDown : Decoder msg
-        , onMouseUp : Decoder msg
-        , onBlur : Decoder msg
-        }
-    -> Listbox
-    -> List (Entry a divider)
-    -> List a
-    -> Html msg
-viewHelp renderedEntries uniqueId views cfg (Listbox data) allEntries selection =
-    let
-        maybeQuery =
-            case data.query of
-                NoQuery ->
-                    Nothing
-
-                Query _ _ query ->
-                    Just query
-    in
-    Html.ul
-        ([ Attributes.id (printListId cfg.id)
-         , Attributes.attribute "role" "listbox"
-         , Attributes.attribute "aria-labelledby" cfg.labelledBy
-         , Events.preventDefaultOn "keydown"
-            (Decode.oneOf
-                [ cfg.onKeyDown
-                , KeyInfo.decoder
-                    |> Decode.andThen
-                        (listKeyPress cfg.id
-                            >> Maybe.map (Decode.succeed << cfg.lift)
-                            >> Maybe.withDefault (Decode.fail "not handling that key combination")
-                        )
-                ]
-                |> preventDefault
-            )
-         , Events.on "mousedown" <|
-            Decode.oneOf
-                [ cfg.onMouseDown
-                , Decode.succeed (cfg.lift ListMouseDown)
-                ]
-         , Events.on "mouseup" <|
-            Decode.oneOf
-                [ cfg.onMouseUp
-                , Decode.succeed (cfg.lift ListMouseUp)
-                ]
-         , Events.on "focus" <|
-            Decode.map cfg.lift <|
-                Decode.succeed (ListFocused cfg.id)
-         , Events.on "blur" <|
-            Decode.oneOf
-                [ cfg.onBlur
-                , Decode.succeed (cfg.lift ListBlured)
-                ]
-         ]
-            |> setAriaActivedescendant cfg.id uniqueId data.maybeKeyboardFocus allEntries
-            |> setTabindex views.focusable
-            |> appendAttributes cfg.lift views.ul
-        )
-        (viewEntries
-            uniqueId
-            views
-            cfg
-            data.maybeKeyboardFocus
-            data.maybeMouseFocus
-            selection
-            maybeQuery
-            renderedEntries
-        )
-
-
-listKeyPress : String -> KeyInfo -> Maybe (Msg a)
-listKeyPress id { code, altDown, controlDown, metaDown, shiftDown } =
-    case code of
-        "ArrowUp" ->
-            if not altDown && not controlDown && not metaDown then
-                Just (ListArrowUpPressed id shiftDown)
-            else
-                Nothing
-
-        "ArrowDown" ->
-            if not altDown && not controlDown && not metaDown then
-                Just (ListArrowDownPressed id shiftDown)
-            else
-                Nothing
-
-        "Enter" ->
-            if not altDown && not controlDown && not metaDown && not shiftDown then
-                Just (ListEnterPressed id)
-            else
-                Nothing
-
-        " " ->
-            if not altDown && not controlDown && not metaDown && shiftDown then
-                Just (ListShiftSpacePressed id)
-            else if not altDown && not controlDown && not metaDown && not shiftDown then
-                Just (ListSpacePressed id)
-            else
-                Nothing
-
-        "Home" ->
-            if not altDown && controlDown && not metaDown && shiftDown then
-                Just (ListControlShiftHomePressed id)
-            else if not altDown && not controlDown && not metaDown && not shiftDown then
-                Just (ListHomePressed id)
-            else
-                Nothing
-
-        "End" ->
-            if not altDown && controlDown && not metaDown && shiftDown then
-                Just (ListControlShiftEndPressed id)
-            else if not altDown && not controlDown && not metaDown && not shiftDown then
-                Just (ListEndPressed id)
-            else
-                Nothing
-
-        "a" ->
-            if not altDown && controlDown && not metaDown && not shiftDown then
-                Just ListControlAPressed
-            else if
-                not altDown
-                    && not controlDown
-                    && not metaDown
-                    && not shiftDown
-                    && (String.length code == 1)
-            then
-                Just (ListKeyPressed id code)
-            else
-                Nothing
-
-        _ ->
-            if
-                not altDown
-                    && not controlDown
-                    && not metaDown
-                    && not shiftDown
-                    && (String.length code == 1)
-            then
-                Just (ListKeyPressed id code)
-            else
-                Nothing
-
-
-viewEntries :
-    (a -> String)
-    -> Views a divider
-    ->
-        { id : String
-        , labelledBy : String
-        , lift : Msg a -> msg
-        , onKeyDown : Decoder msg
-        , onMouseDown : Decoder msg
-        , onMouseUp : Decoder msg
-        , onBlur : Decoder msg
-        }
-    -> Maybe String
-    -> Maybe String
-    -> List a
-    -> Maybe String
-    -> RenderedEntries a divider
-    -> List (Html msg)
-viewEntries uniqueId views cfg maybeKeyboardFocus maybeMouseFocus selection maybeQuery renderedEntries =
-    let
-        entryConfig =
+        internalCfg =
             { id = cfg.id
-            , liOption = views.liOption
-            , liDivider = views.liDivider
-            , uniqueId = uniqueId
+            , labelledBy = cfg.labelledBy
+            , lift = Msg >> cfg.lift
+            , onKeyDown = cfg.onKeyDown
+            , onMouseDown = cfg.onMouseDown
+            , onMouseUp = cfg.onMouseUp
+            , onBlur = cfg.onBlur
             }
-
-        maybeUniqueId e =
-            case e of
-                Divider _ ->
-                    Nothing
-
-                Option a ->
-                    Just (uniqueId a)
-
-        selected e s =
-            case s of
-                [] ->
-                    False
-
-                first :: rest ->
-                    case e of
-                        Divider _ ->
-                            selected e rest
-
-                        Option a ->
-                            if first == a then
-                                True
-                            else
-                                selected e rest
-
-        viewEntryWrapper e =
-            viewEntry entryConfig
-                cfg.lift
-                maybeQuery
-                (selected e selection)
-                (maybeKeyboardFocus == maybeUniqueId e)
-                (maybeMouseFocus == maybeUniqueId e)
-                e
     in
-    List.concat
-        [ spacer renderedEntries.spaceAboveFirst
-        , renderedEntries.entriesAbove
-            |> List.map viewEntryWrapper
-        , spacer renderedEntries.spaceAboveSecond
-        , renderedEntries.visibleEntries
-            |> List.map viewEntryWrapper
-        , spacer renderedEntries.spaceBelowFirst
-        , renderedEntries.entriesBelow
-            |> List.map viewEntryWrapper
-        , spacer renderedEntries.spaceBelowSecond
-        ]
-
-
-viewEntry :
-    { id : String
-    , liOption :
-        { selected : Bool
-        , keyboardFocused : Bool
-        , mouseFocused : Bool
-        , maybeQuery : Maybe String
-        }
-        -> a
-        -> HtmlDetails
-    , liDivider : divider -> HtmlDetails
-    , uniqueId : a -> String
-    }
-    -> (Msg a -> msg)
-    -> Maybe String
-    -> Bool
-    -> Bool
-    -> Bool
-    -> Entry a divider
-    -> Html msg
-viewEntry config lift maybeQuery selected keyboardFocused mouseFocused e =
-    case e of
-        Option a ->
-            let
-                { attributes, children } =
-                    config.liOption
-                        { selected = selected
-                        , keyboardFocused = keyboardFocused
-                        , mouseFocused = mouseFocused
-                        , maybeQuery = maybeQuery
-                        }
-                        a
-
-                setAriaSelected attrs =
-                    if selected then
-                        Attributes.attribute "aria-selected" "true" :: attrs
-                    else
-                        attrs
-            in
-            Html.li
-                ([ Events.onMouseEnter (lift (EntryMouseEntered (config.uniqueId a)))
-                 , Events.onMouseLeave (lift EntryMouseLeft)
-                 , Events.onClick (lift (EntryClicked a))
-                 , Attributes.id (printEntryId config.id (config.uniqueId a))
-                 , Attributes.attribute "role" "option"
-                 ]
-                    |> setAriaSelected
-                    |> appendAttributes lift attributes
-                )
-                (children
-                    |> List.map (Html.map (\_ -> lift NoOp))
-                )
-
-        Divider d ->
-            let
-                { attributes, children } =
-                    config.liDivider d
-            in
-            Html.li
-                (appendAttributes lift attributes [])
-                (children
-                    |> List.map (Html.map (\_ -> lift NoOp))
-                )
-
-
-spacer : Float -> List (Html msg)
-spacer height =
-    [ Html.li
-        (if height == 0 then
-            [ Attributes.style "display" "none" ]
-         else
-            [ Attributes.style "height" (String.fromFloat height ++ "px") ]
-        )
-        []
-    ]
-
-
-
--- VIEW HELPER
-
-
-setAriaActivedescendant :
-    String
-    -> (a -> String)
-    -> Maybe String
-    -> List (Entry a divider)
-    -> List (Html.Attribute msg)
-    -> List (Html.Attribute msg)
-setAriaActivedescendant id uniqueId maybeKeyboardFocus entries attrs =
-    maybeKeyboardFocus
-        |> Maybe.andThen (find uniqueId entries)
-        |> Maybe.map
-            (\( _, a ) ->
-                Attributes.attribute "aria-activedescendant"
-                    (printEntryId id (uniqueId a))
-                    :: attrs
-            )
-        |> Maybe.withDefault attrs
-
-
-setTabindex : Bool -> List (Html.Attribute msg) -> List (Html.Attribute msg)
-setTabindex focusable attrs =
-    if focusable then
-        Attributes.tabindex 0 :: attrs
-    else
-        attrs
+    Internal.viewLazy entryHeight dividerHeight config internalCfg allEntries listbox selection
 
 
 
@@ -1137,39 +610,7 @@ setTabindex focusable attrs =
 {-| The listbox's message type.
 -}
 type Msg a
-    = NoOp
-      -- LIST
-    | ListMouseDown
-    | ListMouseUp
-    | ListFocused String
-    | ListBlured
-    | ListArrowUpPressed String Bool
-    | ListArrowDownPressed String Bool
-    | ListEnterPressed String
-    | ListSpacePressed String
-    | ListShiftSpacePressed String
-    | ListHomePressed String
-    | ListControlShiftHomePressed String
-    | ListEndPressed String
-    | ListControlShiftEndPressed String
-    | ListControlAPressed
-      -- QUERY
-    | ListKeyPressed String String
-    | CurrentTimeReceived String String Time.Posix
-    | Tick Time.Posix
-      -- ENTRY
-    | EntryMouseEntered String
-    | EntryMouseLeft
-    | EntryClicked a
-      -- SCROLLING
-    | InitialEntryDomElementReceived String Dom.Viewport Dom.Element Dom.Element
-    | EntryDomElementReceived String String Dom.Viewport Dom.Element Dom.Element Dom.Element
-    | ListViewportReceived Direction String Dom.Viewport
-
-
-type Direction
-    = Top
-    | Bottom
+    = Msg (Internal.Msg a)
 
 
 {-| Use this function to update the listbox state. You have to provide the same
@@ -1206,738 +647,98 @@ update :
     -> Listbox
     -> List a
     -> ( Listbox, Cmd (Msg a), List a )
-update config entries msg listbox selection =
+update (UpdateConfig config) entries (Msg msg) (Listbox listbox) selection =
     let
         ( newListbox, effect, newSelection ) =
-            internalUpdate config entries msg listbox selection
+            Internal.update config entries msg listbox selection
     in
-    ( newListbox, perform effect, newSelection )
+    ( Listbox newListbox, perform effect, newSelection )
 
 
-type Effect a
-    = CmdNone
-    | TimeNow (Posix -> Msg a)
-    | DomSetViewportOf String Float Float
-    | DomFocus String
-      -- CUSTOM
-    | ScrollListToTop (Dom.Viewport -> Msg a) String
-    | ScrollListToBottom (Dom.Viewport -> Msg a) String
-    | AdjustScrollTop (Dom.Viewport -> Dom.Element -> Dom.Element -> Msg a) String String
-    | AdjustScrollTopNew (Dom.Viewport -> Dom.Element -> Dom.Element -> Dom.Element -> Msg a) String String String
-
-
-perform : Effect a -> Cmd (Msg a)
+perform : Internal.Effect a -> Cmd (Msg a)
 perform effect =
-    case effect of
-        CmdNone ->
-            Cmd.none
-
-        TimeNow toMsg ->
-            Task.perform toMsg Time.now
-
-        DomSetViewportOf id x y ->
-            Task.attempt (\_ -> NoOp) <|
-                Dom.setViewportOf id x y
-
-        DomFocus id ->
-            Task.attempt (\_ -> NoOp) <|
-                Dom.focus id
-
-        ScrollListToTop toMsg id ->
-            Task.succeed toMsg
-                |> and (Dom.getViewportOf (printListId id))
-                |> Task.attempt
-                    (\result ->
-                        case result of
-                            Err _ ->
-                                NoOp
-
-                            Ok msg ->
-                                msg
-                    )
-
-        ScrollListToBottom toMsg id ->
-            Task.succeed toMsg
-                |> and (Dom.getViewportOf (printListId id))
-                |> Task.attempt
-                    (\result ->
-                        case result of
-                            Err _ ->
-                                NoOp
-
-                            Ok msg ->
-                                msg
-                    )
-
-        AdjustScrollTop toMsg id entryId ->
-            Task.succeed toMsg
-                |> and (Dom.getViewportOf (printListId id))
-                |> and (Dom.getElement (printListId id))
-                |> and (Dom.getElement (printEntryId id entryId))
-                |> Task.attempt
-                    (\result ->
-                        case result of
-                            Err _ ->
-                                NoOp
-
-                            Ok msg ->
-                                msg
-                    )
-
-        AdjustScrollTopNew toMsg id entryId previousEntryId ->
-            Task.succeed toMsg
-                |> and (Dom.getViewportOf (printListId id))
-                |> and (Dom.getElement (printListId id))
-                |> and (Dom.getElement (printEntryId id entryId))
-                |> and (Dom.getElement (printEntryId id previousEntryId))
-                |> Task.attempt
-                    (\result ->
-                        case result of
-                            Err _ ->
-                                NoOp
-
-                            Ok msg ->
-                                msg
-                    )
-
-
-internalUpdate :
-    UpdateConfig a
-    -> List (Entry a divider)
-    -> Msg a
-    -> Listbox
-    -> List a
-    -> ( Listbox, Effect a, List a )
-internalUpdate (UpdateConfig uniqueId behaviour) allEntries msg ((Listbox data) as listbox) selection =
-    case msg of
-        -- LIST
-        ListMouseDown ->
-            ( Listbox { data | preventScroll = True }
-            , CmdNone
-            , selection
-            )
-
-        ListMouseUp ->
-            ( Listbox { data | preventScroll = False }
-            , CmdNone
-            , selection
-            )
-
-        ListFocused id ->
-            if data.preventScroll then
-                ( listbox, CmdNone, selection )
-            else
-                ( listbox, selection )
-                    |> focusFirstEntry id uniqueId behaviour allEntries
-
-        ListBlured ->
-            ( Listbox
-                { data
-                    | preventScroll = False
-                    , query = NoQuery
-                }
-            , CmdNone
-            , selection
-            )
-
-        ListArrowUpPressed id shiftDown ->
-            case data.maybePendingKeyboardFocus of
-                Just _ ->
-                    ( listbox, CmdNone, selection )
-
-                Nothing ->
-                    case data.maybeKeyboardFocus of
-                        Nothing ->
-                            ( listbox, selection )
-                                |> focusFirstEntry id uniqueId behaviour allEntries
-                                |> resetQuery
-
-                        Just currentFocusId ->
-                            case findPrevious uniqueId allEntries currentFocusId of
-                                Just (Last lastEntry) ->
-                                    if behaviour.jumpAtEnds then
-                                        data
-                                            |> updateFocus behaviour uniqueId selection shiftDown lastEntry
-                                            |> andDo (scrollListToBottom id)
-                                    else
-                                        ( Listbox { data | query = NoQuery }
-                                        , CmdNone
-                                        , selection
-                                        )
-
-                                Just (Previous newEntry) ->
-                                    data
-                                        |> updateFocus behaviour uniqueId selection shiftDown newEntry
-                                        |> andDo (adjustScrollTopNew id (uniqueId newEntry) currentFocusId)
-
-                                Nothing ->
-                                    ( Listbox { data | query = NoQuery }
-                                    , CmdNone
-                                    , selection
-                                    )
-
-        ListArrowDownPressed id shiftDown ->
-            case data.maybePendingKeyboardFocus of
-                Just _ ->
-                    ( listbox, CmdNone, selection )
-
-                Nothing ->
-                    case data.maybeKeyboardFocus of
-                        Nothing ->
-                            ( listbox, selection )
-                                |> focusFirstEntry id uniqueId behaviour allEntries
-                                |> resetQuery
-
-                        Just currentFocusId ->
-                            case findNext uniqueId allEntries currentFocusId of
-                                Just (First firstEntry) ->
-                                    if behaviour.jumpAtEnds then
-                                        data
-                                            |> updateFocus behaviour uniqueId selection shiftDown firstEntry
-                                            |> andDo (scrollListToTop id)
-                                    else
-                                        ( Listbox { data | query = NoQuery }
-                                        , CmdNone
-                                        , selection
-                                        )
-
-                                Just (Next newEntry) ->
-                                    data
-                                        |> updateFocus behaviour uniqueId selection shiftDown newEntry
-                                        |> andDo (adjustScrollTopNew id (uniqueId newEntry) currentFocusId)
-
-                                Nothing ->
-                                    ( Listbox { data | query = NoQuery }
-                                    , CmdNone
-                                    , selection
-                                    )
-
-        ListEnterPressed id ->
-            data.maybeKeyboardFocus
-                |> Maybe.andThen (find uniqueId allEntries)
-                |> Maybe.map
-                    (\( _, a ) ->
-                        if List.member a selection then
-                            ( Listbox { data | maybeLastSelectedEntry = Nothing }
-                            , CmdNone
-                            , List.filter (\b -> a /= b) selection
-                            )
-                        else
-                            ( Listbox { data | maybeLastSelectedEntry = Just (uniqueId a) }
-                            , CmdNone
-                            , a :: selection
-                            )
-                    )
-                |> Maybe.withDefault ( listbox, CmdNone, selection )
-
-        ListSpacePressed id ->
-            data.maybeKeyboardFocus
-                |> Maybe.andThen (find uniqueId allEntries)
-                |> Maybe.map
-                    (\( _, a ) ->
-                        if List.member a selection then
-                            ( Listbox { data | maybeLastSelectedEntry = Nothing }
-                            , CmdNone
-                            , List.filter (\b -> a /= b) selection
-                            )
-                        else
-                            ( Listbox { data | maybeLastSelectedEntry = Just (uniqueId a) }
-                            , CmdNone
-                            , a :: selection
-                            )
-                    )
-                |> Maybe.withDefault ( listbox, CmdNone, selection )
-
-        ListShiftSpacePressed id ->
-            case ( data.maybeKeyboardFocus, data.maybeLastSelectedEntry ) of
-                ( Just keyboardFocus, Just lastSelectedEntry ) ->
-                    case range uniqueId keyboardFocus lastSelectedEntry allEntries of
-                        [] ->
-                            ( listbox, CmdNone, selection )
-
-                        selectedEntries ->
-                            ( Listbox { data | maybeLastSelectedEntry = Just keyboardFocus }
-                            , CmdNone
-                            , List.uniqueBy uniqueId (selectedEntries ++ selection)
-                            )
-
-                _ ->
-                    ( listbox, CmdNone, selection )
-
-        ListHomePressed id ->
-            case Internal.firstEntry allEntries of
-                Nothing ->
-                    ( listbox, CmdNone, selection )
-
-                Just firstEntry ->
-                    data
-                        |> updateFocus behaviour uniqueId selection False firstEntry
-                        |> andDo (scrollListToTop id)
-
-        ListControlShiftHomePressed id ->
-            case Internal.firstEntry allEntries of
-                Nothing ->
-                    ( listbox, CmdNone, selection )
-
-                Just firstEntry ->
-                    let
-                        newFocus =
-                            uniqueId firstEntry
-                    in
-                    case data.maybeKeyboardFocus of
-                        Nothing ->
-                            ( listbox, CmdNone, selection )
-
-                        Just keyboardFocus ->
-                            case range uniqueId newFocus keyboardFocus allEntries of
-                                [] ->
-                                    ( listbox, CmdNone, selection )
-
-                                selectedEntries ->
-                                    ( Listbox
-                                        { data
-                                            | maybeKeyboardFocus = Just newFocus
-                                            , maybeMouseFocus =
-                                                if behaviour.separateFocus then
-                                                    data.maybeMouseFocus
-                                                else
-                                                    Just newFocus
-                                            , maybeLastSelectedEntry = Just newFocus
-                                        }
-                                    , scrollListToTop id
-                                    , List.uniqueBy uniqueId (selectedEntries ++ selection)
-                                    )
-
-        ListEndPressed id ->
-            case Internal.lastEntry allEntries of
-                Nothing ->
-                    ( listbox, CmdNone, selection )
-
-                Just lastEntry ->
-                    data
-                        |> updateFocus behaviour uniqueId selection False lastEntry
-                        |> andDo (scrollListToBottom id)
-
-        ListControlShiftEndPressed id ->
-            case Internal.lastEntry allEntries of
-                Nothing ->
-                    ( listbox, CmdNone, selection )
-
-                Just lastEntry ->
-                    let
-                        newFocus =
-                            uniqueId lastEntry
-                    in
-                    case data.maybeKeyboardFocus of
-                        Nothing ->
-                            ( listbox, CmdNone, selection )
-
-                        Just keyboardFocus ->
-                            case range uniqueId newFocus keyboardFocus allEntries of
-                                [] ->
-                                    ( listbox, CmdNone, selection )
-
-                                selectedEntries ->
-                                    ( Listbox
-                                        { data
-                                            | maybeKeyboardFocus = Just newFocus
-                                            , maybeMouseFocus =
-                                                if behaviour.separateFocus then
-                                                    data.maybeMouseFocus
-                                                else
-                                                    Just newFocus
-                                            , maybeLastSelectedEntry = Just newFocus
-                                        }
-                                    , scrollListToBottom id
-                                    , List.uniqueBy uniqueId (selectedEntries ++ selection)
-                                    )
-
-        ListControlAPressed ->
-            let
-                allEntriesSet =
-                    allEntries
-                        |> List.filterMap
-                            (\e ->
-                                case e of
-                                    Divider _ ->
-                                        Nothing
-
-                                    Option a ->
-                                        Just (uniqueId a)
-                            )
-                        |> Set.fromList
-
-                allEntriesList =
-                    allEntries
-                        |> List.filterMap
-                            (\e ->
-                                case e of
-                                    Divider _ ->
-                                        Nothing
-
-                                    Option a ->
-                                        Just a
-                            )
-
-                selectionSet =
-                    selection
-                        |> List.map uniqueId
-                        |> Set.fromList
-            in
-            ( listbox
-            , CmdNone
-            , if Set.isEmpty (Set.diff allEntriesSet selectionSet) then
-                []
-              else
-                allEntriesList
-            )
-
-        -- QUERY
-        ListKeyPressed id code ->
-            case behaviour.typeAhead of
-                NoTypeAhead ->
-                    ( listbox, CmdNone, selection )
-
-                TypeAhead _ _ ->
-                    ( listbox
-                    , TimeNow (CurrentTimeReceived id code)
-                    , selection
-                    )
-
-        CurrentTimeReceived id code currentTime ->
-            case behaviour.typeAhead of
-                NoTypeAhead ->
-                    ( listbox, CmdNone, selection )
-
-                TypeAhead timeout matchesQuery ->
-                    let
-                        ( newQuery, queryText ) =
-                            case data.query of
-                                NoQuery ->
-                                    ( Query timeout currentTime code, code )
-
-                                Query _ _ query ->
-                                    ( Query timeout currentTime (query ++ code), query ++ code )
-
-                        newKeyboardFocus =
-                            case data.maybeKeyboardFocus of
-                                Nothing ->
-                                    Nothing
-
-                                Just keyboardFocus ->
-                                    findWith matchesQuery uniqueId keyboardFocus queryText allEntries
-                    in
-                    case newKeyboardFocus of
-                        Nothing ->
-                            ( listbox, CmdNone, selection )
-
-                        Just newFocus ->
-                            ( Listbox
-                                { data
-                                    | query = newQuery
-                                    , maybeKeyboardFocus = Just newFocus
-                                    , maybeMouseFocus =
-                                        if behaviour.separateFocus then
-                                            data.maybeMouseFocus
-                                        else
-                                            Just newFocus
-                                }
-                            , adjustScrollTop id newFocus
-                            , selection
-                            )
-
-        Tick currentTime ->
-            ( case data.query of
-                NoQuery ->
-                    listbox
-
-                Query timeout time _ ->
-                    if Time.posixToMillis currentTime - Time.posixToMillis time > timeout then
-                        Listbox { data | query = NoQuery }
-                    else
-                        listbox
-            , CmdNone
-            , selection
-            )
-
-        -- ENTRY
-        EntryMouseEntered newFocus ->
-            ( Listbox
-                { data
-                    | maybeKeyboardFocus =
-                        if behaviour.separateFocus then
-                            data.maybeKeyboardFocus
-                        else
-                            Just newFocus
-                    , maybeMouseFocus = Just newFocus
-                }
-            , CmdNone
-            , selection
-            )
-
-        EntryMouseLeft ->
-            ( Listbox
-                { data
-                    | maybeMouseFocus =
-                        if behaviour.separateFocus then
-                            Nothing
-                        else
-                            data.maybeMouseFocus
-                }
-            , CmdNone
-            , selection
-            )
-
-        EntryClicked a ->
-            ( Listbox
-                { data
-                    | query = NoQuery
-
-                    -- FOCUS
-                    , maybeKeyboardFocus = Just (uniqueId a)
-                    , maybeMouseFocus = Just (uniqueId a)
-                    , maybeLastSelectedEntry = Just (uniqueId a)
-                }
-            , CmdNone
-            , if List.member a selection then
-                List.filter (\b -> a /= b) selection
-              else
-                a :: selection
-            )
-
-        -- SCROLLING
-        InitialEntryDomElementReceived id { viewport } list li ->
-            let
-                liY =
-                    li.element.y - list.element.y + viewport.y
-
-                liHeight =
-                    li.element.height
-
-                entryHidden =
-                    (liY + liHeight - behaviour.minimalGap < viewport.y)
-                        || (liY + behaviour.minimalGap > viewport.y + viewport.height)
-
-                centerEntry =
-                    DomSetViewportOf (printListId id) viewport.x <|
-                        (liY + liHeight / 2 - viewport.height / 2)
-            in
-            ( Listbox
-                { data
-                    | maybeKeyboardFocus =
-                        data.maybePendingKeyboardFocus
-                            |> or data.maybeKeyboardFocus
-                    , maybePendingKeyboardFocus = Nothing
-                }
-            , if entryHidden then
-                centerEntry
-              else
-                CmdNone
-            , selection
-            )
-
-        EntryDomElementReceived entryId id { viewport } list li previousLi ->
-            let
-                -- MEASUREMENTS
-                liY =
-                    li.element.y - list.element.y + viewport.y
-
-                liHeight =
-                    li.element.height
-
-                previousLiY =
-                    previousLi.element.y - list.element.y + viewport.y
-
-                previousLiHeight =
-                    previousLi.element.height
-
-                -- CONDITIONS
-                previousEntryHidden =
-                    (previousLiY + previousLiHeight < viewport.y)
-                        || (previousLiY > viewport.y + viewport.height)
-
-                newEntryTooLow =
-                    liY + liHeight + behaviour.minimalGap > viewport.y + viewport.height
-
-                newEntryTooHigh =
-                    liY - behaviour.minimalGap < viewport.y
-
-                -- ACTIONS
-                centerNewEntry =
-                    DomSetViewportOf (printListId id) viewport.x <|
-                        (liY + liHeight / 2 - viewport.height / 2)
-
-                scrollDownToNewEntry =
-                    DomSetViewportOf (printListId id) viewport.x <|
-                        (liY + liHeight - viewport.height + behaviour.initialGap)
-
-                scrollUpToNewEntry =
-                    DomSetViewportOf (printListId id) viewport.x <|
-                        (liY - behaviour.initialGap)
-            in
-            ( Listbox
-                { data
-                    | maybeKeyboardFocus = data.maybePendingKeyboardFocus
-                    , maybePendingKeyboardFocus = Nothing
-                }
-            , if previousEntryHidden then
-                centerNewEntry
-              else if newEntryTooLow then
-                scrollDownToNewEntry
-              else if newEntryTooHigh then
-                scrollUpToNewEntry
-              else
-                CmdNone
-            , selection
-            )
-
-        ListViewportReceived direction id list ->
-            ( Listbox
-                { data
-                    | maybeKeyboardFocus = data.maybePendingKeyboardFocus
-                    , maybePendingKeyboardFocus = Nothing
-                }
-            , case direction of
-                Top ->
-                    DomSetViewportOf (printListId id) list.viewport.x 0
-
-                Bottom ->
-                    DomSetViewportOf (printListId id) list.viewport.x list.scene.height
-            , selection
-            )
-
-        NoOp ->
-            ( listbox, CmdNone, selection )
-
-
-andDo : effect -> ( a, b ) -> ( a, effect, b )
-andDo effect ( a, b ) =
-    ( a, effect, b )
-
-
-or : Maybe a -> Maybe a -> Maybe a
-or fallback default =
-    case default of
-        Nothing ->
-            fallback
-
-        Just _ ->
-            default
-
-
-resetQuery : ( Listbox, Effect a, List a ) -> ( Listbox, Effect a, List a )
-resetQuery ( Listbox data, effect, selection ) =
-    ( Listbox { data | query = NoQuery }, effect, selection )
-
-
-focusFirstEntry :
-    String
-    -> (a -> String)
-    -> Behaviour a
-    -> List (Entry a divider)
-    -> ( Listbox, List a )
-    -> ( Listbox, Effect a, List a )
-focusFirstEntry id uniqueId behaviour allEntries ( listbox, selection ) =
-    let
-        (Listbox data) =
-            listbox
-
-        maybeNewEntry =
-            data.maybeKeyboardFocus
-                |> or data.maybeLastSelectedEntry
-                |> Maybe.andThen (find uniqueId allEntries)
-                |> Maybe.map Tuple.second
-                |> or (List.head selection)
-                |> Maybe.andThen (uniqueId >> find uniqueId allEntries)
-                |> Maybe.map Tuple.second
-                |> or (Internal.firstEntry allEntries)
-    in
-    case maybeNewEntry of
-        Nothing ->
-            ( listbox, CmdNone, selection )
-
-        Just newEntry ->
-            updateFocus behaviour uniqueId selection False newEntry data
-                |> (if data.preventScroll then
-                        Tuple.mapFirst focusPendingKeyboardFocus
-                            >> andDo CmdNone
-                    else
-                        andDo (adjustScrollTop id (uniqueId newEntry))
-                   )
-
-
-updateFocus :
-    { b
-        | separateFocus : Bool
-        , selectionFollowsFocus : Bool
-    }
-    -> (a -> String)
-    -> List a
-    -> Bool
-    -> a
-    -> Data
-    -> ( Listbox, List a )
-updateFocus behaviour uniqueId selection shiftDown newEntry data =
-    let
-        newFocus =
-            uniqueId newEntry
-    in
-    if behaviour.selectionFollowsFocus then
-        ( Listbox
-            { data
-                | query = NoQuery
-                , maybePendingKeyboardFocus = Just newFocus
-                , maybeMouseFocus =
-                    if behaviour.separateFocus then
-                        data.maybeMouseFocus
-                    else
-                        Just newFocus
-                , maybeLastSelectedEntry = Just newFocus
-            }
-        , newEntry :: selection
-        )
-    else if shiftDown then
-        if List.member newEntry selection then
-            ( Listbox
-                { data
-                    | query = NoQuery
-                    , maybePendingKeyboardFocus = Just newFocus
-                    , maybeMouseFocus =
-                        if behaviour.separateFocus then
-                            data.maybeMouseFocus
-                        else
-                            Just newFocus
-                    , maybeLastSelectedEntry = Nothing
-                }
-            , List.remove newEntry selection
-            )
-        else
-            ( Listbox
-                { data
-                    | query = NoQuery
-                    , maybePendingKeyboardFocus = Just newFocus
-                    , maybeMouseFocus =
-                        if behaviour.separateFocus then
-                            data.maybeMouseFocus
-                        else
-                            Just newFocus
-                    , maybeLastSelectedEntry = Just newFocus
-                }
-            , newEntry :: selection
-            )
-    else
-        ( Listbox
-            { data
-                | query = NoQuery
-                , maybePendingKeyboardFocus = Just newFocus
-                , maybeMouseFocus =
-                    if behaviour.separateFocus then
-                        data.maybeMouseFocus
-                    else
-                        Just newFocus
-            }
-        , selection
-        )
+    Cmd.map Msg <|
+        case effect of
+            Internal.CmdNone ->
+                Cmd.none
+
+            Internal.TimeNow toMsg ->
+                Task.perform toMsg Time.now
+
+            Internal.DomSetViewportOf id x y ->
+                Task.attempt (\_ -> Internal.NoOp) <|
+                    Dom.setViewportOf id x y
+
+            Internal.DomFocus id ->
+                Task.attempt (\_ -> Internal.NoOp) <|
+                    Dom.focus id
+
+            Internal.ScrollListToTop toMsg id ->
+                Task.succeed toMsg
+                    |> and (Dom.getViewportOf (Internal.printListId id))
+                    |> Task.attempt
+                        (\result ->
+                            case result of
+                                Err _ ->
+                                    Internal.NoOp
+
+                                Ok msg ->
+                                    msg
+                        )
+
+            Internal.ScrollListToBottom toMsg id ->
+                Task.succeed toMsg
+                    |> and (Dom.getViewportOf (Internal.printListId id))
+                    |> Task.attempt
+                        (\result ->
+                            case result of
+                                Err _ ->
+                                    Internal.NoOp
+
+                                Ok msg ->
+                                    msg
+                        )
+
+            Internal.AdjustScrollTop toMsg id entryId ->
+                Task.map3 Internal.InitialEntryDomData
+                    (Dom.getViewportOf (Internal.printListId id))
+                    (Dom.getElement (Internal.printListId id))
+                    (Dom.getElement (Internal.printEntryId id entryId))
+                    |> Task.attempt
+                        (\result ->
+                            case result of
+                                Err _ ->
+                                    Internal.NoOp
+
+                                Ok initialEntryDomData ->
+                                    toMsg initialEntryDomData
+                        )
+
+            Internal.AdjustScrollTopNew toMsg id entryId previousEntryId ->
+                Task.map4 Internal.EntryDomData
+                    (Dom.getViewportOf (Internal.printListId id))
+                    (Dom.getElement (Internal.printListId id))
+                    (Dom.getElement (Internal.printEntryId id entryId))
+                    (Dom.getElement (Internal.printEntryId id previousEntryId))
+                    |> Task.attempt
+                        (\result ->
+                            case result of
+                                Err _ ->
+                                    Internal.NoOp
+
+                                Ok entryDomData ->
+                                    toMsg entryDomData
+                        )
+
+
+and : Task x a -> Task x (a -> b) -> Task x b
+and task previousTask =
+    Task.map2 apply previousTask task
+
+
+apply : (a -> b) -> a -> b
+apply f a =
+    f a
 
 
 
@@ -1951,236 +752,5 @@ updateFocus behaviour uniqueId selection shiftDown newEntry data =
 
 -}
 subscriptions : Listbox -> Sub (Msg a)
-subscriptions (Listbox data) =
-    case data.query of
-        NoQuery ->
-            Sub.none
-
-        Query timeout _ _ ->
-            Time.every (toFloat (timeout // 3)) Tick
-
-
-
--- EFFECTS
-
-
-focusList : String -> Effect a
-focusList id =
-    DomFocus (printListId id)
-
-
-scrollListToTop : String -> Effect a
-scrollListToTop id =
-    ScrollListToTop (ListViewportReceived Top id) id
-
-
-scrollListToBottom : String -> Effect a
-scrollListToBottom id =
-    ScrollListToBottom (ListViewportReceived Bottom id) id
-
-
-adjustScrollTop : String -> String -> Effect a
-adjustScrollTop id =
-    AdjustScrollTop (InitialEntryDomElementReceived id) id
-
-
-adjustScrollTopNew : String -> String -> String -> Effect a
-adjustScrollTopNew id entryId =
-    AdjustScrollTopNew (EntryDomElementReceived entryId id) id entryId
-
-
-and task previousTask =
-    Task.map2 apply previousTask task
-
-
-apply f a =
-    f a
-
-
-
----- IDS
-
-
-printListId : String -> String
-printListId id =
-    id ++ "__element-list"
-
-
-printEntryId : String -> String -> String
-printEntryId id entryId =
-    id ++ "__element--" ++ entryId
-
-
-
--- MISC
-
-
-appendAttributes :
-    (Msg a -> msg)
-    -> List (Html.Attribute Never)
-    -> List (Html.Attribute msg)
-    -> List (Html.Attribute msg)
-appendAttributes lift neverAttrs attrs =
-    neverAttrs
-        |> List.map (Attributes.map (\_ -> lift NoOp))
-        |> List.append attrs
-
-
-preventDefault : Decoder msg -> Decoder ( msg, Bool )
-preventDefault decoder =
-    decoder
-        |> Decode.map (\msg -> ( msg, True ))
-
-
-allowDefault : Decoder msg -> Decoder ( msg, Bool )
-allowDefault decoder =
-    decoder
-        |> Decode.map (\msg -> ( msg, False ))
-
-
-
----- COMPUTE RENDERED ENTRIES
-
-
-type alias RenderedEntries a divider =
-    { spaceAboveFirst : Float
-    , droppedAboveFirst : Int
-    , spaceAboveSecond : Float
-    , droppedAboveSecond : Int
-    , spaceBelowFirst : Float
-    , droppedBelowFirst : Int
-    , spaceBelowSecond : Float
-    , droppedBelowSecond : Int
-    , entriesAbove : List (Entry a divider)
-    , visibleEntries : List (Entry a divider)
-    , entriesBelow : List (Entry a divider)
-    }
-
-
-computeRenderedEntries :
-    (a -> Float)
-    -> (divider -> Float)
-    -> Float
-    -> Float
-    -> Maybe Int
-    -> List (Entry a divider)
-    -> RenderedEntries a divider
-computeRenderedEntries entryHeight dividerHeight ulScrollTop ulClientHeight maybeFocusIndex entries =
-    --let
-    --    initialRenderedEntries =
-    --        { spaceAboveFirst = 0
-    --        , droppedAboveFirst = 0
-    --        , spaceAboveSecond = 0
-    --        , droppedAboveSecond = 0
-    --        , spaceBelowFirst = 0
-    --        , droppedBelowFirst = 0
-    --        , spaceBelowSecond = 0
-    --        , droppedBelowSecond = 0
-    --        , entriesAbove = []
-    --        , visibleEntries = []
-    --        , entriesBelow = []
-    --        }
-    --    withoutIndex e currentHeight data =
-    --        let
-    --            height =
-    --                entryHeight e
-    --        in
-    --        if currentHeight < ulScrollTop - 200 then
-    --            -- entry is above the rendered range
-    --            { data
-    --                | spaceAboveFirst = data.spaceAboveFirst + height
-    --                , droppedAboveFirst = data.droppedAboveFirst + 1
-    --            }
-    --        else if currentHeight >= (ulScrollTop + ulClientHeight + 200) then
-    --            { data
-    --                | spaceBelowFirst = data.spaceBelowFirst + height
-    --                , droppedBelowFirst = data.droppedBelowFirst + 1
-    --            }
-    --        else
-    --            -- entry is within the rendered range
-    --            { data | visibleEntries = e :: data.visibleEntries }
-    --    withIndex index currentIndex e currentHeight data =
-    --        let
-    --            height =
-    --                entryHeight e
-    --        in
-    --        if currentHeight < ulScrollTop - 200 then
-    --            -- entry is above the rendered range
-    --            if currentIndex < index - 1 then
-    --                -- entry is before focused entry
-    --                { data
-    --                    | spaceAboveFirst = data.spaceAboveFirst + height
-    --                    , droppedAboveFirst = data.droppedAboveFirst + 1
-    --                }
-    --            else if currentIndex > index + 1 then
-    --                -- entry is after focused entry
-    --                { data
-    --                    | spaceAboveSecond = data.spaceAboveSecond + height
-    --                    , droppedAboveSecond = data.droppedAboveSecond + 1
-    --                }
-    --            else
-    --                -- entry is focused or next to focused entry
-    --                { data | entriesAbove = e :: data.entriesAbove }
-    --        else if currentHeight > (ulScrollTop + ulClientHeight + 200) then
-    --            -- entry is below the rendered range
-    --            if currentIndex < index - 1 then
-    --                -- entry is before focused entry
-    --                { data
-    --                    | spaceBelowFirst = data.spaceBelowFirst + height
-    --                    , droppedBelowFirst = data.droppedBelowFirst + 1
-    --                }
-    --            else if currentIndex > index + 1 then
-    --                -- entry is after focused entry
-    --                { data
-    --                    | spaceBelowSecond = data.spaceBelowSecond + height
-    --                    , droppedBelowSecond = data.droppedBelowSecond + 1
-    --                }
-    --            else
-    --                -- entry is focused or next to focused entry
-    --                { data | entriesBelow = e :: data.entriesBelow }
-    --        else
-    --            -- entry is within the rendered range
-    --            { data | visibleEntries = e :: data.visibleEntries }
-    --    reverseLists renderedEntries =
-    --        { renderedEntries
-    --            | entriesAbove = List.reverse renderedEntries.entriesAbove
-    --            , visibleEntries = List.reverse renderedEntries.visibleEntries
-    --            , entriesBelow = List.reverse renderedEntries.entriesBelow
-    --        }
-    --in
-    --reverseLists <|
-    --    case maybeFocusIndex of
-    --        Nothing ->
-    --            entries
-    --                |> List.foldl
-    --                    (\e ( currentHeight, data ) ->
-    --                        ( currentHeight + entryHeight e
-    --                        , withoutIndex e currentHeight data
-    --                        )
-    --                    )
-    --                    ( 0, initialRenderedEntries )
-    --                |> Tuple.second
-    --        Just index ->
-    --            entries
-    --                |> List.foldl
-    --                    (\e ( ( currentIndex, currentHeight ), data ) ->
-    --                        ( ( currentIndex + 1
-    --                          , currentHeight + entryHeight e
-    --                          )
-    --                        , withIndex index currentIndex e currentHeight data
-    --                        )
-    --                    )
-    --                    ( ( 0, 0 ), initialRenderedEntries )
-    --                |> Tuple.second
-    { spaceAboveFirst = 0
-    , droppedAboveFirst = 0
-    , spaceAboveSecond = 0
-    , droppedAboveSecond = 0
-    , spaceBelowFirst = 0
-    , droppedBelowFirst = 0
-    , spaceBelowSecond = 0
-    , droppedBelowSecond = 0
-    , entriesAbove = []
-    , visibleEntries = entries
-    , entriesBelow = []
-    }
+subscriptions (Listbox listbox) =
+    Sub.map Msg (Internal.subscriptions listbox)
