@@ -32,6 +32,7 @@ module Internal.Listbox exposing
 
 import Accessibility.Aria as Aria
 import Accessibility.Role as Role
+import Accessibility.Widget as Widget
 import Browser.Dom as Dom
 import Html exposing (Html)
 import Html.Attributes as Attributes
@@ -56,7 +57,7 @@ type alias Listbox =
 
     -- FOCUS
     , focus : Focus
-    , maybeMouseFocus : Maybe String
+    , hover : Maybe String
     , maybeLastSelectedEntry : Maybe String
 
     -- DOM
@@ -136,10 +137,10 @@ findFocus uniqueId allEntries f =
             Nothing
 
         Focus current ->
-            Maybe.map Tuple.second (find uniqueId allEntries current)
+            find uniqueId allEntries current
 
         Pending { next } ->
-            Maybe.map Tuple.second (find uniqueId allEntries next)
+            find uniqueId allEntries next
 
 
 
@@ -151,7 +152,7 @@ init =
     { preventScroll = False
     , query = NoQuery
     , focus = NoFocus
-    , maybeMouseFocus = Nothing
+    , hover = Nothing
     , maybeLastSelectedEntry = Nothing
     , ulScrollTop = 0
     , ulClientHeight = 1000
@@ -177,10 +178,9 @@ focusedEntry { uniqueId } listbox allEntries =
 
 
 hoveredEntry : UpdateConfig a -> Listbox -> List (Entry a divider) -> Maybe a
-hoveredEntry { uniqueId } { maybeMouseFocus } allEntries =
-    maybeMouseFocus
+hoveredEntry { uniqueId } { hover } allEntries =
+    hover
         |> Maybe.andThen (find uniqueId allEntries)
-        |> Maybe.map Tuple.second
 
 
 focusEntry : UpdateConfig a -> a -> Listbox -> List a -> ( Listbox, List a )
@@ -299,8 +299,8 @@ type alias Views a divider =
     { ul : HtmlAttributes
     , liOption :
         { selected : Bool
-        , keyboardFocused : Bool
-        , mouseFocused : Bool
+        , focused : Bool
+        , hovered : Bool
         , maybeQuery : Maybe String
         }
         -> a
@@ -359,7 +359,7 @@ view :
     -> Listbox
     -> List a
     -> Html msg
-view { uniqueId, views } cfg allEntries listbox selection =
+view { uniqueId, views } customization allEntries listbox selection =
     let
         renderedEntries =
             { spaceAboveFirst = 0
@@ -375,7 +375,7 @@ view { uniqueId, views } cfg allEntries listbox selection =
             , entriesBelow = []
             }
     in
-    viewHelp renderedEntries uniqueId views cfg listbox allEntries selection
+    viewHelp renderedEntries uniqueId views customization allEntries listbox selection
 
 
 viewLazy :
@@ -407,14 +407,12 @@ viewLazy entryHeight dividerHeight { uniqueId, views } cfg allEntries listbox se
                     Nothing
 
                 Focus current ->
-                    find uniqueId allEntries current
-                        |> Maybe.map Tuple.first
+                    indexOf uniqueId allEntries current
 
                 Pending { current } ->
-                    find uniqueId allEntries current
-                        |> Maybe.map Tuple.first
+                    indexOf uniqueId allEntries current
     in
-    viewHelp renderedEntries uniqueId views cfg listbox allEntries selection
+    viewHelp renderedEntries uniqueId views cfg allEntries listbox selection
 
 
 viewHelp :
@@ -422,63 +420,52 @@ viewHelp :
     -> (a -> String)
     -> Views a divider
     -> Customization a msg
-    -> Listbox
     -> List (Entry a divider)
+    -> Listbox
     -> List a
     -> Html msg
-viewHelp renderedEntries uniqueId views cfg data allEntries selection =
+viewHelp renderedEntries uniqueId views customization allEntries listbox selection =
     let
-        maybeQuery =
-            case data.query of
-                NoQuery ->
-                    Nothing
+        { id, lift, labelledBy, onKeyDown, onMouseUp, onMouseDown, onBlur } =
+            customization
 
-                Query _ _ query ->
-                    Just query
+        viewEntries =
+            List.map (viewEntry uniqueId views customization listbox selection)
     in
     Html.ul
-        ([ Attributes.id (printListId cfg.id)
+        ([ Attributes.id (printListId id)
          , Role.listBox
-         , Aria.labelledBy cfg.labelledBy
-         , Events.preventDefaultOn "keydown"
-            (Decode.oneOf
-                [ cfg.onKeyDown
-                , Decode.andThen (listKeyPress cfg.id >> Decode.map cfg.lift)
-                    KeyInfo.decoder
-                ]
-                |> preventDefault
-            )
+         , Aria.labelledBy labelledBy
+         , Events.preventDefaultOn "keydown" <|
+            preventDefault <|
+                Decode.oneOf
+                    [ onKeyDown
+                    , Decode.andThen
+                        (listKeyPress id >> Decode.map lift)
+                        KeyInfo.decoder
+                    ]
          , Events.on "mousedown" <|
-            Decode.oneOf
-                [ cfg.onMouseDown
-                , Decode.succeed (cfg.lift ListMouseDown)
-                ]
+            Decode.oneOf [ onMouseDown, Decode.succeed (lift ListMouseDown) ]
          , Events.on "mouseup" <|
-            Decode.oneOf
-                [ cfg.onMouseUp
-                , Decode.succeed (cfg.lift ListMouseUp)
-                ]
+            Decode.oneOf [ onMouseUp, Decode.succeed (lift ListMouseUp) ]
          , Events.on "focus" <|
-            Decode.succeed (cfg.lift (ListFocused cfg.id))
+            Decode.succeed (lift (ListFocused id))
          , Events.on "blur" <|
-            Decode.oneOf
-                [ cfg.onBlur
-                , Decode.succeed (cfg.lift ListBlured)
-                ]
+            Decode.oneOf [ onBlur, Decode.succeed (lift ListBlured) ]
          ]
-            |> setAriaActivedescendant cfg.id uniqueId data.focus allEntries
+            |> setAriaActivedescendant id uniqueId listbox.focus allEntries
             |> setTabindex views.focusable
-            |> appendAttributes cfg.lift views.ul
+            |> appendAttributes lift views.ul
         )
-        (viewEntries
-            uniqueId
-            views
-            cfg
-            data.focus
-            data.maybeMouseFocus
-            selection
-            maybeQuery
-            renderedEntries
+        (List.concat
+            [ spacer renderedEntries.spaceAboveFirst
+            , viewEntries renderedEntries.entriesAbove
+            , spacer renderedEntries.spaceAboveSecond
+            , viewEntries renderedEntries.visibleEntries
+            , spacer renderedEntries.spaceBelowFirst
+            , viewEntries renderedEntries.entriesBelow
+            , spacer renderedEntries.spaceBelowSecond
+            ]
         )
 
 
@@ -573,129 +560,61 @@ listKeyPress id { code, altDown, controlDown, metaDown, shiftDown } =
                 notHandlingThatKey
 
 
-viewEntries :
+viewEntry :
     (a -> String)
     -> Views a divider
     -> Customization a msg
-    -> Focus
-    -> Maybe String
+    -> Listbox
     -> List a
-    -> Maybe String
-    -> RenderedEntries a divider
-    -> List (Html msg)
-viewEntries uniqueId views cfg f maybeMouseFocus selection maybeQuery renderedEntries =
-    let
-        entryConfig =
-            { id = cfg.id
-            , liOption = views.liOption
-            , liDivider = views.liDivider
-            , uniqueId = uniqueId
-            }
-
-        maybeUniqueId e =
-            case e of
-                Divider _ ->
-                    Nothing
-
-                Option a ->
-                    Just (uniqueId a)
-
-        selected e s =
-            case s of
-                [] ->
-                    False
-
-                first :: rest ->
-                    case e of
-                        Divider _ ->
-                            selected e rest
-
-                        Option a ->
-                            if first == a then
-                                True
-
-                            else
-                                selected e rest
-
-        viewEntryWrapper e =
-            viewEntry entryConfig
-                cfg.lift
-                maybeQuery
-                (selected e selection)
-                (maybeUniqueId e
-                    |> Maybe.map (isFocused f)
-                    |> Maybe.withDefault False
-                )
-                (maybeMouseFocus == maybeUniqueId e)
-                e
-    in
-    List.concat
-        [ spacer renderedEntries.spaceAboveFirst
-        , renderedEntries.entriesAbove
-            |> List.map viewEntryWrapper
-        , spacer renderedEntries.spaceAboveSecond
-        , renderedEntries.visibleEntries
-            |> List.map viewEntryWrapper
-        , spacer renderedEntries.spaceBelowFirst
-        , renderedEntries.entriesBelow
-            |> List.map viewEntryWrapper
-        , spacer renderedEntries.spaceBelowSecond
-        ]
-
-
-viewEntry :
-    { id : String
-    , liOption :
-        { selected : Bool
-        , keyboardFocused : Bool
-        , mouseFocused : Bool
-        , maybeQuery : Maybe String
-        }
-        -> a
-        -> HtmlDetails
-    , liDivider : divider -> HtmlDetails
-    , uniqueId : a -> String
-    }
-    -> (Msg a -> msg)
-    -> Maybe String
-    -> Bool
-    -> Bool
-    -> Bool
     -> Entry a divider
     -> Html msg
-viewEntry config lift maybeQuery selected keyboardFocused mouseFocused e =
-    case e of
-        Option a ->
+viewEntry uniqueId config { id, lift } listbox selection entry =
+    let
+        mapNever =
+            List.map (Html.map (\_ -> lift NoOp))
+    in
+    case entry of
+        Option option ->
             let
+                hash =
+                    uniqueId option
+
+                selected =
+                    List.any ((==) option) selection
+
                 { attributes, children } =
                     config.liOption
                         { selected = selected
-                        , keyboardFocused = keyboardFocused
-                        , mouseFocused = mouseFocused
-                        , maybeQuery = maybeQuery
+                        , focused = isFocused listbox.focus hash
+                        , hovered = listbox.hover == Just hash
+                        , maybeQuery =
+                            case listbox.query of
+                                NoQuery ->
+                                    Nothing
+
+                                Query _ _ query ->
+                                    Just query
                         }
-                        a
+                        option
 
                 setAriaSelected attrs =
                     if selected then
-                        Attributes.attribute "aria-selected" "true" :: attrs
+                        Widget.selected True :: attrs
 
                     else
                         attrs
             in
             Html.li
-                ([ Events.onMouseEnter (lift (EntryMouseEntered (config.uniqueId a)))
+                ([ Events.onMouseEnter (lift (EntryMouseEntered hash))
                  , Events.onMouseLeave (lift EntryMouseLeft)
-                 , Events.onClick (lift (EntryClicked a))
-                 , Attributes.id (printEntryId config.id (config.uniqueId a))
+                 , Events.onClick (lift (EntryClicked option))
+                 , Attributes.id (printEntryId id hash)
                  , Role.option
                  ]
                     |> setAriaSelected
                     |> appendAttributes lift attributes
                 )
-                (children
-                    |> List.map (Html.map (\_ -> lift NoOp))
-                )
+                (mapNever children)
 
         Divider d ->
             let
@@ -704,9 +623,7 @@ viewEntry config lift maybeQuery selected keyboardFocused mouseFocused e =
             in
             Html.li
                 (appendAttributes lift attributes [])
-                (children
-                    |> List.map (Html.map (\_ -> lift NoOp))
-                )
+                (mapNever children)
 
 
 spacer : Float -> List (Html msg)
@@ -1031,9 +948,9 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                                     to
                                         { listbox
                                             | focus = schedule newFocus listbox.focus
-                                            , maybeMouseFocus =
+                                            , hover =
                                                 if behaviour.separateFocus then
-                                                    listbox.maybeMouseFocus
+                                                    listbox.hover
 
                                                 else
                                                     Just newFocus
@@ -1051,9 +968,9 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                                     to
                                         { listbox
                                             | focus = schedule newFocus listbox.focus
-                                            , maybeMouseFocus =
+                                            , hover =
                                                 if behaviour.separateFocus then
-                                                    listbox.maybeMouseFocus
+                                                    listbox.hover
 
                                                 else
                                                     Just newFocus
@@ -1091,9 +1008,9 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                                     to
                                         { listbox
                                             | focus = schedule newFocus listbox.focus
-                                            , maybeMouseFocus =
+                                            , hover =
                                                 if behaviour.separateFocus then
-                                                    listbox.maybeMouseFocus
+                                                    listbox.hover
 
                                                 else
                                                     Just newFocus
@@ -1111,9 +1028,9 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                                     to
                                         { listbox
                                             | focus = schedule newFocus listbox.focus
-                                            , maybeMouseFocus =
+                                            , hover =
                                                 if behaviour.separateFocus then
-                                                    listbox.maybeMouseFocus
+                                                    listbox.hover
 
                                                 else
                                                     Just newFocus
@@ -1208,9 +1125,9 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                                 { listbox
                                     | query = newQuery
                                     , focus = Focus newFocus
-                                    , maybeMouseFocus =
+                                    , hover =
                                         if behaviour.separateFocus then
-                                            listbox.maybeMouseFocus
+                                            listbox.hover
 
                                         else
                                             Just newFocus
@@ -1242,18 +1159,18 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
 
                         else
                             Focus newFocus
-                    , maybeMouseFocus = Just newFocus
+                    , hover = Just newFocus
                 }
 
         EntryMouseLeft ->
             to
                 { listbox
-                    | maybeMouseFocus =
+                    | hover =
                         if behaviour.separateFocus then
                             Nothing
 
                         else
-                            listbox.maybeMouseFocus
+                            listbox.hover
                 }
 
         EntryClicked a ->
@@ -1263,7 +1180,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
 
                     -- FOCUS
                     , focus = Focus (uniqueId a)
-                    , maybeMouseFocus = Just (uniqueId a)
+                    , hover = Just (uniqueId a)
                     , maybeLastSelectedEntry = Just (uniqueId a)
                 }
                 |> toggle a
@@ -1399,10 +1316,8 @@ focusFirstEntry id { uniqueId, behaviour } allEntries listbox selection =
         maybeNewEntry =
             listbox.maybeLastSelectedEntry
                 |> Maybe.andThen (find uniqueId allEntries)
-                |> Maybe.map Tuple.second
                 |> or (List.head selection)
                 |> Maybe.andThen (uniqueId >> find uniqueId allEntries)
-                |> Maybe.map Tuple.second
                 |> or (firstEntry allEntries)
 
         resetQuery ( newListbox, effect, newSelection ) =
@@ -1507,9 +1422,9 @@ updateFocus behaviour uniqueId selection shiftDown newEntry listbox =
         ( { listbox
             | query = NoQuery
             , focus = schedule newFocus listbox.focus
-            , maybeMouseFocus =
+            , hover =
                 if behaviour.separateFocus then
-                    listbox.maybeMouseFocus
+                    listbox.hover
 
                 else
                     Just newFocus
@@ -1523,9 +1438,9 @@ updateFocus behaviour uniqueId selection shiftDown newEntry listbox =
             ( { listbox
                 | query = NoQuery
                 , focus = schedule newFocus listbox.focus
-                , maybeMouseFocus =
+                , hover =
                     if behaviour.separateFocus then
-                        listbox.maybeMouseFocus
+                        listbox.hover
 
                     else
                         Just newFocus
@@ -1538,9 +1453,9 @@ updateFocus behaviour uniqueId selection shiftDown newEntry listbox =
             ( { listbox
                 | query = NoQuery
                 , focus = schedule newFocus listbox.focus
-                , maybeMouseFocus =
+                , hover =
                     if behaviour.separateFocus then
-                        listbox.maybeMouseFocus
+                        listbox.hover
 
                     else
                         Just newFocus
@@ -1553,9 +1468,9 @@ updateFocus behaviour uniqueId selection shiftDown newEntry listbox =
         ( { listbox
             | query = NoQuery
             , focus = schedule newFocus listbox.focus
-            , maybeMouseFocus =
+            , hover =
                 if behaviour.separateFocus then
-                    listbox.maybeMouseFocus
+                    listbox.hover
 
                 else
                     Just newFocus
@@ -1644,9 +1559,16 @@ printEntryId id entryId =
 --- FIND
 
 
-find : (a -> String) -> List (Entry a divider) -> String -> Maybe ( Int, a )
-find =
-    findHelp 0
+indexOf : (a -> String) -> List (Entry a divider) -> String -> Maybe Int
+indexOf uniqueId entries selectedId =
+    findHelp 0 uniqueId entries selectedId
+        |> Maybe.map Tuple.first
+
+
+find : (a -> String) -> List (Entry a divider) -> String -> Maybe a
+find uniqueId entries selectedId =
+    findHelp 0 uniqueId entries selectedId
+        |> Maybe.map Tuple.second
 
 
 findHelp :

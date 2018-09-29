@@ -92,9 +92,9 @@ architectureTest =
             \_ _ { listbox } ->
                 listbox.focus
                     |> expectValidFocus
-        , invariantTest "maybeMouseFocus" listboxApp <|
+        , invariantTest "hover" listboxApp <|
             \_ _ { listbox } ->
-                listbox.maybeMouseFocus
+                listbox.hover
                     |> expectValidOption
         , describe "listBlured"
             [ msgTest "keeps keyboardFocus" listboxApp (Fuzz.constant ListBlured) <|
@@ -272,8 +272,8 @@ expectUnchangedFocus before after =
 
 expectUnchangedHover : Model -> Model -> Expectation
 expectUnchangedHover before after =
-    before.listbox.maybeMouseFocus
-        |> Expect.equal after.listbox.maybeMouseFocus
+    before.listbox.hover
+        |> Expect.equal after.listbox.hover
 
 
 expectFirstOptionFocused : Model -> Expectation
@@ -323,8 +323,8 @@ listboxApp =
                     ++ Debug.toString listbox.query
                 , "      , ulScrollTop    = "
                     ++ Debug.toString listbox.ulScrollTop
-                    ++ ",        maybeMouseFocus           = "
-                    ++ Debug.toString listbox.maybeMouseFocus
+                    ++ ",        hover           = "
+                    ++ Debug.toString listbox.hover
                 , "      , ulClientHeight = "
                     ++ Debug.toString listbox.ulClientHeight
                     ++ ",     maybeLastSelectedEntry    = "

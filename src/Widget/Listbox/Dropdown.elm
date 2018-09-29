@@ -192,8 +192,8 @@ type alias Views a divider =
     , ul : HtmlAttributes
     , liOption :
         { selected : Bool
-        , keyboardFocused : Bool
-        , mouseFocused : Bool
+        , focused : Bool
+        , hovered : Bool
         , maybeQuery : Maybe String
         }
         -> a

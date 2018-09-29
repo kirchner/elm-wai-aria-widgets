@@ -156,13 +156,13 @@ viewConfig =
     Listbox.viewConfig identity
         { ul = [ Attributes.class "list" ]
         , liOption =
-            \{ selected, keyboardFocused, mouseFocused, maybeQuery } name ->
+            \{ selected, focused, hovered, maybeQuery } name ->
                 { attributes =
                     [ Attributes.class "entry"
                     , Attributes.classList
                         [ ( "entry--selected", selected )
-                        , ( "entry--keyboard-focused", keyboardFocused )
-                        , ( "entry--mouse-focused", mouseFocused )
+                        , ( "entry--keyboard-focused", focused )
+                        , ( "entry--mouse-focused", hovered )
                         ]
                     ]
                 , children = liChildren maybeQuery name
