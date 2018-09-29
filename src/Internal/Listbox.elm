@@ -686,12 +686,6 @@ preventDefault decoder =
         |> Decode.map (\msg -> ( msg, True ))
 
 
-allowDefault : Decoder msg -> Decoder ( msg, Bool )
-allowDefault decoder =
-    decoder
-        |> Decode.map (\msg -> ( msg, False ))
-
-
 
 ---- UPDATE
 
