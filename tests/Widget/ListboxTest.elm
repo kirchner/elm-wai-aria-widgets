@@ -27,9 +27,61 @@ import Widget.Listbox
 
 suite : Test
 suite =
+    let
+        config behaviour =
+            { uniqueId = identity
+            , behaviour = behaviour
+            }
+
+        behaviours =
+            List.map (\behaviour -> behaviour Listbox.NoTypeAhead 0 0)
+                [ Listbox.Behaviour False False False False
+                , Listbox.Behaviour False False False True
+                , Listbox.Behaviour False False True False
+                , Listbox.Behaviour False False True True
+                , Listbox.Behaviour False True False False
+                , Listbox.Behaviour False True False True
+                , Listbox.Behaviour False True True False
+                , Listbox.Behaviour False True True True
+                , Listbox.Behaviour True False False False
+                , Listbox.Behaviour True False False True
+                , Listbox.Behaviour True False True False
+                , Listbox.Behaviour True False True True
+                , Listbox.Behaviour True True False False
+                , Listbox.Behaviour True True False True
+                , Listbox.Behaviour True True True False
+                , Listbox.Behaviour True True True True
+                ]
+
+        behaviourToTest behaviour =
+            describe (behaviourToString behaviour)
+                [ architectureTests (config behaviour)
+                , functionTests (config behaviour)
+                ]
+
+        behaviourToString behaviour =
+            String.join ", "
+                [ with "jumpAtEnds" behaviour.jumpAtEnds
+                , with "separateFocus" behaviour.separateFocus
+                , with "selectionFollowsFocus" behaviour.selectionFollowsFocus
+                , with "handleHomeAndEnd" behaviour.handleHomeAndEnd
+                ]
+
+        with name value =
+            if value then
+                "with " ++ name
+
+            else
+                "without " ++ name
+    in
+    behaviours
+        |> List.map behaviourToTest
+        |> concat
+
+
+functionTests updateConfig =
     concat
-        [ architectureTest
-        , describe "initial Listbox"
+        [ describe "initial Listbox"
             [ fuzz entriesFuzzer "has no hoveredEntry" <|
                 Listbox.hoveredEntry updateConfig Listbox.init
                     >> Expect.equal Nothing
@@ -43,10 +95,15 @@ suite =
                     let
                         selection =
                             []
+
+                        ( listbox, _ ) =
+                            Listbox.focusEntry updateConfig
+                                knownOption
+                                Listbox.init
+                                selection
                     in
-                    Listbox.focusEntry updateConfig knownOption Listbox.init selection
-                        |> Tuple.mapFirst (focusedEntry entries)
-                        |> Expect.equal ( Just knownOption, [] )
+                    Listbox.focusedEntry updateConfig listbox entries
+                        |> Expect.equal (Just knownOption)
             , describe "after focusNextOrFirstEntry"
                 [ fuzz2 Fuzz.string entriesFuzzer "on initial Listbox" <|
                     \option entries ->
@@ -56,13 +113,15 @@ suite =
 
                             actualEntries =
                                 Widget.Listbox.option option :: entries
+
+                            ( listbox, _ ) =
+                                Listbox.focusNextOrFirstEntry updateConfig
+                                    actualEntries
+                                    Listbox.init
+                                    selection
                         in
-                        Listbox.focusNextOrFirstEntry updateConfig
-                            actualEntries
-                            Listbox.init
-                            selection
-                            |> Tuple.mapFirst (focusedEntry actualEntries)
-                            |> Expect.equal ( Just option, [] )
+                        Listbox.focusedEntry updateConfig listbox actualEntries
+                            |> Expect.equal (Just option)
                 ]
             , describe "after focusPreviousOrFirstEntry"
                 [ fuzz2 Fuzz.string entriesFuzzer "on initial Listbox" <|
@@ -73,39 +132,45 @@ suite =
 
                             actualEntries =
                                 Widget.Listbox.option option :: entries
+
+                            ( listbox, _ ) =
+                                Listbox.focusPreviousOrFirstEntry updateConfig
+                                    actualEntries
+                                    Listbox.init
+                                    selection
                         in
-                        Listbox.focusPreviousOrFirstEntry updateConfig
-                            actualEntries
-                            Listbox.init
-                            selection
-                            |> Tuple.mapFirst (focusedEntry actualEntries)
-                            |> Expect.equal ( Just option, [] )
+                        Listbox.focusedEntry updateConfig listbox actualEntries
+                            |> Expect.equal (Just option)
                 ]
             ]
         ]
 
 
-architectureTest : Test
-architectureTest =
+architectureTests : UpdateConfig String -> Test
+architectureTests ({ behaviour } as updateConfig) =
+    let
+        app =
+            listboxApp updateConfig
+    in
     concat
-        [ invariantTest "maybeKeyboardFocus" listboxApp <|
+        [ invariantTest "maybeKeyboardFocus" app <|
             \_ _ { listbox } ->
                 listbox.focus
                     |> expectValidFocus
-        , invariantTest "hover" listboxApp <|
+        , invariantTest "hover" app <|
             \_ _ { listbox } ->
                 listbox.hover
                     |> expectValidOption
         , describe "listBlured"
-            [ msgTest "keeps keyboardFocus" listboxApp (Fuzz.constant ListBlured) <|
+            [ msgTest "keeps keyboardFocus" app (Fuzz.constant ListBlured) <|
                 \before _ after ->
                     expectUnchangedFocus before after
-            , msgTest "keeps mouseFocus" listboxApp (Fuzz.constant ListBlured) <|
+            , msgTest "keeps mouseFocus" app (Fuzz.constant ListBlured) <|
                 \before _ after ->
                     expectUnchangedHover before after
             ]
         , describe "arrowDown"
-            [ msgTest "moves keyboardFocus to next option" listboxApp listArrowDownDown <|
+            [ msgTest "moves keyboardFocus to next option" app listArrowDownDown <|
                 \before _ after ->
                     case ( before.listbox.focus, after.listbox.focus ) of
                         ( Just focusBefore, Just focusAfter ) ->
@@ -117,12 +182,17 @@ architectureTest =
                             in
                             case maybeNextOption of
                                 Nothing ->
-                                    focusAfter
-                                        |> Expect.equal focusBefore
+                                    if behaviour.jumpAtEnds then
+                                        focusAfter
+                                            |> Expect.equal firstOption
+
+                                    else
+                                        focusAfter
+                                            |> Expect.equal focusBefore
 
                                 Just nextOption ->
-                                    nextOption
-                                        |> Expect.equal focusAfter
+                                    focusAfter
+                                        |> Expect.equal nextOption
 
                         ( Nothing, Just afterKeyboardFocus ) ->
                             case after.listbox.maybeLastSelectedEntry of
@@ -147,7 +217,7 @@ architectureTest =
                             Expect.fail "Expected the listbox to have a keyboardFocus"
             ]
         , describe "arrowUp"
-            [ msgTest "moves keyboardFocus to previous option" listboxApp listArrowUpDown <|
+            [ msgTest "moves keyboardFocus to previous option" app listArrowUpDown <|
                 \before _ after ->
                     case ( before.listbox.focus, after.listbox.focus ) of
                         ( Just focusBefore, Just focusAfter ) ->
@@ -159,12 +229,17 @@ architectureTest =
                             in
                             case maybePreviousOption of
                                 Nothing ->
-                                    focusAfter
-                                        |> Expect.equal focusBefore
+                                    if behaviour.jumpAtEnds then
+                                        focusAfter
+                                            |> Expect.equal lastOption
+
+                                    else
+                                        focusAfter
+                                            |> Expect.equal focusBefore
 
                                 Just previousOption ->
-                                    previousOption
-                                        |> Expect.equal focusAfter
+                                    focusAfter
+                                        |> Expect.equal previousOption
 
                         ( Nothing, Just afterKeyboardFocus ) ->
                             case after.listbox.maybeLastSelectedEntry of
@@ -189,17 +264,17 @@ architectureTest =
                             Expect.fail "Expected the listbox to have a keyboardFocus"
             ]
         , describe "home"
-            [ msgTest "moves keyboardFocus to first option" listboxApp listHomeDown <|
+            [ msgTest "moves keyboardFocus to first option" app listHomeDown <|
                 \_ _ after ->
                     expectFirstOptionFocused after
             ]
         , describe "end"
-            [ msgTest "moves keyboardFocus to last option" listboxApp listEndDown <|
+            [ msgTest "moves keyboardFocus to last option" app listEndDown <|
                 \_ _ after ->
                     expectLastOptionFocused after
             ]
         , describe "controlA"
-            [ msgTest "controlA selects/deselects all options" listboxApp listControlADown <|
+            [ msgTest "controlA selects/deselects all options" app listControlADown <|
                 \before _ after ->
                     if List.sort before.selection == List.sort options then
                         expectNothingSelected after
@@ -279,29 +354,29 @@ expectEverythingSelected { selection } =
 ---- SETUP
 
 
-listboxApp : TestedApp Model (Msg String)
-listboxApp =
+listboxApp : UpdateConfig String -> TestedApp Model (Msg String)
+listboxApp updateConfig =
     { model = ConstantModel (Model Listbox.init [] (Time.millisToPosix 0))
-    , update = UpdateWithoutCmds update
+    , update = UpdateWithoutCmds (update updateConfig)
     , msgFuzzer = msgFuzzer
     , msgToString = Debug.toString
     , modelToString =
         \{ listbox, selection } ->
             String.join "\n"
                 [ "listbox ="
-                , "      { preventScroll  = "
+                , "      { preventScroll          = "
                     ++ Debug.toString listbox.preventScroll
-                    ++ ",    maybeKeyboardFocus        = "
+                    ++ ",   focus = "
                     ++ Debug.toString listbox.focus
-                , "      , query          = "
+                , "      , query                  = "
                     ++ Debug.toString listbox.query
-                , "      , ulScrollTop    = "
-                    ++ Debug.toString listbox.ulScrollTop
-                    ++ ",        hover           = "
+                    ++ ", hover = "
                     ++ Debug.toString listbox.hover
-                , "      , ulClientHeight = "
+                , "      , ulScrollTop            = "
+                    ++ Debug.toString listbox.ulScrollTop
+                , "      , ulClientHeight         = "
                     ++ Debug.toString listbox.ulClientHeight
-                    ++ ",     maybeLastSelectedEntry    = "
+                , "      , maybeLastSelectedEntry = "
                     ++ Debug.toString listbox.maybeLastSelectedEntry
                 , "      }"
                 , "\n    selection ="
@@ -317,8 +392,8 @@ type alias Model =
     }
 
 
-update : Msg String -> Model -> Model
-update msg model =
+update : Listbox.UpdateConfig String -> Msg String -> Model -> Model
+update updateConfig msg model =
     let
         ( newListbox, effect, newSelection ) =
             Listbox.update updateConfig
@@ -343,20 +418,20 @@ update msg model =
             newModel
 
         TimeNow toMsg ->
-            update (toMsg model.now) newModel
+            update updateConfig (toMsg model.now) newModel
 
         DomSetViewportOf _ _ _ ->
             newModel
 
         DomFocus targetId ->
             if targetId == Listbox.printListId id then
-                update (ListFocused id) newModel
+                update updateConfig (ListFocused id) newModel
 
             else
                 newModel
 
         ScrollListToTop toMsg _ ->
-            update
+            update updateConfig
                 (toMsg
                     { scene = listboxScene
                     , viewport =
@@ -370,7 +445,7 @@ update msg model =
                 newModel
 
         ScrollListToBottom toMsg _ ->
-            update
+            update updateConfig
                 (toMsg
                     { scene = listboxScene
                     , viewport =
@@ -395,7 +470,7 @@ update msg model =
                         }
                     }
             in
-            update
+            update updateConfig
                 (toMsg
                     { viewportList = viewportOfList
                     , elementList = elementOfList
@@ -416,7 +491,7 @@ update msg model =
                         }
                     }
             in
-            update
+            update updateConfig
                 (toMsg
                     { viewportList = viewportOfList
                     , elementList = elementOfList
@@ -482,35 +557,7 @@ elementOfEntry entryId =
 
 
 
----- HELPER
-
-
-focusedEntry : List (Entry String divider) -> Listbox -> Maybe String
-focusedEntry entries listbox =
-    Listbox.focusedEntry updateConfig listbox entries
-
-
-
 ---- FIXTURES
-
-
-updateConfig : UpdateConfig String
-updateConfig =
-    { uniqueId = identity
-    , behaviour =
-        { jumpAtEnds = False
-        , separateFocus = True
-        , selectionFollowsFocus = False
-        , handleHomeAndEnd = True
-        , typeAhead = Listbox.NoTypeAhead
-        , minimalGap = 0
-        , initialGap = 0
-        }
-    }
-
-
-
--- ENTRIES
 
 
 options : List String
