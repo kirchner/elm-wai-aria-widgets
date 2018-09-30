@@ -150,8 +150,8 @@ updateConfig =
         , selectionFollowsFocus = False
         , handleHomeAndEnd = True
         , typeAhead = Listbox.simpleTypeAhead 200 identity
-        , minimalGap = 30
-        , initialGap = 100
+        , minimalGap = 0
+        , initialGap = 0
         }
 
 
