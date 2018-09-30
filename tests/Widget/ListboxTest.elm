@@ -79,6 +79,7 @@ suite =
         |> concat
 
 
+functionTests : UpdateConfig String -> Test
 functionTests updateConfig =
     concat
         [ describe "initial Listbox"
@@ -155,12 +156,10 @@ architectureTests ({ behaviour } as updateConfig) =
     concat
         [ invariantTest "maybeKeyboardFocus" app <|
             \_ _ { listbox } ->
-                listbox.focus
-                    |> expectValidFocus
+                expectValidFocus listbox.focus
         , invariantTest "hover" app <|
             \_ _ { listbox } ->
-                listbox.hover
-                    |> expectValidOption
+                expectValidOption listbox.hover
         , describe "listBlured"
             [ msgTest "keeps keyboardFocus" app (Fuzz.constant ListBlured) <|
                 \before _ after ->
@@ -172,96 +171,38 @@ architectureTests ({ behaviour } as updateConfig) =
         , describe "arrowDown"
             [ msgTest "moves keyboardFocus to next option" app listArrowDownDown <|
                 \before _ after ->
-                    case ( before.listbox.focus, after.listbox.focus ) of
-                        ( Just focusBefore, Just focusAfter ) ->
-                            let
-                                maybeNextOption =
-                                    options
-                                        |> List.splitWhen ((==) focusBefore)
-                                        |> Maybe.andThen (Tuple.second >> List.drop 1 >> List.head)
-                            in
-                            case maybeNextOption of
-                                Nothing ->
-                                    if behaviour.jumpAtEnds then
-                                        focusAfter
-                                            |> Expect.equal firstOption
-
-                                    else
-                                        focusAfter
-                                            |> Expect.equal focusBefore
-
-                                Just nextOption ->
-                                    focusAfter
-                                        |> Expect.equal nextOption
-
-                        ( Nothing, Just afterKeyboardFocus ) ->
-                            case after.listbox.maybeLastSelectedEntry of
-                                Nothing ->
-                                    afterKeyboardFocus
-                                        |> Expect.equal firstOption
-
-                                Just afterLastSelectedEntry ->
-                                    afterKeyboardFocus
-                                        |> Expect.equal afterLastSelectedEntry
-
-                        ( Just focusBefore, Nothing ) ->
-                            case after.listbox.focus of
-                                Just afterKeyboardFocus ->
-                                    afterKeyboardFocus
-                                        |> Expect.equal focusBefore
-
-                                Nothing ->
-                                    Expect.fail "Expected the listbox to not loose its keyboardFocus"
-
-                        ( Nothing, Nothing ) ->
-                            Expect.fail "Expected the listbox to have a keyboardFocus"
+                    ( before, after )
+                        |> Expect.all
+                            [ expectNextOrFirstOptionFocused behaviour
+                            , Tuple.second >> expectNoPendingFocus
+                            ]
+            ]
+        , describe "shiftArrowDown"
+            [ msgTest "moves keyboardFocus to next option" app listShiftArrowDownDown <|
+                \before _ after ->
+                    ( before, after )
+                        |> Expect.all
+                            [ expectNextOrFirstOptionFocused behaviour
+                            , Tuple.second >> expectNoPendingFocus
+                            ]
             ]
         , describe "arrowUp"
             [ msgTest "moves keyboardFocus to previous option" app listArrowUpDown <|
                 \before _ after ->
-                    case ( before.listbox.focus, after.listbox.focus ) of
-                        ( Just focusBefore, Just focusAfter ) ->
-                            let
-                                maybePreviousOption =
-                                    options
-                                        |> List.splitWhen ((==) focusBefore)
-                                        |> Maybe.andThen (Tuple.first >> List.reverse >> List.head)
-                            in
-                            case maybePreviousOption of
-                                Nothing ->
-                                    if behaviour.jumpAtEnds then
-                                        focusAfter
-                                            |> Expect.equal lastOption
-
-                                    else
-                                        focusAfter
-                                            |> Expect.equal focusBefore
-
-                                Just previousOption ->
-                                    focusAfter
-                                        |> Expect.equal previousOption
-
-                        ( Nothing, Just afterKeyboardFocus ) ->
-                            case after.listbox.maybeLastSelectedEntry of
-                                Nothing ->
-                                    afterKeyboardFocus
-                                        |> Expect.equal firstOption
-
-                                Just afterLastSelectedEntry ->
-                                    afterKeyboardFocus
-                                        |> Expect.equal afterLastSelectedEntry
-
-                        ( Just focusBefore, Nothing ) ->
-                            case after.listbox.focus of
-                                Just afterKeyboardFocus ->
-                                    afterKeyboardFocus
-                                        |> Expect.equal focusBefore
-
-                                Nothing ->
-                                    Expect.fail "Expected the listbox to not loose its keyboardFocus"
-
-                        ( Nothing, Nothing ) ->
-                            Expect.fail "Expected the listbox to have a keyboardFocus"
+                    ( before, after )
+                        |> Expect.all
+                            [ expectPreviousOrFirstOptionFocused behaviour
+                            , Tuple.second >> expectNoPendingFocus
+                            ]
+            ]
+        , describe "shiftArrowUp"
+            [ msgTest "moves keyboardFocus to previous option" app listShiftArrowUpDown <|
+                \before _ after ->
+                    ( before, after )
+                        |> Expect.all
+                            [ expectPreviousOrFirstOptionFocused behaviour
+                            , Tuple.second >> expectNoPendingFocus
+                            ]
             ]
         , describe "home"
             [ msgTest "moves keyboardFocus to first option" app listHomeDown <|
@@ -348,6 +289,106 @@ expectEverythingSelected { selection } =
     selection
         |> List.sort
         |> Expect.equalLists (List.sort options)
+
+
+expectNoPendingFocus : Model -> Expectation
+expectNoPendingFocus { listbox } =
+    listbox.pendingFocus
+        |> Expect.equal Nothing
+
+
+expectNextOrFirstOptionFocused : Listbox.Behaviour String -> ( Model, Model ) -> Expectation
+expectNextOrFirstOptionFocused behaviour ( before, after ) =
+    case ( before.listbox.focus, after.listbox.focus ) of
+        ( Just focusBefore, Just focusAfter ) ->
+            let
+                maybeNextOption =
+                    options
+                        |> List.splitWhen ((==) focusBefore)
+                        |> Maybe.andThen (Tuple.second >> List.drop 1 >> List.head)
+            in
+            case maybeNextOption of
+                Nothing ->
+                    if behaviour.jumpAtEnds then
+                        focusAfter
+                            |> Expect.equal firstOption
+
+                    else
+                        focusAfter
+                            |> Expect.equal focusBefore
+
+                Just nextOption ->
+                    focusAfter
+                        |> Expect.equal nextOption
+
+        ( Nothing, Just afterKeyboardFocus ) ->
+            case after.listbox.maybeLastSelectedEntry of
+                Nothing ->
+                    afterKeyboardFocus
+                        |> Expect.equal firstOption
+
+                Just afterLastSelectedEntry ->
+                    afterKeyboardFocus
+                        |> Expect.equal afterLastSelectedEntry
+
+        ( Just focusBefore, Nothing ) ->
+            case after.listbox.focus of
+                Just afterKeyboardFocus ->
+                    afterKeyboardFocus
+                        |> Expect.equal focusBefore
+
+                Nothing ->
+                    Expect.fail "Expected the listbox to not loose its keyboardFocus"
+
+        ( Nothing, Nothing ) ->
+            Expect.fail "Expected the listbox to have a keyboardFocus"
+
+
+expectPreviousOrFirstOptionFocused : Listbox.Behaviour String -> ( Model, Model ) -> Expectation
+expectPreviousOrFirstOptionFocused behaviour ( before, after ) =
+    case ( before.listbox.focus, after.listbox.focus ) of
+        ( Just focusBefore, Just focusAfter ) ->
+            let
+                maybePreviousOption =
+                    options
+                        |> List.splitWhen ((==) focusBefore)
+                        |> Maybe.andThen (Tuple.first >> List.reverse >> List.head)
+            in
+            case maybePreviousOption of
+                Nothing ->
+                    if behaviour.jumpAtEnds then
+                        focusAfter
+                            |> Expect.equal lastOption
+
+                    else
+                        focusAfter
+                            |> Expect.equal focusBefore
+
+                Just previousOption ->
+                    focusAfter
+                        |> Expect.equal previousOption
+
+        ( Nothing, Just afterKeyboardFocus ) ->
+            case after.listbox.maybeLastSelectedEntry of
+                Nothing ->
+                    afterKeyboardFocus
+                        |> Expect.equal firstOption
+
+                Just afterLastSelectedEntry ->
+                    afterKeyboardFocus
+                        |> Expect.equal afterLastSelectedEntry
+
+        ( Just focusBefore, Nothing ) ->
+            case after.listbox.focus of
+                Just afterKeyboardFocus ->
+                    afterKeyboardFocus
+                        |> Expect.equal focusBefore
+
+                Nothing ->
+                    Expect.fail "Expected the listbox to not loose its keyboardFocus"
+
+        ( Nothing, Nothing ) ->
+            Expect.fail "Expected the listbox to have a keyboardFocus"
 
 
 
@@ -650,9 +691,19 @@ listArrowDownDown =
     Fuzz.constant (ListArrowDownDown id)
 
 
+listShiftArrowDownDown : Fuzzer (Msg String)
+listShiftArrowDownDown =
+    Fuzz.constant (ListShiftArrowDownDown id)
+
+
 listArrowUpDown : Fuzzer (Msg String)
 listArrowUpDown =
     Fuzz.constant (ListArrowUpDown id)
+
+
+listShiftArrowUpDown : Fuzzer (Msg String)
+listShiftArrowUpDown =
+    Fuzz.constant (ListShiftArrowUpDown id)
 
 
 listHomeDown : Fuzzer (Msg String)
@@ -678,18 +729,18 @@ msgFuzzer =
         , ( 1, Fuzz.constant ListMouseUp )
         , ( 1, Fuzz.constant (ListFocused id) )
         , ( 1, Fuzz.constant ListBlured )
-        , ( 10, Fuzz.constant (ListArrowUpDown id) )
-        , ( 10, Fuzz.constant (ListShiftArrowUpDown id) )
-        , ( 10, Fuzz.constant (ListArrowDownDown id) )
-        , ( 10, Fuzz.constant (ListShiftArrowDownDown id) )
+        , ( 10, listArrowUpDown )
+        , ( 10, listShiftArrowUpDown )
+        , ( 10, listArrowDownDown )
+        , ( 10, listShiftArrowDownDown )
         , ( 1, Fuzz.constant (ListEnterDown id) )
         , ( 1, Fuzz.constant (ListSpaceDown id) )
         , ( 1, Fuzz.constant (ListShiftSpaceDown id) )
-        , ( 1, Fuzz.constant (ListHomeDown id) )
+        , ( 1, listHomeDown )
         , ( 1, Fuzz.constant (ListControlShiftHomeDown id) )
-        , ( 1, Fuzz.constant (ListEndDown id) )
+        , ( 1, listEndDown )
         , ( 1, Fuzz.constant (ListControlShiftEndDown id) )
-        , ( 1, Fuzz.constant ListControlADown )
+        , ( 1, listControlADown )
 
         -- QUERY
         , ( 1
