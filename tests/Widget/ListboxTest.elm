@@ -20,6 +20,7 @@ import Internal.Listbox as Listbox
         , UpdateConfig
         )
 import List.Extra as List
+import Set
 import Test exposing (..)
 import Time exposing (Posix)
 import Widget.Listbox
@@ -175,6 +176,11 @@ architectureTests ({ behaviour } as updateConfig) =
                         |> Expect.all
                             [ expectNextOrFirstOptionFocused behaviour
                             , Tuple.second >> expectNoPendingFocus
+                            , if behaviour.selectionFollowsFocus then
+                                Tuple.second >> expectOnlyFocusSelected
+
+                              else
+                                expectUnchangedSelection
                             ]
             ]
         , describe "shiftArrowDown"
@@ -184,6 +190,7 @@ architectureTests ({ behaviour } as updateConfig) =
                         |> Expect.all
                             [ expectNextOrFirstOptionFocused behaviour
                             , Tuple.second >> expectNoPendingFocus
+                            , expectSelectionToggledOfFocusedOption
                             ]
             ]
         , describe "arrowUp"
@@ -193,6 +200,11 @@ architectureTests ({ behaviour } as updateConfig) =
                         |> Expect.all
                             [ expectPreviousOrFirstOptionFocused behaviour
                             , Tuple.second >> expectNoPendingFocus
+                            , if behaviour.selectionFollowsFocus then
+                                Tuple.second >> expectOnlyFocusSelected
+
+                              else
+                                expectUnchangedSelection
                             ]
             ]
         , describe "shiftArrowUp"
@@ -289,6 +301,51 @@ expectEverythingSelected { selection } =
     selection
         |> List.sort
         |> Expect.equalLists (List.sort options)
+
+
+expectOnlyFocusSelected : Model -> Expectation
+expectOnlyFocusSelected { listbox, selection } =
+    let
+        focusList =
+            case listbox.focus of
+                Nothing ->
+                    []
+
+                Just hash ->
+                    [ hash ]
+    in
+    selection
+        |> Expect.equalLists focusList
+
+
+expectUnchangedSelection : ( Model, Model ) -> Expectation
+expectUnchangedSelection ( before, after ) =
+    before.selection
+        |> Set.fromList
+        |> Expect.equalSets (Set.fromList after.selection)
+
+
+expectSelectionToggledOfFocusedOption : ( Model, Model ) -> Expectation
+expectSelectionToggledOfFocusedOption ( before, after ) =
+    let
+        beforeSelection =
+            Set.fromList before.selection
+
+        afterSelection =
+            Set.fromList after.selection
+    in
+    case after.listbox.focus of
+        Nothing ->
+            Expect.fail "Expected the listbox to have a keyboardFocus"
+
+        Just hash ->
+            if List.member hash before.selection then
+                Set.diff afterSelection beforeSelection
+                    |> Expect.equalSets Set.empty
+
+            else
+                Set.diff beforeSelection afterSelection
+                    |> Expect.equalSets Set.empty
 
 
 expectNoPendingFocus : Model -> Expectation
@@ -415,6 +472,8 @@ listboxApp updateConfig =
                     ++ Debug.toString listbox.hover
                 , "      , ulScrollTop            = "
                     ++ Debug.toString listbox.ulScrollTop
+                    ++ ",       pendingFocus = "
+                    ++ Debug.toString listbox.pendingFocus
                 , "      , ulClientHeight         = "
                     ++ Debug.toString listbox.ulClientHeight
                 , "      , maybeLastSelectedEntry = "

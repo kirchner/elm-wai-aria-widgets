@@ -123,7 +123,7 @@ focusEntry { uniqueId, behaviour } a listbox selection =
         , focus = Just (uniqueId a)
       }
     , if behaviour.selectionFollowsFocus then
-        List.uniqueBy uniqueId (a :: selection)
+        [ a ]
 
       else
         selection
@@ -172,7 +172,7 @@ focusNextOrFirstEntry config allEntries listbox selection =
             in
             if behaviour.selectionFollowsFocus then
                 ( newListbox
-                , List.uniqueBy uniqueId (a :: selection)
+                , [ a ]
                 )
 
             else
@@ -223,7 +223,7 @@ focusPreviousOrFirstEntry config allEntries listbox selection =
             in
             if behaviour.selectionFollowsFocus then
                 ( newListbox
-                , List.uniqueBy uniqueId (a :: selection)
+                , [ a ]
                 )
 
             else
@@ -784,7 +784,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                         newListbox
                             |> fromModel
                             |> withEffect (adjustScrollTop id hash)
-                            |> withSelection (List.uniqueBy uniqueId (a :: selection))
+                            |> withSelection [ a ]
 
                     else
                         newListbox
@@ -802,6 +802,15 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                         }
                             |> fromModel
                             |> withEffect (scrollListToBottom id)
+
+                    else if behaviour.selectionFollowsFocus && not shiftDown then
+                        case find uniqueId allEntries current of
+                            Nothing ->
+                                fromModel { listbox | query = NoQuery }
+
+                            Just currentA ->
+                                fromModel { listbox | query = NoQuery }
+                                    |> withSelection [ currentA ]
 
                     else
                         fromModel { listbox | query = NoQuery }
@@ -832,6 +841,15 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                         }
                             |> fromModel
                             |> withEffect (scrollListToTop id)
+
+                    else if behaviour.selectionFollowsFocus && not shiftDown then
+                        case find uniqueId allEntries current of
+                            Nothing ->
+                                fromModel { listbox | query = NoQuery }
+
+                            Just currentA ->
+                                fromModel { listbox | query = NoQuery }
+                                    |> withSelection [ currentA ]
 
                     else
                         fromModel { listbox | query = NoQuery }
@@ -869,10 +887,10 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                                         , pendingFocus = Nothing
                                     }
                             in
-                            if behaviour.selectionFollowsFocus then
+                            if behaviour.selectionFollowsFocus && not shiftDown then
                                 newListbox
                                     |> fromModel
-                                    |> select a []
+                                    |> withSelection [ a ]
 
                             else if shiftDown then
                                 newListbox
