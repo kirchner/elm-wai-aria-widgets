@@ -177,7 +177,11 @@ architectureTests ({ behaviour } as updateConfig) =
                             [ expectNextOrFirstOptionFocused behaviour
                             , Tuple.second >> expectNoPendingFocus
                             , if behaviour.selectionFollowsFocus then
-                                Tuple.second >> expectOnlyFocusSelected
+                                if before.listbox.focus /= Nothing then
+                                    Tuple.second >> expectOnlyFocusSelected
+
+                                else
+                                    Tuple.second >> expectFirstOptionSelected
 
                               else
                                 expectUnchangedSelection
@@ -194,7 +198,7 @@ architectureTests ({ behaviour } as updateConfig) =
                                 expectSelectionToggledOfFocusedOption
 
                               else if behaviour.selectionFollowsFocus then
-                                expectFocusedOptionAddedToSelection
+                                Tuple.second >> expectFirstOptionSelected
 
                               else
                                 expectUnchangedSelection
@@ -208,7 +212,11 @@ architectureTests ({ behaviour } as updateConfig) =
                             [ expectPreviousOrFirstOptionFocused behaviour
                             , Tuple.second >> expectNoPendingFocus
                             , if behaviour.selectionFollowsFocus then
-                                Tuple.second >> expectOnlyFocusSelected
+                                if before.listbox.focus /= Nothing then
+                                    Tuple.second >> expectOnlyFocusSelected
+
+                                else
+                                    Tuple.second >> expectFirstOptionSelected
 
                               else
                                 expectUnchangedSelection
@@ -225,7 +233,7 @@ architectureTests ({ behaviour } as updateConfig) =
                                 expectSelectionToggledOfFocusedOption
 
                               else if behaviour.selectionFollowsFocus then
-                                expectFocusedOptionAddedToSelection
+                                Tuple.second >> expectFirstOptionSelected
 
                               else
                                 expectUnchangedSelection
@@ -303,6 +311,18 @@ expectLastOptionFocused : Model -> Expectation
 expectLastOptionFocused { listbox } =
     listbox.focus
         |> Expect.equal (Just lastOption)
+
+
+expectFirstOptionSelected : Model -> Expectation
+expectFirstOptionSelected { selection } =
+    List.member firstOption selection
+        |> Expect.true ("'" ++ firstOption ++ "' is not selected")
+
+
+expectLastOptionSelected : Model -> Expectation
+expectLastOptionSelected { selection } =
+    List.member lastOption selection
+        |> Expect.true ("'" ++ lastOption ++ "' is not selected")
 
 
 expectNothingSelected : Model -> Expectation
