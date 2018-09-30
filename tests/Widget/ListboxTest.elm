@@ -190,7 +190,14 @@ architectureTests ({ behaviour } as updateConfig) =
                         |> Expect.all
                             [ expectNextOrFirstOptionFocused behaviour
                             , Tuple.second >> expectNoPendingFocus
-                            , expectSelectionToggledOfFocusedOption
+                            , if before.listbox.focus /= Nothing then
+                                expectSelectionToggledOfFocusedOption
+
+                              else if behaviour.selectionFollowsFocus then
+                                expectFocusedOptionAddedToSelection
+
+                              else
+                                expectUnchangedSelection
                             ]
             ]
         , describe "arrowUp"
@@ -214,6 +221,14 @@ architectureTests ({ behaviour } as updateConfig) =
                         |> Expect.all
                             [ expectPreviousOrFirstOptionFocused behaviour
                             , Tuple.second >> expectNoPendingFocus
+                            , if before.listbox.focus /= Nothing then
+                                expectSelectionToggledOfFocusedOption
+
+                              else if behaviour.selectionFollowsFocus then
+                                expectFocusedOptionAddedToSelection
+
+                              else
+                                expectUnchangedSelection
                             ]
             ]
         , describe "home"
@@ -325,6 +340,31 @@ expectUnchangedSelection ( before, after ) =
         |> Expect.equalSets (Set.fromList after.selection)
 
 
+expectFocusedOptionAddedToSelection : ( Model, Model ) -> Expectation
+expectFocusedOptionAddedToSelection ( before, after ) =
+    let
+        beforeSelection =
+            Set.fromList before.selection
+
+        afterSelection =
+            Set.fromList after.selection
+    in
+    case after.listbox.focus of
+        Nothing ->
+            Expect.fail "Expected the listbox to have a keyboardFocus"
+
+        Just hash ->
+            Expect.all
+                [ \_ ->
+                    Set.diff afterSelection beforeSelection
+                        |> Expect.equalSets (Set.singleton hash)
+                , \_ ->
+                    Set.diff beforeSelection afterSelection
+                        |> Expect.equalSets Set.empty
+                ]
+                ()
+
+
 expectSelectionToggledOfFocusedOption : ( Model, Model ) -> Expectation
 expectSelectionToggledOfFocusedOption ( before, after ) =
     let
@@ -340,8 +380,12 @@ expectSelectionToggledOfFocusedOption ( before, after ) =
 
         Just hash ->
             if List.member hash before.selection then
-                Set.diff afterSelection beforeSelection
-                    |> Expect.equalSets Set.empty
+                Expect.all
+                    [ \_ ->
+                        Set.diff afterSelection beforeSelection
+                            |> Expect.equalSets Set.empty
+                    ]
+                    ()
 
             else
                 Set.diff beforeSelection afterSelection

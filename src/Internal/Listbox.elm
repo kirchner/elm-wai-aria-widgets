@@ -784,7 +784,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                         newListbox
                             |> fromModel
                             |> withEffect (adjustScrollTop id hash)
-                            |> withSelection [ a ]
+                            |> select a []
 
                     else
                         newListbox
@@ -803,14 +803,19 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                             |> fromModel
                             |> withEffect (scrollListToBottom id)
 
-                    else if behaviour.selectionFollowsFocus && not shiftDown then
+                    else if behaviour.selectionFollowsFocus then
                         case find uniqueId allEntries current of
                             Nothing ->
                                 fromModel { listbox | query = NoQuery }
 
                             Just currentA ->
-                                fromModel { listbox | query = NoQuery }
-                                    |> withSelection [ currentA ]
+                                if shiftDown then
+                                    fromModel { listbox | query = NoQuery }
+                                        |> toggle currentA
+
+                                else
+                                    fromModel { listbox | query = NoQuery }
+                                        |> withSelection [ currentA ]
 
                     else
                         fromModel { listbox | query = NoQuery }
@@ -842,14 +847,19 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                             |> fromModel
                             |> withEffect (scrollListToTop id)
 
-                    else if behaviour.selectionFollowsFocus && not shiftDown then
+                    else if behaviour.selectionFollowsFocus then
                         case find uniqueId allEntries current of
                             Nothing ->
                                 fromModel { listbox | query = NoQuery }
 
                             Just currentA ->
-                                fromModel { listbox | query = NoQuery }
-                                    |> withSelection [ currentA ]
+                                if shiftDown then
+                                    fromModel { listbox | query = NoQuery }
+                                        |> toggle currentA
+
+                                else
+                                    fromModel { listbox | query = NoQuery }
+                                        |> withSelection [ currentA ]
 
                     else
                         fromModel { listbox | query = NoQuery }
