@@ -243,6 +243,17 @@ view config ids allEntries (ComboBox data) query =
         (appendAttributes containerHtmlAttributes
             [ Events.onMouseDown (ListboxMouseDown ids.id)
             , Events.onMouseUp (ListboxMouseUp ids.id)
+            , Events.on "click"
+                (Decode.at [ "target", "id" ] Decode.string
+                    |> Decode.andThen
+                        (\targetId ->
+                            if targetId == printTextfieldId ids.id then
+                                Decode.fail "not handling click event here"
+
+                            else
+                                Decode.succeed (ListboxClicked ids.id)
+                        )
+                )
             ]
         )
         [ Html.input
@@ -354,6 +365,7 @@ type Msg a
     | ListboxMsg (Maybe String) (Listbox.Msg a)
     | ListboxMouseDown String
     | ListboxMouseUp String
+    | ListboxClicked String
 
 
 {-| TODO
@@ -554,6 +566,12 @@ update config allEntries msg ((ComboBox data) as comboBox) query =
 
         ListboxMouseUp id ->
             ( ComboBox { data | preventBlur = False }
+            , focusTextfield id
+            , query
+            )
+
+        ListboxClicked id ->
+            ( ComboBox { data | open = False }
             , focusTextfield id
             , query
             )
