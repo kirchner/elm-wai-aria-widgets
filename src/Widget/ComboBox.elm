@@ -1,23 +1,10 @@
-module Widget.ComboBox
-    exposing
-        ( Behaviour
-        , ComboBox
-        , DisplayCondition
-        , Msg
-        , Shared
-        , UpdateConfig
-        , ViewConfig
-        , Views
-        , init
-        , matchingQuery
-        , onDemand
-        , onFocus
-        , subscriptions
-        , update
-        , updateConfig
-        , view
-        , viewConfig
-        )
+module Widget.ComboBox exposing
+    ( ComboBox, init, view, update, Msg, subscriptions
+    , Shared
+    , UpdateConfig, updateConfig, Behaviour
+    , DisplayCondition, matchingQuery, onFocus, onDemand
+    , ViewConfig, viewConfig, Views
+    )
 
 {-|
 
@@ -75,7 +62,6 @@ type ComboBox
 type alias Data =
     { preventBlur : Bool
     , open : Bool
-    , query : Maybe String
     , listbox : Listbox
     }
 
@@ -87,7 +73,6 @@ init =
     ComboBox
         { preventBlur = False
         , open = False
-        , query = Nothing
         , listbox = Listbox.init
         }
 
@@ -128,7 +113,7 @@ type alias Views a divider =
     { container : HtmlAttributes
     , placeholder : String
     , textfield :
-        { maybeSelection : Maybe a
+        { query : String
         , open : Bool
         }
         -> HtmlAttributes
@@ -137,7 +122,7 @@ type alias Views a divider =
         { selected : Bool
         , focused : Bool
         , hovered : Bool
-        , maybeQuery : Maybe String
+        , query : String
         }
         -> a
         -> HtmlDetails
@@ -219,16 +204,16 @@ view :
         }
     -> List (Entry a divider)
     -> ComboBox
-    -> Maybe a
+    -> String
     -> Html (Msg a)
-view config ids allEntries (ComboBox data) maybeSelection =
+view config ids allEntries (ComboBox data) query =
     let
         (ViewConfig { uniqueId, matchesQuery, printEntry } views) =
             config
 
         textfieldHtmlAttributes open =
             views.textfield
-                { maybeSelection = maybeSelection
+                { query = query
                 , open = open
                 }
 
@@ -244,7 +229,7 @@ view config ids allEntries (ComboBox data) maybeSelection =
                             { selected = selected
                             , focused = focused
                             , hovered = hovered
-                            , maybeQuery = data.query
+                            , query = query
                             }
                 , liDivider = views.liDivider
                 , empty = Html.text ""
@@ -253,14 +238,13 @@ view config ids allEntries (ComboBox data) maybeSelection =
 
         filteredEntries =
             filterEntries (matchesQuery query) allEntries
-
-        query =
-            data.query
-                |> or (Maybe.map printEntry maybeSelection)
-                |> Maybe.withDefault ""
     in
     Html.div
-        (appendAttributes containerHtmlAttributes [])
+        (appendAttributes containerHtmlAttributes
+            [ Events.onMouseDown (ListboxMouseDown ids.id)
+            , Events.onMouseUp (ListboxMouseUp ids.id)
+            ]
+        )
         [ Html.input
             ([ Attributes.id (printTextfieldId ids.id)
              , Attributes.type_ "text"
@@ -275,24 +259,21 @@ view config ids allEntries (ComboBox data) maybeSelection =
              , Events.onFocus (TextfieldFocused ids.id)
              , Events.onBlur (TextfieldBlured ids.id)
              , Events.onInput TextfieldChanged
-             , Events.preventDefaultOn "keydown"
+             , Listbox.preventDefaultOnKeyDown
+                { id = printListboxId ids.id
+                , labelledBy = ids.labelledBy
+                , lift = ListboxMsg (Just ids.id)
+                }
                 (Decode.field "key" Decode.string
                     |> Decode.andThen
                         (\code ->
                             case code of
-                                "ArrowUp" ->
-                                    Decode.succeed (TextfieldArrowUpPressed ids.id)
-
-                                "ArrowDown" ->
-                                    Decode.succeed (TextfieldArrowDownPressed ids.id)
-
                                 "Enter" ->
-                                    Decode.succeed TextfieldEnterPressed
+                                    Decode.succeed ( TextfieldEnterPressed, True )
 
                                 _ ->
                                     Decode.fail "not handling that key here"
                         )
-                    |> preventDefault
                 )
              ]
                 |> setAriaExpanded data.open
@@ -305,18 +286,15 @@ view config ids allEntries (ComboBox data) maybeSelection =
                     Html.text ""
 
                 _ ->
-                    ListboxUnique.customView listboxConfig
+                    ListboxUnique.view listboxConfig
                         { id = printListboxId ids.id
                         , labelledBy = ids.labelledBy
                         , lift = ListboxMsg (Just ids.id)
-                        , onKeyDown = Decode.fail "not handling this event here"
-                        , onMouseDown = Decode.succeed (ListboxMouseDown ids.id)
-                        , onMouseUp = Decode.succeed (ListboxMouseUp ids.id)
-                        , onBlur = Decode.fail "not handling this event here"
                         }
                         filteredEntries
                         data.listbox
-                        maybeSelection
+                        Nothing
+
           else
             Html.text ""
         ]
@@ -336,16 +314,11 @@ appendAttributes neverAttrs attrs =
         |> List.append attrs
 
 
-preventDefault : Decoder msg -> Decoder ( msg, Bool )
-preventDefault decoder =
-    decoder
-        |> Decode.map (\msg -> ( msg, True ))
-
-
 setAriaExpanded : Bool -> List (Html.Attribute msg) -> List (Html.Attribute msg)
 setAriaExpanded isOpen attrs =
     if isOpen then
         Attributes.attribute "aria-expanded" "true" :: attrs
+
     else
         attrs
 
@@ -376,8 +349,6 @@ type Msg a
     | TextfieldFocused String
     | TextfieldBlured String
     | TextfieldChanged String
-    | TextfieldArrowUpPressed String
-    | TextfieldArrowDownPressed String
     | TextfieldEnterPressed
       -- LISTBOX
     | ListboxMsg (Maybe String) (Listbox.Msg a)
@@ -392,17 +363,12 @@ update :
     -> List (Entry a divider)
     -> Msg a
     -> ComboBox
-    -> Maybe a
-    -> ( ComboBox, Cmd (Msg a), Maybe a )
-update config allEntries msg ((ComboBox data) as comboBox) maybeSelection =
+    -> String
+    -> ( ComboBox, Cmd (Msg a), String )
+update config allEntries msg ((ComboBox data) as comboBox) query =
     let
         (UpdateConfig { uniqueId, matchesQuery, printEntry } behaviour) =
             config
-
-        query =
-            data.query
-                |> or (Maybe.map printEntry maybeSelection)
-                |> Maybe.withDefault ""
     in
     case msg of
         -- TEXTFIELD
@@ -430,6 +396,7 @@ update config allEntries msg ((ComboBox data) as comboBox) maybeSelection =
                                 | open = True
                                 , preventBlur = False
                             }
+
                     else
                         comboBox
 
@@ -443,110 +410,63 @@ update config allEntries msg ((ComboBox data) as comboBox) maybeSelection =
                 OnDemand ->
                     comboBox
             , Cmd.none
-            , maybeSelection
+            , query
             )
 
         TextfieldBlured id ->
             ( if data.preventBlur then
                 comboBox
+
               else
                 ComboBox { data | open = False }
             , if data.preventBlur then
                 focusTextfield id
+
               else
                 Cmd.none
-            , maybeSelection
+            , query
             )
 
         TextfieldChanged newQuery ->
             ( case behaviour.displayCondition of
                 MatchingQuery minimalLength ->
+                    let
+                        filteredEntries =
+                            List.filter matches allEntries
+
+                        matches entry =
+                            case entry of
+                                Divider _ ->
+                                    False
+
+                                Option a ->
+                                    matchesQuery query a
+                    in
                     if
-                        (String.length newQuery >= minimalLength)
-                            && (List.length (filterEntries (matchesQuery query) allEntries) >= 1)
+                        (String.length query >= minimalLength)
+                            && (List.length filteredEntries > 1)
                     then
                         ComboBox
                             { data
                                 | open = True
-                                , query = Just newQuery
+                                , preventBlur = False
                             }
+
                     else
-                        ComboBox
-                            { data
-                                | open = False
-                                , query = Just newQuery
-                            }
+                        comboBox
 
                 OnFocus ->
-                    ComboBox { data | query = Just newQuery }
+                    ComboBox
+                        { data
+                            | open = True
+                            , preventBlur = False
+                        }
 
                 OnDemand ->
-                    ComboBox { data | query = Just newQuery }
+                    comboBox
             , Cmd.none
-            , maybeSelection
+            , newQuery
             )
-
-        TextfieldArrowUpPressed id ->
-            if data.open then
-                let
-                    filteredEntries =
-                        filterEntries (matchesQuery query) allEntries
-
-                    listboxConfig =
-                        Listbox.updateConfig uniqueId
-                            { jumpAtEnds = behaviour.jumpAtEnds
-                            , separateFocus = behaviour.separateFocus
-                            , selectionFollowsFocus = behaviour.selectionFollowsFocus
-                            , handleHomeAndEnd = behaviour.handleHomeAndEnd
-                            , typeAhead = Listbox.noTypeAhead
-                            , minimalGap = behaviour.minimalGap
-                            , initialGap = behaviour.initialGap
-                            }
-
-                    ( newListbox, newSelection ) =
-                        ListboxUnique.focusPreviousOrFirstEntry listboxConfig
-                            filteredEntries
-                            data.listbox
-                            maybeSelection
-                in
-                ( ComboBox { data | listbox = newListbox }
-                , Cmd.map (ListboxMsg (Just id)) <|
-                    Listbox.scrollToFocus (printListboxId id) newListbox
-                , newSelection
-                )
-            else
-                ( comboBox, Cmd.none, maybeSelection )
-
-        TextfieldArrowDownPressed id ->
-            if data.open then
-                let
-                    filteredEntries =
-                        filterEntries (matchesQuery query) allEntries
-
-                    listboxConfig =
-                        Listbox.updateConfig uniqueId
-                            { jumpAtEnds = behaviour.jumpAtEnds
-                            , separateFocus = behaviour.separateFocus
-                            , selectionFollowsFocus = behaviour.selectionFollowsFocus
-                            , handleHomeAndEnd = behaviour.handleHomeAndEnd
-                            , typeAhead = Listbox.noTypeAhead
-                            , minimalGap = behaviour.minimalGap
-                            , initialGap = behaviour.initialGap
-                            }
-
-                    ( newListbox, newSelection ) =
-                        ListboxUnique.focusNextOrFirstEntry listboxConfig
-                            filteredEntries
-                            data.listbox
-                            maybeSelection
-                in
-                ( ComboBox { data | listbox = newListbox }
-                , Cmd.map (ListboxMsg (Just id)) <|
-                    Listbox.scrollToFocus (printListboxId id) newListbox
-                , newSelection
-                )
-            else
-                ( comboBox, Cmd.none, maybeSelection )
 
         TextfieldEnterPressed ->
             let
@@ -566,16 +486,16 @@ update config allEntries msg ((ComboBox data) as comboBox) maybeSelection =
             in
             case Listbox.focusedEntry listboxConfig data.listbox filteredEntries of
                 Nothing ->
-                    ( comboBox, Cmd.none, Nothing )
+                    ( comboBox, Cmd.none, query )
 
                 Just newEntry ->
                     ( ComboBox
                         { data
                             | open = False
-                            , query = Nothing
+                            , listbox = Listbox.init
                         }
                     , Cmd.none
-                    , Just newEntry
+                    , printEntry newEntry
                     )
 
         -- LISTBOX
@@ -594,10 +514,21 @@ update config allEntries msg ((ComboBox data) as comboBox) maybeSelection =
 
                 ( newListbox, listboxCmd, newSelection ) =
                     ListboxUnique.update listboxConfig
-                        allEntries
+                        filteredEntries
                         listboxMsg
                         data.listbox
-                        maybeSelection
+                        Nothing
+
+                filteredEntries =
+                    List.filter matches allEntries
+
+                matches entry =
+                    case entry of
+                        Divider _ ->
+                            False
+
+                        Option a ->
+                            matchesQuery query a
 
                 newData =
                     { data | listbox = newListbox }
@@ -605,25 +536,30 @@ update config allEntries msg ((ComboBox data) as comboBox) maybeSelection =
                 comboBoxCmd =
                     Cmd.map (ListboxMsg maybeId) listboxCmd
             in
-            ( ComboBox data
+            ( ComboBox newData
             , comboBoxCmd
-            , newSelection
+            , case newSelection of
+                Nothing ->
+                    query
+
+                Just a ->
+                    printEntry a
             )
 
         ListboxMouseDown id ->
             ( ComboBox { data | preventBlur = True }
             , focusTextfield id
-            , maybeSelection
+            , query
             )
 
         ListboxMouseUp id ->
             ( ComboBox { data | preventBlur = False }
             , focusTextfield id
-            , maybeSelection
+            , query
             )
 
         NoOp ->
-            ( comboBox, Cmd.none, Nothing )
+            ( comboBox, Cmd.none, query )
 
 
 filterEntries : (a -> Bool) -> List (Entry a divider) -> List (Entry a divider)
@@ -666,5 +602,6 @@ subscriptions : ComboBox -> Sub (Msg a)
 subscriptions (ComboBox { listbox, open }) =
     if open then
         Sub.map (ListboxMsg Nothing) (Listbox.subscriptions listbox)
+
     else
         Sub.none

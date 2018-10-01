@@ -6,6 +6,7 @@ module Widget.Listbox exposing
     , ViewConfig, viewConfig, Views, noDivider
     , TypeAhead, noTypeAhead, simpleTypeAhead, typeAhead
     , customView
+    , preventDefaultOnKeyDown
     , focusedEntry, hoveredEntry
     , focusEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
     , focus
@@ -51,6 +52,8 @@ interactions this widget offers.
 # Advanced usage
 
 @docs customView
+
+@docs preventDefaultOnKeyDown
 
 
 ## State manipulation
@@ -570,6 +573,27 @@ customView (ViewConfig config) cfg allEntries (Listbox listbox) selection =
             }
     in
     Internal.view config internalCfg allEntries listbox selection
+
+
+{-| TODO
+-}
+preventDefaultOnKeyDown :
+    { id : String
+    , labelledBy : String
+    , lift : Msg a -> msg
+    }
+    -> Decoder ( msg, Bool )
+    -> Html.Attribute msg
+preventDefaultOnKeyDown { id, labelledBy, lift } =
+    Internal.preventDefaultOnKeyDown
+        { id = id
+        , labelledBy = labelledBy
+        , lift = Msg >> lift
+        , onKeyDown = Decode.fail "not handling this event here"
+        , onMouseDown = Decode.fail "not handling this event here"
+        , onMouseUp = Decode.fail "not handling this event here"
+        , onBlur = Decode.fail "not handling this event here"
+        }
 
 
 {-| TODO

@@ -43,14 +43,14 @@ main =
 
 type alias Model =
     { comboBox : ComboBox
-    , selection : Maybe String
+    , query : String
     }
 
 
 init : {} -> ( Model, Cmd Msg )
 init _ =
     ( { comboBox = ComboBox.init
-      , selection = Nothing
+      , query = ""
       }
     , Cmd.none
     )
@@ -73,16 +73,16 @@ update msg model =
 
         ComboBoxMsg comboBoxMsg ->
             let
-                ( newComboBox, comboBoxCmd, newSelection ) =
+                ( newComboBox, comboBoxCmd, newQuery ) =
                     ComboBox.update updateConfig
                         fruits
                         comboBoxMsg
                         model.comboBox
-                        model.selection
+                        model.query
             in
             ( { model
                 | comboBox = newComboBox
-                , selection = newSelection
+                , query = newQuery
               }
             , Cmd.map ComboBoxMsg comboBoxCmd
             )
@@ -120,17 +120,7 @@ view model =
                             }
                             fruits
                             model.comboBox
-                            model.selection
-                    ]
-                , Html.p
-                    [ Attributes.class "help" ]
-                    [ Html.text <|
-                        case model.selection of
-                            Nothing ->
-                                "nothing selected"
-
-                            Just selection ->
-                                "currently selected: " ++ selection
+                            model.query
                     ]
                 ]
             ]
@@ -174,7 +164,7 @@ viewConfig =
         , textfield = \_ -> [ Attributes.class "textfield" ]
         , ul = [ Attributes.class "dropdown-list" ]
         , liOption =
-            \{ selected, focused, hovered, maybeQuery } name ->
+            \{ selected, focused, hovered, query } name ->
                 { attributes =
                     [ Attributes.class "entry"
                     , Attributes.classList
@@ -183,44 +173,39 @@ viewConfig =
                         , ( "entry--mouse-focused", hovered )
                         ]
                     ]
-                , children = liChildren maybeQuery name
+                , children = liChildren query name
                 }
         , liDivider = Listbox.noDivider
         }
 
 
-liChildren : Maybe String -> String -> List (Html Never)
-liChildren maybeQuery name =
-    case maybeQuery of
-        Nothing ->
-            [ Html.text name ]
+liChildren : String -> String -> List (Html Never)
+liChildren query name =
+    let
+        queryLength =
+            String.length query
+    in
+    String.toLower name
+        |> String.split (String.toLower query)
+        |> List.map String.length
+        |> List.foldl
+            (\count ( remainingName, nodes ) ->
+                case remainingName of
+                    "" ->
+                        ( remainingName, nodes )
 
-        Just query ->
-            let
-                queryLength =
-                    String.length query
-            in
-            String.toLower name
-                |> String.split (String.toLower query)
-                |> List.map String.length
-                |> List.foldl
-                    (\count ( remainingName, nodes ) ->
-                        case remainingName of
-                            "" ->
-                                ( remainingName, nodes )
-
-                            _ ->
-                                ( String.dropLeft (count + queryLength) remainingName
-                                , Html.span
-                                    [ Attributes.style "color" "#0091eb" ]
-                                    [ Html.text (String.left queryLength (String.dropLeft count remainingName)) ]
-                                    :: Html.text (String.left count remainingName)
-                                    :: nodes
-                                )
-                    )
-                    ( name, [] )
-                |> Tuple.second
-                |> List.reverse
+                    _ ->
+                        ( String.dropLeft (count + queryLength) remainingName
+                        , Html.span
+                            [ Attributes.style "color" "#0091eb" ]
+                            [ Html.text (String.left queryLength (String.dropLeft count remainingName)) ]
+                            :: Html.text (String.left count remainingName)
+                            :: nodes
+                        )
+            )
+            ( name, [] )
+        |> Tuple.second
+        |> List.reverse
 
 
 

@@ -17,6 +17,7 @@ module Internal.Listbox exposing
     , focusedEntry
     , hoveredEntry
     , init
+    , preventDefaultOnKeyDown
     , printEntryId
     , printListId
     , scrollListToBottom
@@ -390,7 +391,7 @@ viewHelp renderedEntries uniqueId views customization allEntries listbox selecti
                 Decode.oneOf
                     [ onKeyDown
                     , Decode.andThen
-                        (listKeyPress id >> Decode.map lift)
+                        (listKeyPress False id >> Decode.map lift)
                         KeyInfo.decoder
                     ]
          , Events.on "mousedown" <|
@@ -418,8 +419,19 @@ viewHelp renderedEntries uniqueId views customization allEntries listbox selecti
         )
 
 
-listKeyPress : String -> KeyInfo -> Decoder (Msg a)
-listKeyPress id { code, altDown, controlDown, metaDown, shiftDown } =
+preventDefaultOnKeyDown : Customization a msg -> Decoder ( msg, Bool ) -> Html.Attribute msg
+preventDefaultOnKeyDown { id, lift } keyDownDecoder =
+    Events.preventDefaultOn "keydown" <|
+        Decode.oneOf
+            [ keyDownDecoder
+            , KeyInfo.decoder
+                |> Decode.andThen (listKeyPress True id >> Decode.map lift)
+                |> preventDefault
+            ]
+
+
+listKeyPress : Bool -> String -> KeyInfo -> Decoder (Msg a)
+listKeyPress fromOutside id { code, altDown, controlDown, metaDown, shiftDown } =
     let
         noModifierDown =
             not altDown && not controlDown && not metaDown && not shiftDown
@@ -462,11 +474,15 @@ listKeyPress id { code, altDown, controlDown, metaDown, shiftDown } =
                 notHandlingThatKey
 
         " " ->
-            if onlyShiftDown then
-                Decode.succeed (ListShiftSpaceDown id)
+            if not fromOutside then
+                if onlyShiftDown then
+                    Decode.succeed (ListShiftSpaceDown id)
 
-            else if noModifierDown then
-                Decode.succeed (ListSpaceDown id)
+                else if noModifierDown then
+                    Decode.succeed (ListSpaceDown id)
+
+                else
+                    notHandlingThatKey
 
             else
                 notHandlingThatKey
@@ -492,18 +508,26 @@ listKeyPress id { code, altDown, controlDown, metaDown, shiftDown } =
                 notHandlingThatKey
 
         "a" ->
-            if onlyControlDown then
-                Decode.succeed ListControlADown
+            if not fromOutside then
+                if onlyControlDown then
+                    Decode.succeed ListControlADown
 
-            else if noModifierDown && (String.length code == 1) then
-                Decode.succeed (ListKeyDown id code)
+                else if noModifierDown && (String.length code == 1) then
+                    Decode.succeed (ListKeyDown id code)
+
+                else
+                    notHandlingThatKey
 
             else
                 notHandlingThatKey
 
         _ ->
-            if noModifierDown && (String.length code == 1) then
-                Decode.succeed (ListKeyDown id code)
+            if not fromOutside then
+                if noModifierDown && (String.length code == 1) then
+                    Decode.succeed (ListKeyDown id code)
+
+                else
+                    notHandlingThatKey
 
             else
                 notHandlingThatKey
@@ -833,7 +857,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                         |> withEffect (adjustScrollTopNew id hash current)
 
                 Nothing ->
-                    fromModel { listbox | query = NoQuery }
+                    initFocus id
 
         scheduleFocusNext id shiftDown current =
             case findNext uniqueId allEntries current of
@@ -877,7 +901,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                         |> withEffect (adjustScrollTopNew id hash current)
 
                 Nothing ->
-                    fromModel { listbox | query = NoQuery }
+                    initFocus id
 
         focusScheduledFocus =
             case listbox.pendingFocus of
