@@ -452,10 +452,10 @@ update config allEntries msg ((ComboBox data) as comboBox) query =
                                     False
 
                                 Option a ->
-                                    matchesQuery query a
+                                    matchesQuery newQuery a
                     in
                     if
-                        (String.length query >= minimalLength)
+                        (String.length newQuery >= minimalLength)
                             && (List.length filteredEntries > 1)
                     then
                         ComboBox
