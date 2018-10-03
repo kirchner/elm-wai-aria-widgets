@@ -1,12 +1,7 @@
-module Widget.Listbox.Unique
-    exposing
-        ( customView
-        , focusEntry
-        , focusNextOrFirstEntry
-        , focusPreviousOrFirstEntry
-        , update
-        , view
-        )
+module Widget.Listbox.Unique exposing
+    ( view, update
+    , focusEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
+    )
 
 {-| This is a variant of `Widget.Listbox` allowing only **at most one**
 selection. You just have to replace the `view` and the `update` function with
@@ -14,7 +9,7 @@ the ones in this module.
 
 TODO: link to ellie example
 
-@docs view, customView, update
+@docs view, update
 
 @docs focusEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
 
@@ -61,28 +56,6 @@ view :
     -> Html msg
 view config cfg entries listbox selection =
     Listbox.view config cfg entries listbox (maybeToList selection)
-
-
-{-| Use this instead of `Widget.Listbox.viewUnique` if you need to attach your
-own event handlers. Take a look at `customView` for more details.
--}
-customView :
-    ViewConfig a divider
-    ->
-        { id : String
-        , labelledBy : String
-        , lift : Msg a -> msg
-        , onKeyDown : Decoder msg
-        , onMouseDown : Decoder msg
-        , onMouseUp : Decoder msg
-        , onBlur : Decoder msg
-        }
-    -> List (Entry a divider)
-    -> Listbox
-    -> Maybe a
-    -> Html msg
-customView config cfg allEntries listbox selection =
-    Listbox.customView config cfg allEntries listbox (maybeToList selection)
 
 
 {-| Use this function instead of `Widget.Listbox.update` if the user can only

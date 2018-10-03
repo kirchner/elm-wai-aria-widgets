@@ -303,10 +303,6 @@ type alias Customization a msg =
     { id : String
     , labelledBy : String
     , lift : Msg a -> msg
-    , onKeyDown : Decoder msg
-    , onMouseDown : Decoder msg
-    , onMouseUp : Decoder msg
-    , onBlur : Decoder msg
     }
 
 
@@ -376,7 +372,7 @@ viewHelp :
     -> Html msg
 viewHelp renderedEntries uniqueId views customization allEntries listbox selection =
     let
-        { id, lift, labelledBy, onKeyDown, onMouseUp, onMouseDown, onBlur } =
+        { id, lift, labelledBy } =
             customization
 
         viewEntries =
@@ -387,21 +383,13 @@ viewHelp renderedEntries uniqueId views customization allEntries listbox selecti
          , Role.listBox
          , Aria.labelledBy labelledBy
          , Events.preventDefaultOn "keydown" <|
-            preventDefault <|
-                Decode.oneOf
-                    [ onKeyDown
-                    , Decode.andThen
-                        (listKeyPress False id >> Decode.map lift)
-                        KeyInfo.decoder
-                    ]
-         , Events.on "mousedown" <|
-            Decode.oneOf [ onMouseDown, Decode.succeed (lift ListMouseDown) ]
-         , Events.on "mouseup" <|
-            Decode.oneOf [ onMouseUp, Decode.succeed (lift ListMouseUp) ]
-         , Events.on "focus" <|
-            Decode.succeed (lift (ListFocused id))
-         , Events.on "blur" <|
-            Decode.oneOf [ onBlur, Decode.succeed (lift ListBlured) ]
+            Decode.andThen
+                (listKeyPress False id >> Decode.map (\msg -> ( lift msg, True )))
+                KeyInfo.decoder
+         , Events.onMouseDown (lift ListMouseDown)
+         , Events.onMouseUp (lift ListMouseUp)
+         , Events.onFocus (lift (ListFocused id))
+         , Events.onBlur (lift ListBlured)
          ]
             |> setAriaActivedescendant id uniqueId listbox.focus allEntries
             |> setTabindex views.focusable
@@ -424,9 +412,9 @@ preventDefaultOnKeyDown { id, lift } keyDownDecoder =
     Events.preventDefaultOn "keydown" <|
         Decode.oneOf
             [ keyDownDecoder
-            , KeyInfo.decoder
-                |> Decode.andThen (listKeyPress True id >> Decode.map lift)
-                |> preventDefault
+            , Decode.andThen
+                (listKeyPress True id >> Decode.map (\msg -> ( lift msg, True )))
+                KeyInfo.decoder
             ]
 
 
@@ -652,12 +640,6 @@ appendAttributes lift neverAttrs attrs =
     neverAttrs
         |> List.map (Attributes.map (\_ -> lift NoOp))
         |> List.append attrs
-
-
-preventDefault : Decoder msg -> Decoder ( msg, Bool )
-preventDefault decoder =
-    decoder
-        |> Decode.map (\msg -> ( msg, True ))
 
 
 

@@ -705,15 +705,11 @@ viewListbox listbox selection =
             [ Attributes.class "control" ]
             [ selection
                 |> Set.toList
-                |> Listbox.customView
+                |> Listbox.view
                     listboxViewConfig
                     { id = "locales"
                     , labelledBy = "locales-label"
                     , lift = ListboxMsg
-                    , onKeyDown = Decode.fail "not handling this event here"
-                    , onMouseDown = Decode.fail "not handling this event here"
-                    , onMouseUp = Decode.fail "not handling this event here"
-                    , onBlur = Decode.fail "not handling this event here"
                     }
                     locales
                     listbox
@@ -766,15 +762,11 @@ viewMuppetsListbox listbox selection =
             [ Attributes.class "control" ]
             [ selection
                 |> Set.toList
-                |> Listbox.customView
+                |> Listbox.view
                     listboxViewConfig
                     { id = "muppets"
                     , labelledBy = "muppets-label"
                     , lift = MuppetsListboxMsg
-                    , onKeyDown = Decode.fail "not handling this event here"
-                    , onMouseDown = Decode.fail "not handling this event here"
-                    , onMouseUp = Decode.fail "not handling this event here"
-                    , onBlur = Decode.fail "not handling this event here"
                     }
                     muppets
                     listbox

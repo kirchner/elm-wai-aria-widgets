@@ -1,18 +1,8 @@
-module Widget.Listbox.Dropdown
-    exposing
-        ( Behaviour
-        , Dropdown
-        , Msg
-        , UpdateConfig
-        , ViewConfig
-        , Views
-        , init
-        , subscriptions
-        , update
-        , updateConfig
-        , view
-        , viewConfig
-        )
+module Widget.Listbox.Dropdown exposing
+    ( Dropdown, init, view, update, Msg, subscriptions
+    , UpdateConfig, updateConfig, Behaviour
+    , ViewConfig, viewConfig, Views
+    )
 
 {-| This is a collapsible dropdown version of `Widget.Listbox`. The behaviour
 is based on the [Collapsible Dropdown Listbox
@@ -107,7 +97,7 @@ viewConfig =
     ViewConfig
 
 
-{-| ** Available view customizations **
+{-| \*\* Available view customizations \*\*
 
 This is the second argument to `viewConfig`. You can customize the styling with
 the following fields:
@@ -219,7 +209,7 @@ updateConfig =
     UpdateConfig
 
 
-{-| ** Available behaviour customizations **
+{-| \*\* Available behaviour customizations \*\*
 
 You can customize the behaviour of the dropdown with the following options:
 
@@ -341,6 +331,7 @@ view (ViewConfig uniqueId views) ids allEntries (Dropdown data) maybeSelection =
                 { ul =
                     if data.open then
                         Attributes.style "position" "absolute" :: views.ul
+
                     else
                         Attributes.style "display" "none"
                             :: Attributes.style "position" "absolute"
@@ -355,15 +346,19 @@ view (ViewConfig uniqueId views) ids allEntries (Dropdown data) maybeSelection =
         (appendAttributes views.container
             [ Events.onMouseDown ListboxMousePressed
             , Events.onMouseUp (ListboxMouseReleased ids.id)
-            ]
-        )
-        [ viewButton ids.id buttonHtmlDetails ids.labelledBy maybeSelection True
-        , ListboxUnique.customView listboxConfig
-            { id = printListboxId ids.id
-            , labelledBy = ids.labelledBy
-            , lift = ListboxMsg (Just ids.id)
-            , onKeyDown =
-                KeyInfo.decoder
+            , Events.on "focusout"
+                (Decode.at [ "target", "id" ] Decode.string
+                    |> Decode.andThen
+                        (\targetId ->
+                            if targetId == printButtonId ids.id then
+                                Decode.fail "not handling that event here"
+
+                            else
+                                Decode.succeed (ListboxBlured ids.id)
+                        )
+                )
+            , Events.on "keydown"
+                (KeyInfo.decoder
                     |> Decode.andThen
                         (\{ code, altDown, controlDown, metaDown, shiftDown } ->
                             case code of
@@ -375,6 +370,7 @@ view (ViewConfig uniqueId views) ids allEntries (Dropdown data) maybeSelection =
                                             && not shiftDown
                                     then
                                         Decode.succeed (ListboxEscapePressed ids.id)
+
                                     else
                                         Decode.fail "not handling that key combination"
 
@@ -386,15 +382,21 @@ view (ViewConfig uniqueId views) ids allEntries (Dropdown data) maybeSelection =
                                             && not shiftDown
                                     then
                                         Decode.succeed (ListboxEnterPressed ids.id)
+
                                     else
                                         Decode.fail "not handling that key combination"
 
                                 _ ->
                                     Decode.fail "not handling that key combination"
                         )
-            , onMouseDown = Decode.fail "not handling this event here"
-            , onMouseUp = Decode.fail "not handling this event here"
-            , onBlur = Decode.succeed (ListboxBlured ids.id)
+                )
+            ]
+        )
+        [ viewButton ids.id buttonHtmlDetails ids.labelledBy maybeSelection True
+        , ListboxUnique.view listboxConfig
+            { id = printListboxId ids.id
+            , labelledBy = ids.labelledBy
+            , lift = ListboxMsg (Just ids.id)
             }
             allEntries
             data.listbox
@@ -452,6 +454,7 @@ setAriaExpanded : Bool -> List (Html.Attribute msg) -> List (Html.Attribute msg)
 setAriaExpanded isOpen attrs =
     if isOpen then
         Attributes.attribute "aria-expanded" "true" :: attrs
+
     else
         attrs
 
@@ -581,6 +584,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg dropdown maybeSelection 
                     , pendingFocusListbox =
                         if data.open then
                             Nothing
+
                         else
                             Just id
                 }
@@ -604,6 +608,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg dropdown maybeSelection 
                     , pendingFocusListbox =
                         if data.open then
                             Nothing
+
                         else
                             Just id
                 }
@@ -636,14 +641,16 @@ update (UpdateConfig uniqueId behaviour) allEntries msg dropdown maybeSelection 
             if data.open then
                 ( Dropdown { data | open = False }
                 , focusButton id
-                , Listbox.focusedEntry listboxConfig data.listbox allEntries
+                , maybeSelection
                 )
+
             else
                 ( dropdown, Cmd.none, maybeSelection )
 
         ListboxBlured id ->
             if data.preventBlur then
                 ( dropdown, Cmd.none, maybeSelection )
+
             else
                 ( Dropdown { data | open = False }
                 , focusButton id
@@ -662,6 +669,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg dropdown maybeSelection 
                 , focusButton id
                 , maybeSelection
                 )
+
             else
                 ( Dropdown { data | preventBlur = False }
                 , Cmd.none
@@ -694,6 +702,7 @@ subscriptions (Dropdown data) =
     Sub.batch
         [ if data.open then
             Sub.map (ListboxMsg Nothing) (Listbox.subscriptions data.listbox)
+
           else
             Sub.none
         ]

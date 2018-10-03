@@ -5,7 +5,6 @@ module Widget.Listbox exposing
     , UpdateConfig, updateConfig, Behaviour
     , ViewConfig, viewConfig, Views, noDivider
     , TypeAhead, noTypeAhead, simpleTypeAhead, typeAhead
-    , customView
     , preventDefaultOnKeyDown
     , focusedEntry, hoveredEntry
     , focusEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
@@ -50,8 +49,6 @@ interactions this widget offers.
 
 
 # Advanced usage
-
-@docs customView
 
 @docs preventDefaultOnKeyDown
 
@@ -487,89 +484,6 @@ view (ViewConfig config) { id, labelledBy, lift } allEntries (Listbox listbox) s
             { id = id
             , labelledBy = labelledBy
             , lift = Msg >> lift
-            , onKeyDown = Decode.fail "not handling this event here"
-            , onMouseDown = Decode.fail "not handling this event here"
-            , onMouseUp = Decode.fail "not handling this event here"
-            , onBlur = Decode.fail "not handling this event here"
-            }
-    in
-    Internal.view config internalCfg allEntries listbox selection
-
-
-{-| Use this instead of `view` if you need to attach your own event handlers.
-You can provide the following event decoders:
-
-  - **onKeyDown**: Handle `keydown` events on the listbox.
-
-  - **onMouseDown**: Handle `mousedown` events on the listbox.
-
-  - **onMouseUp**: Handle `mouseup` events on the listbox.
-
-  - **onBlur**: Handle `blur` events on the listbox.
-
-If you provide a failing decoder the event will be handled by the listbox
-itself.
-
-For example, to handle the `ArrowUp` key yourself, you could do something like
-this:
-
-    view : Listbox -> List String -> Html Msg
-    view listbox selection =
-        Html.div []
-            [ Listbox.customView viewConfig
-                { id = "listbox"
-                , labelledBy = "label"
-                , lift = ListboxMsg
-                , onKeyDown =
-                    Decode.field "key" Decode.string
-                        |> Decode.andThen
-                            (\code ->
-                                case code of
-                                    "ArrowUp" ->
-                                        Decode.succeed ArrowUpPressed
-
-                                    _ ->
-                                        Decode.fail "not handling that key here"
-                            )
-                , onMouseDown = Decode.fail "not handling that key here"
-                , onMouseUp = Decode.fail "not handling that key here"
-                , onBlur = Decode.fail "not handling that key here"
-                }
-                entries
-                listbox
-                selection
-            ]
-
-    type Msg
-        = ListboxMsg Listbox.Msg
-        | ArrowUpPressed
-
--}
-customView :
-    ViewConfig a divider
-    ->
-        { id : String
-        , labelledBy : String
-        , lift : Msg a -> msg
-        , onKeyDown : Decoder msg
-        , onMouseDown : Decoder msg
-        , onMouseUp : Decoder msg
-        , onBlur : Decoder msg
-        }
-    -> List (Entry a divider)
-    -> Listbox
-    -> List a
-    -> Html msg
-customView (ViewConfig config) cfg allEntries (Listbox listbox) selection =
-    let
-        internalCfg =
-            { id = cfg.id
-            , labelledBy = cfg.labelledBy
-            , lift = Msg >> cfg.lift
-            , onKeyDown = cfg.onKeyDown
-            , onMouseDown = cfg.onMouseDown
-            , onMouseUp = cfg.onMouseUp
-            , onBlur = cfg.onBlur
             }
     in
     Internal.view config internalCfg allEntries listbox selection
@@ -589,10 +503,6 @@ preventDefaultOnKeyDown { id, labelledBy, lift } =
         { id = id
         , labelledBy = labelledBy
         , lift = Msg >> lift
-        , onKeyDown = Decode.fail "not handling this event here"
-        , onMouseDown = Decode.fail "not handling this event here"
-        , onMouseUp = Decode.fail "not handling this event here"
-        , onBlur = Decode.fail "not handling this event here"
         }
 
 
@@ -606,10 +516,6 @@ viewLazy :
         { id : String
         , labelledBy : String
         , lift : Msg a -> msg
-        , onKeyDown : Decoder msg
-        , onMouseDown : Decoder msg
-        , onMouseUp : Decoder msg
-        , onBlur : Decoder msg
         }
     -> List (Entry a divider)
     -> Listbox
@@ -621,10 +527,6 @@ viewLazy entryHeight dividerHeight (ViewConfig config) cfg allEntries (Listbox l
             { id = cfg.id
             , labelledBy = cfg.labelledBy
             , lift = Msg >> cfg.lift
-            , onKeyDown = cfg.onKeyDown
-            , onMouseDown = cfg.onMouseDown
-            , onMouseUp = cfg.onMouseUp
-            , onBlur = cfg.onBlur
             }
     in
     Internal.viewLazy entryHeight dividerHeight config internalCfg allEntries listbox selection
