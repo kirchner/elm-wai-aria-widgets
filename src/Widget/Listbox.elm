@@ -1,15 +1,15 @@
 module Widget.Listbox exposing
-    ( Listbox(..), init, view
+    ( Listbox, init, view
     , Entry, option, divider
-    , update, Msg(..), subscriptions
+    , update, Msg, subscriptions
     , UpdateConfig, updateConfig, Behaviour
     , ViewConfig, viewConfig, Views, noDivider
     , TypeAhead, noTypeAhead, simpleTypeAhead, typeAhead
-    , preventDefaultOnKeyDown
     , focusedEntry, hoveredEntry
     , focusEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
     , focus
     , scrollToFocus
+    , preventDefaultOnKeyDown
     )
 
 {-| Implementation of the [listbox
@@ -50,15 +50,13 @@ interactions this widget offers.
 
 # Advanced usage
 
-@docs preventDefaultOnKeyDown
+
+## State info
+
+@docs focusedEntry, hoveredEntry
 
 
 ## State manipulation
-
-
-### Keyboard focus
-
-@docs focusedEntry, hoveredEntry
 
 @docs focusEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
 
@@ -68,6 +66,8 @@ interactions this widget offers.
 @docs focus
 
 @docs scrollToFocus
+
+@docs preventDefaultOnKeyDown
 
 -}
 
@@ -242,18 +242,17 @@ viewConfig uniqueId views =
         }
 
 
-{-| \*\* Available view customizations \*\*
+{-| **Available view customizations**
 
 This is the second argument to `viewConfig`. You can customize the styling with
 the following fields:
 
   - **ul**: A list of html attributes applied to the outer listbox.
 
-  - **liOption**: A function return `HtmlDetails` for each option in your
+  - **liOption**: A function returning `HtmlDetails` for each option in your
     entries list. It gets the actual option value `a` and flags telling you if
-    this option is currently `selected` or has focus (`keyboardFocus` and
-    `mouseFocus`). If the user typed in a query, you get this via the
-    `maybeQuery` field.
+    this option is currently `selected`, `focused` or `hovered`. If the user
+    typed in a query, you get this via the `maybeQuery` field.
 
   - **liDivider**: This lets you style the divider list entries. It gets the
     actual `divider` entry and returns `HtmlDetails`.
@@ -267,14 +266,14 @@ The DOM structure of a listbox will be something like this:
     listbox =
         Html.ul
             [ ... ] -- ul attributes
-            [ li
+            [ Html.li
                 [ ... ] -- liDivider attributes
                 [ ... ] -- liDivider children
-            , li
+            , Html.li
                 [ ... ] -- liOption attributes
                 [ ... ] -- liOption children
             , ...
-            , li
+            , Html.li
                 [ ... ] -- liOption attributes
                 [ ... ] -- liOption children
             ]
@@ -286,12 +285,16 @@ like this:
     views =
         { ul = [ Html.Attributes.class "listbox__container" ]
         , liOption =
-            \{ selected, keyboardFocused } option ->
+            \{ selected, focused } option ->
                 { attributes =
                     [ Html.Attributes.class "listbox__option"
                     , Html.Attributes.classList
-                        [ ( "listbox__option--selected", selected )
-                        , ( "listbox__option--keyboardFocused", keyboardFocused )
+                        [ ( "listbox__option--selected"
+                          , selected
+                          )
+                        , ( "listbox__option--keyboardFocused"
+                          , focused
+                          )
                         ]
                     ]
                 , children =
@@ -304,7 +307,19 @@ like this:
 
 -}
 type alias Views a divider =
-    Internal.Views a divider
+    { ul : HtmlAttributes
+    , liOption :
+        { selected : Bool
+        , focused : Bool
+        , hovered : Bool
+        , maybeQuery : Maybe String
+        }
+        -> a
+        -> HtmlDetails
+    , liDivider : divider -> HtmlDetails
+    , empty : Html Never
+    , focusable : Bool
+    }
 
 
 {-| Helper function which can be used for the `liDivider` field in your view
@@ -337,13 +352,13 @@ updateConfig uniqueId behaviour =
         }
 
 
-{-| \*\* Available behaviour customizations \*\*
+{-| **Available behaviour customizations**
 
 You can customize the behaviour of the listbox with the following options:
 
-  - **jumpAtEnds**: Should the keyboard focus jump to the other end of the list
-    when pressing `ArrowUp` while focusing the first option (or `ArrowDown` while
-    focusing the last).
+  - **jumpAtEnds**: Whether the keyboard focus should jump to the other end of
+    the list when pressing `ArrowUp` while focusing the first option (or
+    `ArrowDown` while focusing the last).
 
   - **separateFocus**: Whether the mouse focus and the keyboard focus can be
     different.
@@ -358,13 +373,13 @@ You can customize the behaviour of the listbox with the following options:
     Take a look at `TypeAhead` for more information.
 
   - **minimalGap**: If the distance (in px) of the option having the keyboard
-    focus to the borders of the listbox scene is smaller then this value, the
-    listbox will adjust its scroll position so that this distance is at least
+    focus to the borders of the listbox's viewport is smaller then this value,
+    the listbox will adjust its scroll position so that this distance is at least
     `initialGap`.
 
   - **initialGap**: The minimal distance (in px) of the option having the
-    keyboard focus to the borders of the listbox scene after the scroll position
-    has been adjusted.
+    keyboard focus to the borders of the listbox's viewport after the scroll
+    position has been adjusted.
 
 A behaviour configuration could look something like this:
 
@@ -380,14 +395,21 @@ A behaviour configuration could look something like this:
         }
 
 The listbox will behave as explained in the [WAI-ARIA Authoring Practices
-1.1](https://www.w3.org/TR/wai-aria-practices-1.1/#Listbox) under `Keyboard
-Interaction`. Note that you get the "recommended selection model" if you
-choose `selectionFollowsFocus = False`, and the "alternative selection model"
-for `selectionFollowsFocus = True`.
+1.1](https://www.w3.org/TR/wai-aria-practices-1.1/#Listbox) in the _Keyboard
+Interaction_ section. Note that you get the _recommended selection model_ if
+you choose `selectionFollowsFocus = False`, and the _alternative
+selection model_ for `selectionFollowsFocus = True`.
 
 -}
 type alias Behaviour a =
-    Internal.Behaviour a
+    { jumpAtEnds : Bool
+    , separateFocus : Bool
+    , selectionFollowsFocus : Bool
+    , handleHomeAndEnd : Bool
+    , typeAhead : TypeAhead a
+    , minimalGap : Float
+    , initialGap : Float
+    }
 
 
 {-| -}
@@ -404,11 +426,16 @@ noTypeAhead =
 
 
 {-| Activate the type-ahead functionality. When the user types in a search
-query. The second argument -- `a -> String` -- should be a reasonable
-stringification of the options. It is used to check whether an option starts
-with this query or not. The listbox will then move the keyboard focus forward
-to the next matching option. The first argument is the timeout (in
-milliseconds) after which the query is reseted.
+query.
+
+  - The first argument is the timeout (in milliseconds) after which the query
+    is reseted.
+
+  - The second argument, `a -> String`, should be a reasonable stringification
+    of the options. It is used to check whether an option starts with this query
+    or not. The listbox will then move the keyboard focus forward to the next
+    matching option.
+
 -}
 simpleTypeAhead : Int -> (a -> String) -> TypeAhead a
 simpleTypeAhead timeout entryToString =
@@ -461,7 +488,7 @@ For example:
     fruits : List (Entry String divider)
     fruits =
         List.map Listbox.option
-            [ "Apple", "Banana", "Cherry", "Durian", "Elderberries" ]
+            [ "Apple", "Banana", "Cherry" ]
 
     type Msg
         = ListboxMsg Listbox.Msg
@@ -489,7 +516,29 @@ view (ViewConfig config) { id, labelledBy, lift } allEntries (Listbox listbox) s
     Internal.view config internalCfg allEntries listbox selection
 
 
-{-| TODO
+{-| This adds all the keydown event listener needed for the listbox on any DOM
+node. For example, this could be an input field which keeps focused while the
+listbox is displayed in a dropdown. You usually want to set `focusable = False`
+inside the `ViewConfig` when using this event listener.
+
+You must provide your own event decoder, which is tried **before** the
+listbox's event decoder. This lets you prevent the listbox reacting on key
+combinations. If you do not need to handle keydown events, just insert a failing decoder:
+
+    view =
+        Html.input
+            [ preventDefaultOnKeyDown
+                { id = "fruits-listbox"
+                , labelledBy = "fruits"
+                , lift = ListboxMsg
+                }
+                (Decode.fail "not handling this event here")
+            ]
+            []
+
+In this example, pressing keys like `ArrowUp` and `ArrowDown` will adjust the
+listbox's focus although the listbox itself is not focused.
+
 -}
 preventDefaultOnKeyDown :
     { id : String
@@ -677,7 +726,8 @@ apply f a =
 {-| Do not forget to add this to your subscriptions:
 
     subscriptions model =
-        Sub.map ListboxMsg (Listbox.subscriptions model.listbox)
+        Sub.map ListboxMsg
+            (Listbox.subscriptions model.listbox)
 
 -}
 subscriptions : Listbox -> Sub (Msg a)

@@ -1,5 +1,5 @@
 docs:
-	elm make --optimize --docs=documentation.json
+	elm make --optimize --docs=docs.json
 
 .PHONY: examples
 

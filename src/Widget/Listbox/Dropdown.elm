@@ -97,7 +97,7 @@ viewConfig =
     ViewConfig
 
 
-{-| \*\* Available view customizations \*\*
+{-| **Available view customizations**
 
 This is the second argument to `viewConfig`. You can customize the styling with
 the following fields:
@@ -130,14 +130,14 @@ The DOM structure of a dropdown will be something like this:
                 [ ... ] -- button attributes
             , Html.ul
                 [ ... ] -- ul attributes
-                [ li
+                [ Html.li
                     [ ... ] -- liDivider attributes
                     [ ... ] -- liDivider children
-                , li
+                , Html.li
                     [ ... ] -- liOption attributes
                     [ ... ] -- liOption children
                 , ...
-                , li
+                , Html.li
                     [ ... ] -- liOption attributes
                     [ ... ] -- liOption children
                 ]
@@ -151,18 +151,26 @@ like this:
         { container = [ Html.Attributes.class "dropdown__container" ]
         , button =
             \{ maybeSelection } ->
-                { attributes = [ Html.Attributes.class "dropdown__button" ]
+                { attributes =
+                    [ Html.Attributes.class "dropdown__button" ]
                 , children =
-                    [ Html.text (Maybe.withDefault "Make a selection.." maybeSelection) ]
+                    [ Html.text <|
+                        Maybe.withDefault "Make a selection.."
+                            maybeSelection
+                    ]
                 }
         , ul = [ Html.Attributes.class "listbox__container" ]
         , liOption =
-            \{ selected, keyboardFocused } option ->
+            \{ selected, focused } option ->
                 { attributes =
                     [ Html.Attributes.class "listbox__option"
                     , Html.Attributes.classList
-                        [ ( "listbox__option--selected", selected )
-                        , ( "listbox__option--keyboardFocused", keyboardFocused )
+                        [ ( "listbox__option--selected"
+                          , selected
+                          )
+                        , ( "listbox__option--keyboardFocused"
+                          , focused
+                          )
                         ]
                     ]
                 , children =
@@ -209,7 +217,7 @@ updateConfig =
     UpdateConfig
 
 
-{-| \*\* Available behaviour customizations \*\*
+{-| **Available behaviour customizations**
 
 You can customize the behaviour of the dropdown with the following options:
 
@@ -257,7 +265,7 @@ A behaviour configuration could look something like this:
 
 The dropdown will behave as explained in the [WAI-ARIA Authoring Practices
 1.1](https://www.w3.org/TR/wai-aria-practices-1.1/examples/listbox/listbox-collapsible.html)
-under `Keyboard Support`.
+in the section _Keyboard Support_.
 
 -}
 type alias Behaviour a =
@@ -290,19 +298,20 @@ For example:
     view : Dropdown -> Maybe String -> Html Msg
     view dropdown selection =
         Html.div []
-            [ Listbox.Dropdown.view viewConfig
-                { id = "fruits-dropdown"
-                , labelledBy = "fruits"
-                }
-                fruits
-                dropdown
-                selection
+            [ Html.map DropdownMsg <|
+                Listbox.Dropdown.view viewConfig
+                    { id = "fruits-dropdown"
+                    , labelledBy = "fruits"
+                    }
+                    fruits
+                    dropdown
+                    selection
             ]
 
     fruits : List (Entry String divider)
     fruits =
         List.map Listbox.option
-            [ "Apple", "Banana", "Cherry", "Durian", "Elderberries" ]
+            [ "Apple", "Banana", "Cherry" ]
 
     type Msg
         = DropdownMsg Listbox.Dropdown.Msg
@@ -507,9 +516,9 @@ For example:
                     ( newDropdown, dropdownCmd, newSelection ) =
                         Listbox.Dropdown.update updateConfig
                             entries
+                            dropdownMsg
                             model.dropdown
                             model.selection
-                            dropdownMsg
                 in
                 ( { model
                     | dropdown = newDropdown
@@ -694,7 +703,8 @@ focusButton id =
 {-| Do not forget to add this to your subscriptions:
 
     subscriptions model =
-        Sub.map DropdownMsg (Listbox.Dropdown.subscriptions model.dropdown)
+        Sub.map DropdownMsg
+            (Listbox.Dropdown.subscriptions model.dropdown)
 
 -}
 subscriptions : Dropdown -> Sub (Msg a)
