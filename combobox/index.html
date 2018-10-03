@@ -102,6 +102,19 @@
       var app = Elm.Main.init({
           node: container
       });
+
+      app.ports.setSelectionRange.subscribe(function(selectionRange) {
+        var textfield = document.getElementById(selectionRange.id);
+
+        if (textfield === null) {
+          return;
+        }
+
+        textfield.setSelectionRange(
+          selectionRange.selectionStart,
+          selectionRange.selectionEnd
+        );
+      });
     </script>
   </body>
 </html>
